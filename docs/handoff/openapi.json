@@ -1,0 +1,2804 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Generative VR practice \u2014 proposed project API",
+    "version": "1.1.0",
+    "description": "Project-owned contracts, not provider endpoints. Authenticate owner-scoped requests. Internal specialist endpoints may be functions in the same backend, not separate services. Numeric limits are configurable initial budgets. Cross-field checks are specified in development-plan.md."
+  },
+  "security": [
+    {
+      "sessionBearer": []
+    }
+  ],
+  "paths": {
+    "/v1/session-plans": {
+      "post": {
+        "summary": "Coordinate plan and run scene/audio generation; Idempotency-Key required.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlanRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Job"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          }
+        ]
+      }
+    },
+    "/v1/scene-revisions": {
+      "post": {
+        "summary": "Supersede the prior revision and regenerate affected outputs.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BuilderRevision"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Job"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/scenes": {
+      "post": {
+        "summary": "Internal specialist compose_scene operation.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SceneRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SceneSpec"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/audio-plans": {
+      "post": {
+        "summary": "Internal specialist plan_audio operation.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AudioRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AudioPlan"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/dialogue": {
+      "post": {
+        "summary": "",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DialogueRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DialogueResult"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/feedback": {
+      "post": {
+        "summary": "",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FeedbackRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedbackResult"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/adaptations": {
+      "post": {
+        "summary": "",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdaptationRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdaptationResult"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/transcription-sessions": {
+      "post": {
+        "summary": "Project proxy bootstrap; adapt to verified provider protocol, never return shared provider secret.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TranscriptionBootstrapRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TranscriptionBootstrap"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/jobs/{job_id}": {
+      "parameters": [
+        {
+          "in": "path",
+          "name": "job_id",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Owner-scoped job",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Job"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Idempotently cancel and invalidate late results",
+        "responses": {
+          "204": {
+            "description": "Cancelled"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "sessionBearer": {
+        "type": "http",
+        "scheme": "bearer"
+      }
+    },
+    "schemas": {
+      "Intensity": {
+        "type": "object",
+        "properties": {
+          "summary": {
+            "type": "string",
+            "maxLength": 300
+          },
+          "dimensions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "maxLength": 80
+                },
+                "value": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "meaning": {
+                  "type": "string",
+                  "maxLength": 200
+                }
+              },
+              "required": [
+                "name",
+                "value",
+                "meaning"
+              ],
+              "additionalProperties": false
+            },
+            "maxItems": 12
+          }
+        },
+        "required": [
+          "summary",
+          "dimensions"
+        ],
+        "additionalProperties": false
+      },
+      "HistoryRow": {
+        "type": "object",
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "topic": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "intensity": {
+            "$ref": "#/components/schemas/Intensity"
+          },
+          "planned_seconds": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100000
+          },
+          "active_seconds": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100000
+          },
+          "outcome": {
+            "type": "string",
+            "maxLength": 30
+          },
+          "reported_difficulty": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10
+          },
+          "reported_readiness": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10
+          },
+          "reflection_summary": {
+            "type": "string",
+            "maxLength": 1000
+          },
+          "intensity_1_10": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10
+          }
+        },
+        "required": [
+          "session_id",
+          "topic",
+          "intensity",
+          "planned_seconds",
+          "active_seconds",
+          "outcome",
+          "intensity_1_10"
+        ],
+        "additionalProperties": false
+      },
+      "PlanRequest": {
+        "type": "object",
+        "properties": {
+          "schema_version": {
+            "const": "1",
+            "type": "string"
+          },
+          "session_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100000
+          },
+          "fear_description": {
+            "type": "string",
+            "maxLength": 4000
+          },
+          "current_ability": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "preferences": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 400
+            },
+            "maxItems": 20
+          },
+          "relevant_history": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HistoryRow"
+            },
+            "maxItems": 20
+          },
+          "history_choice": {
+            "type": "string",
+            "enum": [
+              "accepted",
+              "declined",
+              "not_available",
+              "chain_reuse"
+            ]
+          },
+          "parent_session_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "builder_additions": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 2000
+            },
+            "maxItems": 30
+          },
+          "use_history": {
+            "type": "boolean"
+          },
+          "chained_rerun": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "schema_version",
+          "session_id",
+          "revision",
+          "fear_description",
+          "current_ability",
+          "preferences",
+          "relevant_history",
+          "history_choice",
+          "builder_additions",
+          "use_history",
+          "chained_rerun"
+        ],
+        "additionalProperties": false
+      },
+      "Character": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "maxLength": 80
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 80
+          },
+          "role": {
+            "type": "string",
+            "maxLength": 300
+          },
+          "appearance_brief": {
+            "type": "string",
+            "maxLength": 1000
+          },
+          "goal": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "behavior_boundaries": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 300
+            },
+            "maxItems": 12
+          },
+          "voice_id": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "scene_node_id": {
+            "type": "string",
+            "maxLength": 80
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "role",
+          "appearance_brief",
+          "goal",
+          "behavior_boundaries",
+          "voice_id",
+          "scene_node_id"
+        ],
+        "additionalProperties": false
+      },
+      "ToolCall": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "tool": {
+                "const": "compose_scene"
+              },
+              "execute_when": {
+                "type": "string",
+                "enum": [
+                  "setup",
+                  "after_session",
+                  "dialogue_turn",
+                  "builder_revision"
+                ]
+              },
+              "arguments": {
+                "type": "object",
+                "properties": {
+                  "setting_brief": {
+                    "type": "string",
+                    "maxLength": 3000
+                  },
+                  "intensity_1_10": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 10
+                  },
+                  "props": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "maxLength": 300
+                    },
+                    "maxItems": 100
+                  },
+                  "interaction_mode": {
+                    "type": "string",
+                    "enum": [
+                      "solo",
+                      "dialogue",
+                      "navigation",
+                      "mixed"
+                    ]
+                  }
+                },
+                "required": [
+                  "setting_brief",
+                  "intensity_1_10",
+                  "props",
+                  "interaction_mode"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "tool",
+              "execute_when",
+              "arguments"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "tool": {
+                "const": "plan_audio"
+              },
+              "execute_when": {
+                "type": "string",
+                "enum": [
+                  "setup",
+                  "after_session",
+                  "dialogue_turn",
+                  "builder_revision"
+                ]
+              },
+              "arguments": {
+                "type": "object",
+                "properties": {
+                  "audio_brief": {
+                    "type": "string",
+                    "maxLength": 3000
+                  },
+                  "intensity_1_10": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 10
+                  },
+                  "duration_sec": {
+                    "type": "integer",
+                    "minimum": 10,
+                    "maximum": 3600
+                  },
+                  "transition_whoosh_required": {
+                    "const": true
+                  }
+                },
+                "required": [
+                  "audio_brief",
+                  "intensity_1_10",
+                  "duration_sec",
+                  "transition_whoosh_required"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "tool",
+              "execute_when",
+              "arguments"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "tool": {
+                "const": "generate_feedback"
+              },
+              "execute_when": {
+                "type": "string",
+                "enum": [
+                  "setup",
+                  "after_session",
+                  "dialogue_turn",
+                  "builder_revision"
+                ]
+              },
+              "arguments": {
+                "type": "object",
+                "properties": {
+                  "observation_source": {
+                    "const": "current_session_observations"
+                  },
+                  "tone": {
+                    "const": "coaching_nonclinical"
+                  },
+                  "max_did_well": {
+                    "const": 3
+                  },
+                  "max_noticed": {
+                    "const": 3
+                  }
+                },
+                "required": [
+                  "observation_source",
+                  "tone",
+                  "max_did_well",
+                  "max_noticed"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "tool",
+              "execute_when",
+              "arguments"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "tool": {
+                "const": "adapt_session"
+              },
+              "execute_when": {
+                "type": "string",
+                "enum": [
+                  "setup",
+                  "after_session",
+                  "dialogue_turn",
+                  "builder_revision"
+                ]
+              },
+              "arguments": {
+                "type": "object",
+                "properties": {
+                  "observation_source": {
+                    "const": "completed_session_observations"
+                  },
+                  "history_source": {
+                    "const": "authorized_chain_history"
+                  }
+                },
+                "required": [
+                  "observation_source",
+                  "history_source"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "tool",
+              "execute_when",
+              "arguments"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "tool": {
+                "const": "character_turn"
+              },
+              "execute_when": {
+                "type": "string",
+                "enum": [
+                  "setup",
+                  "after_session",
+                  "dialogue_turn",
+                  "builder_revision"
+                ]
+              },
+              "arguments": {
+                "type": "object",
+                "properties": {
+                  "character_id": {
+                    "type": "string",
+                    "maxLength": 80
+                  },
+                  "context_source": {
+                    "const": "current_turn_and_recent_history"
+                  }
+                },
+                "required": [
+                  "character_id",
+                  "context_source"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "tool",
+              "execute_when",
+              "arguments"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "tool": {
+                "const": "revise_scene"
+              },
+              "execute_when": {
+                "type": "string",
+                "enum": [
+                  "setup",
+                  "after_session",
+                  "dialogue_turn",
+                  "builder_revision"
+                ]
+              },
+              "arguments": {
+                "type": "object",
+                "properties": {
+                  "additional_input": {
+                    "type": "string",
+                    "maxLength": 4000
+                  },
+                  "base_revision": {
+                    "type": "integer",
+                    "minimum": 1
+                  }
+                },
+                "required": [
+                  "additional_input",
+                  "base_revision"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "tool",
+              "execute_when",
+              "arguments"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "NarratorBeat": {
+        "type": "object",
+        "properties": {
+          "at_active_second": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100000
+          },
+          "text": {
+            "type": "string",
+            "maxLength": 800
+          }
+        },
+        "required": [
+          "at_active_second",
+          "text"
+        ],
+        "additionalProperties": false
+      },
+      "SessionPlan": {
+        "type": "object",
+        "properties": {
+          "schema_version": {
+            "const": "1",
+            "type": "string"
+          },
+          "session_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100000
+          },
+          "topic": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "task_instruction": {
+            "type": "string",
+            "maxLength": 1500
+          },
+          "setting_brief": {
+            "type": "string",
+            "maxLength": 3000
+          },
+          "props": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 300
+            },
+            "maxItems": 100
+          },
+          "intensity": {
+            "$ref": "#/components/schemas/Intensity"
+          },
+          "intro_target_seconds": {
+            "const": 8,
+            "type": "integer"
+          },
+          "narrator_beats": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NarratorBeat"
+            },
+            "maxItems": 50
+          },
+          "characters": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Character"
+            },
+            "maxItems": 30
+          },
+          "interaction_mode": {
+            "type": "string",
+            "enum": [
+              "solo",
+              "dialogue",
+              "navigation",
+              "mixed"
+            ]
+          },
+          "tool_calls": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ToolCall"
+            },
+            "maxItems": 20
+          },
+          "adaptation_rationale": {
+            "type": "string",
+            "maxLength": 1000
+          },
+          "intensity_1_10": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10
+          },
+          "topic_short": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 30
+          },
+          "duration_sec": {
+            "type": "integer",
+            "minimum": 10,
+            "maximum": 3600
+          },
+          "narrator_intro_8s": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "stop_reminder": {
+            "const": "To stop at any time, just say STOP!",
+            "type": "string"
+          },
+          "audio_brief": {
+            "type": "string",
+            "maxLength": 3000
+          },
+          "safety": {
+            "$ref": "#/components/schemas/SafetyDecision"
+          }
+        },
+        "required": [
+          "schema_version",
+          "session_id",
+          "revision",
+          "topic",
+          "task_instruction",
+          "setting_brief",
+          "props",
+          "intensity",
+          "duration_sec",
+          "narrator_intro_8s",
+          "intro_target_seconds",
+          "narrator_beats",
+          "characters",
+          "interaction_mode",
+          "tool_calls",
+          "intensity_1_10",
+          "topic_short",
+          "stop_reminder",
+          "audio_brief",
+          "safety"
+        ],
+        "additionalProperties": false
+      },
+      "Asset": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "mesh",
+              "texture",
+              "audio"
+            ]
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "origin": {
+            "type": "string",
+            "enum": [
+              "bundled",
+              "generated"
+            ]
+          },
+          "bounds_meters": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "minItems": 3,
+            "maxItems": 3
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "description",
+          "origin"
+        ],
+        "additionalProperties": false
+      },
+      "SceneRequest": {
+        "type": "object",
+        "properties": {
+          "plan": {
+            "$ref": "#/components/schemas/SessionPlan"
+          },
+          "capabilities_version": {
+            "type": "string",
+            "maxLength": 40
+          },
+          "asset_manifest": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Asset"
+            },
+            "maxItems": 1000
+          },
+          "previous_scene": {
+            "$ref": "#/components/schemas/SceneSpec"
+          },
+          "revision_instruction": {
+            "type": "string",
+            "maxLength": 3000
+          }
+        },
+        "required": [
+          "plan",
+          "capabilities_version",
+          "asset_manifest"
+        ],
+        "additionalProperties": false
+      },
+      "Geometry": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "const": "box"
+              },
+              "size": {
+                "type": "array",
+                "items": {
+                  "type": "number"
+                },
+                "minItems": 3,
+                "maxItems": 3
+              }
+            },
+            "required": [
+              "kind",
+              "size"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "const": "plane"
+              },
+              "width": {
+                "type": "number",
+                "minimum": 0.001,
+                "maximum": 1000
+              },
+              "height": {
+                "type": "number",
+                "minimum": 0.001,
+                "maximum": 1000
+              }
+            },
+            "required": [
+              "kind",
+              "width",
+              "height"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "const": "sphere"
+              },
+              "radius": {
+                "type": "number",
+                "minimum": 0.001,
+                "maximum": 1000
+              }
+            },
+            "required": [
+              "kind",
+              "radius"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "const": "cylinder"
+              },
+              "radius": {
+                "type": "number",
+                "minimum": 0.001,
+                "maximum": 1000
+              },
+              "height": {
+                "type": "number",
+                "minimum": 0.001,
+                "maximum": 1000
+              }
+            },
+            "required": [
+              "kind",
+              "radius",
+              "height"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "const": "asset"
+              },
+              "asset_id": {
+                "type": "string",
+                "maxLength": 100
+              }
+            },
+            "required": [
+              "kind",
+              "asset_id"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "Material": {
+        "type": "object",
+        "properties": {
+          "color": {
+            "type": "string",
+            "pattern": "^#[0-9a-fA-F]{6}$"
+          },
+          "roughness": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "texture_asset_id": {
+            "type": "string",
+            "maxLength": 100
+          }
+        },
+        "required": [
+          "color",
+          "roughness"
+        ],
+        "additionalProperties": false
+      },
+      "SceneNode": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "maxLength": 80
+          },
+          "parent_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "environment",
+              "prop",
+              "character",
+              "task_focus"
+            ]
+          },
+          "geometry": {
+            "$ref": "#/components/schemas/Geometry"
+          },
+          "position": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "minItems": 3,
+            "maxItems": 3
+          },
+          "rotation_radians": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "minItems": 3,
+            "maxItems": 3
+          },
+          "scale": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "minItems": 3,
+            "maxItems": 3
+          },
+          "material": {
+            "$ref": "#/components/schemas/Material"
+          },
+          "animation": {
+            "type": "string",
+            "enum": [
+              "none",
+              "idle",
+              "listen",
+              "speak",
+              "gesture"
+            ]
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 500
+          }
+        },
+        "required": [
+          "id",
+          "parent_id",
+          "role",
+          "geometry",
+          "position",
+          "rotation_radians",
+          "scale",
+          "material",
+          "animation",
+          "description"
+        ],
+        "additionalProperties": false
+      },
+      "WorldOperation": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "const": "set_visible"
+              },
+              "node_id": {
+                "type": "string",
+                "maxLength": 80
+              },
+              "visible": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "type",
+              "node_id",
+              "visible"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "const": "set_material"
+              },
+              "node_id": {
+                "type": "string",
+                "maxLength": 80
+              },
+              "material": {
+                "$ref": "#/components/schemas/Material"
+              }
+            },
+            "required": [
+              "type",
+              "node_id",
+              "material"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "const": "character_action"
+              },
+              "character_id": {
+                "type": "string",
+                "maxLength": 80
+              },
+              "behavior": {
+                "type": "string",
+                "enum": [
+                  "idle",
+                  "listen",
+                  "speak",
+                  "gesture"
+                ]
+              }
+            },
+            "required": [
+              "type",
+              "character_id",
+              "behavior"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "const": "viewpoint_transition"
+              },
+              "destination_id": {
+                "type": "string",
+                "maxLength": 80
+              },
+              "transition": {
+                "const": "fade"
+              }
+            },
+            "required": [
+              "type",
+              "destination_id",
+              "transition"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "const": "narrate"
+              },
+              "text": {
+                "type": "string",
+                "maxLength": 800
+              }
+            },
+            "required": [
+              "type",
+              "text"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "const": "play_sound"
+              },
+              "cue_id": {
+                "type": "string",
+                "maxLength": 80
+              }
+            },
+            "required": [
+              "type",
+              "cue_id"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "Choice": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "maxLength": 80
+          },
+          "label": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "intent_examples": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "maxItems": 10
+          },
+          "operations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorldOperation"
+            },
+            "maxItems": 20
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "intent_examples",
+          "operations"
+        ],
+        "additionalProperties": false
+      },
+      "Interaction": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "maxLength": 80
+          },
+          "prompt": {
+            "type": "string",
+            "maxLength": 600
+          },
+          "trigger": {
+            "type": "string",
+            "enum": [
+              "user_request",
+              "scene_start",
+              "scheduled",
+              "choice_completed"
+            ]
+          },
+          "at_active_second": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100000
+          },
+          "choices": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Choice"
+            },
+            "maxItems": 20
+          }
+        },
+        "required": [
+          "id",
+          "prompt",
+          "trigger",
+          "choices"
+        ],
+        "additionalProperties": false
+      },
+      "SceneSpec": {
+        "type": "object",
+        "properties": {
+          "schema_version": {
+            "const": "1",
+            "type": "string"
+          },
+          "session_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100000
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "nodes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SceneNode"
+            },
+            "maxItems": 500
+          },
+          "viewpoints": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "maxLength": 80
+                },
+                "position": {
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  },
+                  "minItems": 3,
+                  "maxItems": 3
+                },
+                "description": {
+                  "type": "string",
+                  "maxLength": 300
+                }
+              },
+              "required": [
+                "id",
+                "position",
+                "description"
+              ],
+              "additionalProperties": false
+            },
+            "maxItems": 50
+          },
+          "initial_viewpoint_id": {
+            "type": "string",
+            "maxLength": 80
+          },
+          "lighting": {
+            "type": "object",
+            "properties": {
+              "ambient_color": {
+                "type": "string",
+                "maxLength": 7
+              },
+              "ambient_intensity": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 5
+              },
+              "key_direction": {
+                "type": "array",
+                "items": {
+                  "type": "number"
+                },
+                "minItems": 3,
+                "maxItems": 3
+              },
+              "key_intensity": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 5
+              }
+            },
+            "required": [
+              "ambient_color",
+              "ambient_intensity",
+              "key_direction",
+              "key_intensity"
+            ],
+            "additionalProperties": false
+          },
+          "atmosphere": {
+            "type": "object",
+            "properties": {
+              "background_color": {
+                "type": "string",
+                "maxLength": 7
+              },
+              "fog_density": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              }
+            },
+            "required": [
+              "background_color",
+              "fog_density"
+            ],
+            "additionalProperties": false
+          },
+          "interactions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Interaction"
+            },
+            "maxItems": 100
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "at_active_second": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 100000
+                },
+                "operation": {
+                  "$ref": "#/components/schemas/WorldOperation"
+                }
+              },
+              "required": [
+                "at_active_second",
+                "operation"
+              ],
+              "additionalProperties": false
+            },
+            "maxItems": 100
+          },
+          "stereo": {
+            "$ref": "#/components/schemas/StereoSpec"
+          },
+          "reveal": {
+            "$ref": "#/components/schemas/RevealSpec"
+          }
+        },
+        "required": [
+          "schema_version",
+          "session_id",
+          "revision",
+          "description",
+          "nodes",
+          "viewpoints",
+          "initial_viewpoint_id",
+          "lighting",
+          "atmosphere",
+          "interactions",
+          "events",
+          "stereo",
+          "reveal"
+        ],
+        "additionalProperties": false
+      },
+      "AudioRequest": {
+        "type": "object",
+        "properties": {
+          "plan": {
+            "$ref": "#/components/schemas/SessionPlan"
+          },
+          "available_assets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Asset"
+            },
+            "maxItems": 1000
+          }
+        },
+        "required": [
+          "plan",
+          "available_assets"
+        ],
+        "additionalProperties": false
+      },
+      "AudioLayer": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "maxLength": 80
+          },
+          "asset_id": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "music",
+              "ambience",
+              "sfx"
+            ]
+          },
+          "loop": {
+            "type": "boolean"
+          },
+          "gain": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "position": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "minItems": 3,
+            "maxItems": 3
+          },
+          "start_active_second": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100000
+          },
+          "end_active_second": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100000
+          },
+          "ramps": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "at_active_second": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 100000
+                },
+                "gain": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "fade_seconds": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 60
+                }
+              },
+              "required": [
+                "at_active_second",
+                "gain",
+                "fade_seconds"
+              ],
+              "additionalProperties": false
+            },
+            "maxItems": 30
+          }
+        },
+        "required": [
+          "id",
+          "asset_id",
+          "role",
+          "loop",
+          "gain",
+          "start_active_second",
+          "ramps"
+        ],
+        "additionalProperties": false
+      },
+      "AudioPlan": {
+        "type": "object",
+        "properties": {
+          "schema_version": {
+            "const": "1",
+            "type": "string"
+          },
+          "session_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100000
+          },
+          "layers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AudioLayer"
+            },
+            "maxItems": 30
+          },
+          "transition_whoosh_asset_id": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "duck_gain_during_speech": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "rationale": {
+            "type": "string",
+            "maxLength": 800
+          }
+        },
+        "required": [
+          "schema_version",
+          "session_id",
+          "revision",
+          "layers",
+          "transition_whoosh_asset_id",
+          "duck_gain_during_speech",
+          "rationale"
+        ],
+        "additionalProperties": false
+      },
+      "DialogueRequest": {
+        "type": "object",
+        "properties": {
+          "schema_version": {
+            "const": "1",
+            "type": "string"
+          },
+          "session_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100000
+          },
+          "turn_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "character_id": {
+            "type": "string",
+            "maxLength": 80
+          },
+          "user_utterance": {
+            "type": "string",
+            "maxLength": 8000
+          },
+          "recent_turns": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "speaker_id": {
+                  "type": "string",
+                  "maxLength": 80
+                },
+                "text": {
+                  "type": "string",
+                  "maxLength": 3000
+                }
+              },
+              "required": [
+                "speaker_id",
+                "text"
+              ],
+              "additionalProperties": false
+            },
+            "maxItems": 30
+          },
+          "context_summary": {
+            "type": "string",
+            "maxLength": 4000
+          },
+          "remaining_seconds": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100000
+          },
+          "available_choices": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Choice"
+            },
+            "maxItems": 30
+          }
+        },
+        "required": [
+          "schema_version",
+          "session_id",
+          "revision",
+          "turn_id",
+          "character_id",
+          "user_utterance",
+          "recent_turns",
+          "context_summary",
+          "remaining_seconds",
+          "available_choices"
+        ],
+        "additionalProperties": false
+      },
+      "DialogueResult": {
+        "type": "object",
+        "properties": {
+          "schema_version": {
+            "const": "1",
+            "type": "string"
+          },
+          "session_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100000
+          },
+          "turn_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "character_id": {
+            "type": "string",
+            "maxLength": 80
+          },
+          "reply": {
+            "type": "string",
+            "maxLength": 1200
+          },
+          "behavior": {
+            "type": "string",
+            "enum": [
+              "idle",
+              "listen",
+              "speak",
+              "gesture"
+            ]
+          },
+          "context_summary": {
+            "type": "string",
+            "maxLength": 4000
+          },
+          "operations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorldOperation"
+            },
+            "maxItems": 20
+          }
+        },
+        "required": [
+          "schema_version",
+          "session_id",
+          "revision",
+          "turn_id",
+          "character_id",
+          "reply",
+          "behavior",
+          "context_summary",
+          "operations"
+        ],
+        "additionalProperties": false
+      },
+      "Observation": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "session_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "active_duration",
+              "stop_count",
+              "self_report",
+              "speech_excerpt",
+              "task_action",
+              "dialogue_turn"
+            ]
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "app_event",
+              "user_report",
+              "transcript"
+            ]
+          },
+          "value": {
+            "type": [
+              "string",
+              "number"
+            ]
+          },
+          "at_active_second": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100000
+          }
+        },
+        "required": [
+          "id",
+          "session_id",
+          "kind",
+          "source",
+          "value"
+        ],
+        "additionalProperties": false
+      },
+      "FeedbackRequest": {
+        "type": "object",
+        "properties": {
+          "plan": {
+            "$ref": "#/components/schemas/SessionPlan"
+          },
+          "observations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Observation"
+            },
+            "maxItems": 500
+          }
+        },
+        "required": [
+          "plan",
+          "observations"
+        ],
+        "additionalProperties": false
+      },
+      "FeedbackItem": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "maxLength": 600
+          },
+          "evidence_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "minItems": 1,
+            "maxItems": 20
+          },
+          "valence": {
+            "type": "string",
+            "enum": [
+              "positive",
+              "negative"
+            ]
+          },
+          "small_improvement": {
+            "type": "string",
+            "maxLength": 400
+          }
+        },
+        "required": [
+          "text",
+          "evidence_ids",
+          "valence"
+        ],
+        "additionalProperties": false
+      },
+      "FeedbackResult": {
+        "type": "object",
+        "properties": {
+          "schema_version": {
+            "const": "1",
+            "type": "string"
+          },
+          "session_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100000
+          },
+          "did_well": {
+            "type": "array",
+            "items": {
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/FeedbackItem"
+                },
+                {
+                  "properties": {
+                    "valence": {
+                      "const": "positive"
+                    }
+                  }
+                }
+              ]
+            },
+            "maxItems": 3
+          },
+          "noticed": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FeedbackItem"
+            },
+            "maxItems": 3
+          },
+          "one_quick_fix": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "tone": {
+            "const": "coaching_nonclinical"
+          }
+        },
+        "required": [
+          "schema_version",
+          "session_id",
+          "revision",
+          "did_well",
+          "noticed",
+          "tone"
+        ],
+        "additionalProperties": false
+      },
+      "AdaptationRequest": {
+        "type": "object",
+        "properties": {
+          "previous_plan": {
+            "$ref": "#/components/schemas/SessionPlan"
+          },
+          "observations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Observation"
+            },
+            "maxItems": 500
+          },
+          "relevant_history": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HistoryRow"
+            },
+            "maxItems": 20
+          },
+          "user_preferences": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 500
+            },
+            "maxItems": 20
+          }
+        },
+        "required": [
+          "previous_plan",
+          "observations",
+          "relevant_history",
+          "user_preferences"
+        ],
+        "additionalProperties": false
+      },
+      "AdaptationResult": {
+        "type": "object",
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "direction": {
+            "type": "string",
+            "enum": [
+              "maintain",
+              "ease",
+              "increase",
+              "mixed"
+            ]
+          },
+          "intensity": {
+            "$ref": "#/components/schemas/Intensity"
+          },
+          "duration_seconds": {
+            "type": "integer",
+            "minimum": 10,
+            "maximum": 3600
+          },
+          "changes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "dimension": {
+                  "type": "string",
+                  "maxLength": 80
+                },
+                "before": {
+                  "type": "string",
+                  "maxLength": 300
+                },
+                "after": {
+                  "type": "string",
+                  "maxLength": 300
+                },
+                "reason": {
+                  "type": "string",
+                  "maxLength": 500
+                }
+              },
+              "required": [
+                "dimension",
+                "before",
+                "after",
+                "reason"
+              ],
+              "additionalProperties": false
+            },
+            "maxItems": 20
+          },
+          "spoken_summary": {
+            "type": "string",
+            "maxLength": 600
+          },
+          "evidence_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "maxItems": 50
+          },
+          "intensity_1_10": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10
+          }
+        },
+        "required": [
+          "session_id",
+          "direction",
+          "intensity",
+          "duration_seconds",
+          "changes",
+          "spoken_summary",
+          "evidence_ids",
+          "intensity_1_10"
+        ],
+        "additionalProperties": false
+      },
+      "BuilderRevision": {
+        "type": "object",
+        "properties": {
+          "schema_version": {
+            "const": "1",
+            "type": "string"
+          },
+          "session_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100000
+          },
+          "additional_input": {
+            "type": "string",
+            "maxLength": 4000
+          },
+          "previous_plan": {
+            "$ref": "#/components/schemas/SessionPlan"
+          }
+        },
+        "required": [
+          "schema_version",
+          "session_id",
+          "revision",
+          "additional_input",
+          "previous_plan"
+        ],
+        "additionalProperties": false
+      },
+      "Reflection": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "session_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "display_title": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "[DATE] [HH:MM] - [TOPIC <=30 characters]; YYYY-MM-DD date. Disk export may sanitize colons, preserving this display title."
+          },
+          "topic": {
+            "type": "string",
+            "maxLength": 30
+          },
+          "relative_file_path": {
+            "type": "string",
+            "maxLength": 300
+          },
+          "transcript": {
+            "type": "string",
+            "maxLength": 30000
+          },
+          "local_date": {
+            "type": "string",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+          },
+          "local_time": {
+            "type": "string",
+            "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$"
+          },
+          "timezone": {
+            "type": "string",
+            "maxLength": 100
+          }
+        },
+        "required": [
+          "id",
+          "session_id",
+          "created_at",
+          "display_title",
+          "topic",
+          "relative_file_path",
+          "transcript",
+          "local_date",
+          "local_time",
+          "timezone"
+        ],
+        "additionalProperties": false
+      },
+      "SessionRecord": {
+        "type": "object",
+        "properties": {
+          "schema_version": {
+            "const": "1"
+          },
+          "session_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "parent_session_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "started_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "ended_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "plan": {
+            "$ref": "#/components/schemas/SessionPlan"
+          },
+          "scene_revision": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100000
+          },
+          "active_seconds": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100000
+          },
+          "stop_count": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100000
+          },
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "completed",
+              "user_ended",
+              "interrupted",
+              "failed"
+            ]
+          },
+          "reported_difficulty": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 10
+          },
+          "reported_readiness": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 10
+          },
+          "reflection_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "feedback": {
+            "$ref": "#/components/schemas/FeedbackResult"
+          },
+          "generation_provenance": {
+            "type": "object",
+            "properties": {
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "live",
+                  "replay"
+                ]
+              },
+              "model_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "maxLength": 100
+                },
+                "maxItems": 20
+              },
+              "request_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                "maxItems": 30
+              }
+            },
+            "required": [
+              "mode",
+              "model_ids",
+              "request_ids"
+            ],
+            "additionalProperties": false
+          },
+          "use_history": {
+            "type": "boolean"
+          },
+          "chained_rerun": {
+            "type": "boolean"
+          },
+          "intensity_1_10": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10
+          },
+          "topic_short": {
+            "type": "string",
+            "maxLength": 30
+          },
+          "early_end": {
+            "type": "boolean"
+          },
+          "observations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Observation"
+            }
+          },
+          "adaptation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AdaptationResult"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reflection_file": {
+            "type": "string"
+          },
+          "reflection": {
+            "type": "object"
+          }
+        },
+        "required": [
+          "schema_version",
+          "session_id",
+          "started_at",
+          "ended_at",
+          "plan",
+          "scene_revision",
+          "active_seconds",
+          "stop_count",
+          "outcome",
+          "reported_difficulty",
+          "reported_readiness",
+          "generation_provenance",
+          "use_history",
+          "chained_rerun",
+          "intensity_1_10",
+          "topic_short",
+          "early_end"
+        ],
+        "additionalProperties": false
+      },
+      "ValidationIssue": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "maxLength": 300
+          },
+          "rule": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "message": {
+            "type": "string",
+            "maxLength": 1000
+          }
+        },
+        "required": [
+          "path",
+          "rule",
+          "message"
+        ],
+        "additionalProperties": false
+      },
+      "Error": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "INVALID_INPUT",
+              "UNAUTHORIZED",
+              "RATE_LIMITED",
+              "PROVIDER_UNAVAILABLE",
+              "TIMEOUT",
+              "INVALID_MODEL_OUTPUT",
+              "CANCELLED",
+              "CONFLICT"
+            ]
+          },
+          "message": {
+            "type": "string",
+            "maxLength": 1000
+          },
+          "retryable": {
+            "type": "boolean"
+          },
+          "request_id": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "issues": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ValidationIssue"
+            },
+            "maxItems": 100
+          },
+          "retry_after_ms": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100000
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "retryable",
+          "request_id"
+        ],
+        "additionalProperties": false
+      },
+      "GenerationResult": {
+        "type": "object",
+        "properties": {
+          "plan": {
+            "$ref": "#/components/schemas/SessionPlan"
+          },
+          "scene": {
+            "$ref": "#/components/schemas/SceneSpec"
+          },
+          "audio": {
+            "$ref": "#/components/schemas/AudioPlan"
+          }
+        },
+        "required": [
+          "plan",
+          "scene",
+          "audio"
+        ],
+        "additionalProperties": false
+      },
+      "Job": {
+        "type": "object",
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "session_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100000
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "running",
+              "succeeded",
+              "failed",
+              "cancelled"
+            ]
+          },
+          "stage": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "result": {
+            "$ref": "#/components/schemas/GenerationResult"
+          },
+          "error": {
+            "$ref": "#/components/schemas/Error"
+          }
+        },
+        "required": [
+          "job_id",
+          "session_id",
+          "revision",
+          "status",
+          "stage"
+        ],
+        "additionalProperties": false
+      },
+      "TranscriptionBootstrapRequest": {
+        "type": "object",
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "language_hint": {
+            "type": "string",
+            "maxLength": 40
+          }
+        },
+        "required": [
+          "session_id"
+        ],
+        "additionalProperties": false
+      },
+      "TranscriptionBootstrap": {
+        "type": "object",
+        "properties": {
+          "websocket_url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "session_token": {
+            "type": "string",
+            "maxLength": 4000
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "websocket_url",
+          "session_token",
+          "expires_at"
+        ],
+        "additionalProperties": false
+      },
+      "SafetyDecision": {
+        "type": "object",
+        "properties": {
+          "decision": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "soften",
+              "refuse"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 1000
+          },
+          "practice_preserving_alternative": {
+            "type": "string",
+            "maxLength": 1000
+          }
+        },
+        "required": [
+          "decision",
+          "reason",
+          "practice_preserving_alternative"
+        ],
+        "additionalProperties": false
+      },
+      "StereoSpec": {
+        "type": "object",
+        "properties": {
+          "presentation": {
+            "const": "stereographic"
+          },
+          "units": {
+            "const": "meters"
+          },
+          "coordinate_system": {
+            "const": "right_handed_y_up"
+          },
+          "eye_calibration": {
+            "const": "device_viewer_profile"
+          },
+          "camera_control": {
+            "const": "app_owned"
+          }
+        },
+        "required": [
+          "presentation",
+          "units",
+          "coordinate_system",
+          "eye_calibration",
+          "camera_control"
+        ],
+        "additionalProperties": false
+      },
+      "RevealSpec": {
+        "type": "object",
+        "properties": {
+          "black_intro_seconds": {
+            "const": 8
+          },
+          "fade_seconds": {
+            "type": "number",
+            "minimum": 0.1,
+            "maximum": 5
+          },
+          "blur_to_clear_seconds": {
+            "type": "number",
+            "minimum": 0.1,
+            "maximum": 5
+          }
+        },
+        "required": [
+          "black_intro_seconds",
+          "fade_seconds",
+          "blur_to_clear_seconds"
+        ],
+        "additionalProperties": false
+      },
+      "EnvironmentSpec": {
+        "$ref": "#/components/schemas/SceneSpec"
+      },
+      "SessionFeedback": {
+        "$ref": "#/components/schemas/FeedbackResult"
+      }
+    }
+  }
+}

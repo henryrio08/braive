@@ -1,0 +1,17 @@
+node_modules/
+.env
+backend/.env
+.build/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+.DS_Store
+backend/data/
+
+# Temporary locally generated output for explicit offline visual review.
+ios/Braive/Review/
+
+__pycache__/
+
+*.p12
+*.mobileprovision

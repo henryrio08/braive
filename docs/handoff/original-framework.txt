@@ -1,0 +1,229 @@
+General Fear Exposure App
+Meta global ai developer hackathon brainstorm
+
+
+Concept
+A stereographic VR app meant to help people train for uncomfortable and/or high-stakes
+situations through practice and exposure. A user describes their fear and current ability to
+handle it, and our system constructs a timed simulation. Examples might be public speaking, job
+interviews, getting lost on a trail, or getting trapped in tight spaces. The program is meant to
+push the user towards level-headed critical thinking and problem solving in uncomfortable
+and/or high-stakes situations. It’s worth stating here explicitly that this is not meant to be a
+mental health advisement product, since those are discouraged in the hackathon.
+
+
+Meta Model Usage Plan
+ Model                                   Capabilities                     Project Use
+
+ Muse Spark                      Agentic coding, reasoning,      scene coordinator: takes fear
+                                 and multimodal tool             + session history, fills the
+                                                                 main OpenAPI schema
+                                                                 (intensity, timer, narrator
+                                                                 beats, tool calls for
+                                                                 setting/sound/feedback).
+                                                                 Also guide/narrator copy.
+                                                                 build-time helper only, not in
+                                                                 the live loop.
+
+ Muse Wonder                     Highest-capability              environment /
+                                 long-horizon agentic coding     3D or image scene from
+                                 and orchestration               coordinator fields (setting
+                                                                 brief, intensity, props).
+
+ Muse Glimmer                    Open-weight multimodal          ambient +
+                                  model for self-hosted             SFX plan from coordinator
+                                  inference and fine-tuning         (beds, intensity ramps,
+                                                                    whoosh on transitions). If
+                                                                    Glimmer is awkward for
+                                                                    audio-only, keep Glimmer off
+                                                                    the critical path and use
+                                                                    canned royalty-free beds +
+                                                                    Spark-chosen labels.
+
+ Muse Voice Transcribe            Speech-to-text for live           live STT for START / STOP /
+                                  streams or audio files            yes-no / hey builder / fear
+                                                                    description / reflection.
+                                                                    Always on during listen
+                                                                    windows.
+
+ SAM 3.1                          Detect, segment, and track        optional head-direction proxy
+                                  objects in images and video       from phone gyro/camera; not
+                                                                    required for the first win path.
+                                                                    Cut it if it burns time.
+
+ Muse Image                       Generate and edit images          only if Wonder can't cover a
+                                  from text or reference images     2D fallback asset; skip for
+                                                                    stereo VR if Wonder is
+                                                                    enough.
+
+ Muse Code                        Agentic coding agent for          build-time helper only, not in
+                                  terminal multi-agent builds       the live loop.
+
+
+
+Core Engagement Loop
+Primarily operated through audible commands and feedback. There is a dedicated preloader
+screen for all page transitions, that displays different tips based on what the user’s transition
+endpoint is. Putting the phone into portrait mode also pauses the app until it is returned to
+landscape mode. Transitions between pages should play a whooshing wind noise.
+    -​ User opens app
+           -​ There is the simple preloader screen with tips
+        -​  When the app loads, the first thing the user sees is a 3D preset forest parallax
+            scenery (with depth so that it fades off into the atmosphere)
+        -​ What do they hear?
+                -​ Royalty free piano music plays in the background ALONGSIDE
+                     atmospheric forest/wind noise
+        -​ What are they able to do?
+                -​ Contrasting-color (to the background) text on the screen says “When
+                     you’re ready to start, say START!”
+-​   User sets up headset
+        -​ Check that the headset is set up
+                -​ “It looks like you’re in portrait mode! Make sure you’ve got your headset
+                     on before you start a simulation!”
+        -​ Get voice-confirmation from user to start
+-​   User describes fear
+        -​ If there is information in the app’s SESSIONS spreadsheet that is relevant to the
+            described fear, ask whether the user would like that to be taken into account
+                -​ “I see we’ve explored this situation before! Would you like to consider
+                     past sessions for this simulation?”
+                -​ If this is a chained session from the “would you like to go again” part at
+                     the end of sessions, then don’t ask.
+        -​ Scene-maker/coordinator AI is sent a prompt. The prompt describes the context
+            of the app, the user’s input, the goal of the model, examples of ideal outputs, and
+            the entire suite of tools/options the model has available.
+                -​ We will use an OpenAPI schema for this (it’s what I usually do and it
+                     works well). I usually outline the stuff and then ask GPT or Gemini to
+                     make a schema.
+        -​ Other models construct their dedicated part (setting, sounds) of the scene
+            according to the instructions of the initial coordinating model, so that everything is
+            coherent.
+                -​ Once the scene-coordinating model has made decisions, decisions are
+                     made: unless further user input is entered.
+                -​ We will also want to have schemas to give these models as well
+-​   User waits for scene setup
+        -​ The narrator says: “I’ll get the scene ready. If there’s anything additional you’d
+            like to say, just say ‘hey builder!’ and let me know!”
+        -​ Preloader screen should always display this tip first here:
+                -​ “To stop at any time, just say STOP!”
+        -​ Ideally, generation should take no more than 2 minutes. It should take around a
+            minute on average.
+-​   User experiences scene
+        -​ The screen is black, and the narrator describes the scene in 8 seconds before
+            the black fades away and the scene (blurry at first) fades into view.
+                -​ In those 8 seconds, the narrator also reminds the user of the STOP
+                     command
+           -​  The user halts the simulation at any time by saying “STOP!”
+                   -​ This causes everything to pause. A black-tinted overlay with a white text
+                        display shows “Quit simulation?”. The user says “yes” to skip the rest of
+                        the simulation or “no” to resume (basically undoing everything that STOP
+                        did).
+           -​ Timer counts down
+                   -​ A timer counts down from a set amount of time chosen by the
+                        scene-coordinating model
+   -​   User gives feedback
+           -​ Self-report experience
+           -​ Optional vocal-reflection that is transcribed and saved to a “Reflections” folder in
+               the app folder
+                   -​ Filename is “[DATE]
+                   -​ [HH::MM] - [SIMULATION TOPIC (<=30 characters)]”
+   -​   User optionally receives feedback/analysis
+           -​ “Would you like to hear feedback on your experience?”
+           -​ Here’s what you did well
+                   -​ 3 things maximum (positive only)
+           -​ I also noticed…
+                   -​ 3 things maximum (each can be either positive or negative. Doesn’t
+                        matter)
+                   -​ If it’s relevant, include at least one smaller thing that the user can fix
+                        quickly, so that initial difficulty does not feel insurmountable
+           -​ Obviously, this would need to be the work of an agent, and so we’d need an
+               OpenAPI schema here as well.
+   -​   Save session information to the app’s SESSIONS spreadsheet
+           -​ The spreadsheet should have a conservative column-count and be designed to
+               prioritize conveying information (especially the topics and the quantitative values)
+               for mass review and cross-session pattern recognition.
+   -​   User optionally goes again at an adapted level or returns to initial action screen
+           -​ “Based on your last performance, would you like to go again?”
+           -​ The one that says “when you’re ready to start, say START!”
+
+
+
+
+Edge Cases to Account For
+Fear is NSFW?
+Fear requires human interaction (like conversation)?
+User has noticeably malicious intent?
+Testing & demo tech plan
+Goal: native iPhone app for Cardboard-style goggles demo (not a web compromise).
+App Store / $99 Developer Program not required for a cable-install demo.
+
+
+Team Machines
+• Henry: Mac + Xcode
+• Richard: Windows; can also use xtool (https://github.com/xtool-org/xtool) via WSL to
+build/deploy SwiftPM iOS apps without Xcode
+
+
+Path A — Henry’s Mac (primary for Xcode)
+• Plug iPhone into Mac via USB → Trust on phone if prompted
+• In Xcode: select the phone as run destination → hit Run (▶)
+• Xcode builds, signs (free Apple ID Personal Team), installs, and launches the app
+• First time on phone: Settings → General → VPN & Device Management → trust developer;
+enable Developer Mode if asked
+• After install, unplug is fine; open the app from the home screen for the goggles demo
+
+
+
+
+Path B — Richard’s Windows + xtool
+• WSL + USB passthrough (USBIPD); one-time Xcode.xip for Darwin Swift SDK; xtool setup
+(free Apple ID password login OK)
+• Plug phone into Windows (bound into WSL) → xtool dev → build, sign, install
+• Launch from home screen; same trust / Developer Mode steps as above
+• xtool is a Swift/SwiftUI pipeline (not React Native / Flutter / Expo)
+Signing & fees
+• Free Apple ID Personal Team: enough for on-device testing; profiles expire ~7 days → rebuild
+before demo if needed
+• TestFlight / Ad Hoc / App Store need paid Apple Developer Program ($99/yr) — skip for
+hackathon live demo
+• Cardboard-style goggles only hold the phone; no store listing needed
+
+
+Demo day
+• Install ahead of time (or live with cable)
+• Phone in goggles; app already on home screen
+• Cable optional once installed
+
+
+Phone setup — first time (do once per phone)
+• Use a cable (USB-C or Lightning → USB); wireless pairing is optional later, cable is simplest
+for install
+• Unlock the iPhone; when “Trust This Computer?” appears, tap Trust and enter the passcode
+• On the iPhone: Settings → Privacy & Security → Developer Mode → On → restart when
+asked → confirm
+• On the Mac (Xcode) or Windows (xtool): sign in with a free Apple ID / Personal Team; Xcode
+or xtool will register the device and create a development profile
+• Build and install once (Xcode Run ▶, or xtool dev)
+• First launch may show “Untrusted Developer”: Settings → General → VPN & Device
+Management → select the developer certificate → Trust
+• Confirm the app icon is on the Home Screen / App Library and opens without the cable
+
+
+Phone setup — each rebuild / before demo day
+• Free Personal Team profiles expire ~7 days; if the app won’t open, plug in and rebuild/reinstall
+from Xcode or xtool
+• Smoke-test mic (Transcribe / stop word), speakers/headphones, and gyroscope / orientation
+before putting the phone in goggles
+• Charge the phone; enable Do Not Disturb; raise volume; landscape lock as needed for the
+cardboard viewer
+• Optional: keep Low Power Mode off during the demo so the screen doesn’t dim mid-scene
+
+
+Demo with goggles (live)
+• Install ahead of judging if possible; cable only needed for install, not for the demo itself
+• Open the app on the phone → confirm stop word works → start the scene → slide phone into
+Cardboard-style goggles
+• Hold phone + goggles for the user; keep a backup phone or laptop nearby to reinstall if signing
+expired
+• If something breaks mid-demo: unplug from goggles, reconnect cable, Run / xtool dev again
+(~1–2 min)
+
