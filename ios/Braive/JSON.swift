@@ -75,7 +75,7 @@ struct JSON: Codable, Equatable {
 struct API {
   var base: String
   var token: String
-  func call(_ path: String, _ body: JSON? = nil, method: String? = nil) async throws -> JSON {
+  func call(_ path: String, _ body: JSON? = nil, method: String? = nil, timeout: TimeInterval = 35) async throws -> JSON {
     guard let url = URL(string: base + path), ["http", "https"].contains(url.scheme ?? "") else {
       throw URLError(.badURL)
     }
@@ -86,7 +86,7 @@ struct API {
       req.httpBody = try JSONEncoder().encode(body)
       req.setValue("application/json", forHTTPHeaderField: "Content-Type")
     }
-    req.timeoutInterval = 35
+    req.timeoutInterval = timeout
     let (data, response) = try await URLSession.shared.data(for: req)
     let result = data.isEmpty ? JSON() : try JSONDecoder().decode(JSON.self, from: data)
     guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {

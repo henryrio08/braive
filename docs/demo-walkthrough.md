@@ -1,6 +1,6 @@
 # Public-speaking verification and submission capture
 
-This is a capture plan, not a claim of completed testing. Do not use credits until Henry explicitly approves live use. Keep recordings honest about generated content and development status.
+This is a capture plan, not a claim of completed testing. Live checks may use the remaining single US$5 cumulative continuation allowance through `scripts/start-phone-test.mjs`. Check the persistent ledger and other processes first; never reset the allowance. Keep recordings honest about generated content and development status.
 
 Suggested freeform request: “I need to present a community garden proposal to eight neighbors in a sunny library. I can speak for a minute but get flustered when someone asks a follow-up. Keep the questions friendly.”
 

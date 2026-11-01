@@ -1,3 +1,5 @@
+import {activeBudget} from './budget.js';
+import {meshCatalog} from './assets.js';
 import express from 'express';
 import { createServer } from 'node:http';
 import { randomUUID, timingSafeEqual } from 'node:crypto';
@@ -14,22 +16,22 @@ app.use((req,res,next)=> authorized(req.headers.authorization) ? next() : res.st
 const approved=new Map<string,{plan:SessionPlan,scene:SceneSpec,audio:AudioPlan}>();
 const attempts=new Map<string,{deadline:number,repairs:number}>();
 const jobs=new Map<string,Job>(); const running=new Map<string,AbortController>(); const revisions=new Map<string,number>();
-const meshAssets=['person_standing','person_seated','chair','table','lectern','bookshelf','window_frame'].map(id=>({id,kind:'mesh',origin:'bundled',description:id.replaceAll('_',' ')+'; complete original native assembly; feet/base at y=0; forward=-Z'}));
-const capabilities={version:'iphone-initial-1',nodes:350,resolved_nodes:650,draw_calls:700,texture_bytes:16000000,resident_bytes:180000000,units:'meters',eye_height:1.6,initial_forward:'negative Z',geometry:['box','plane','sphere','cylinder'],characters:'Recognizable component assembly: head, hair, torso, arms, hands, legs. Root has character role. Root idle/listen/speak/gesture animates assembly.',voices:['default'],assets:meshAssets, audio_assets:['forest','piano','wind','room','crowd','whoosh']};
+
+const capabilities={version:'iphone-initial-1',nodes:350,resolved_nodes:650,draw_calls:700,texture_bytes:16000000,resident_bytes:180000000,units:'meters',eye_height:1.6,initial_forward:'negative Z',geometry:['box','plane','sphere','cylinder','asset'],characters:'Use only character.base.neutral_humanoid_01. Solid Material.color from Character.color_hex. Skin preserved; app supplies subtle idle/listen/speak/gesture joint motions on known neutral bones; unknown rigs safely no-op. Never use crowd_proxy as a character.',voices:['default'],asset_catalog_format:'category.subcategory: [[asset_id, triangle_count], ...]. All assets normalized to meters, base y=0, forward -Z. Use each GLB intact; do not author its mesh or skeleton children.',assets:meshCatalog, audio_assets:['forest','piano','wind','room','crowd','whoosh']};
 const assets=capabilities.audio_assets.map(id=>({id,kind:'audio',description:`Bundled synthesized ${id}`,origin:'bundled'}));
 async function generate(request:PlanRequest, job:Job, signal:AbortSignal) {
  let plan:SessionPlan|undefined, scene:SceneSpec|undefined, audio:AudioPlan|undefined, issues:unknown;
  const previous=approved.get(request.session_id)??(request.parent_session_id?approved.get(request.parent_session_id):undefined);
  for(let attempt=0;attempt<2;attempt++) {
   try {
-   if(!plan) { job.stage='Coordinating your situation'; plan=await model('SessionPlan',{request,capabilities,issues,previous_plan:previous?.plan},`You coordinate Braive situational practice. ${authoring}\nUse current ability and explicit boundaries. Copy session_id/revision. Intro includes exact stop_reminder, at most 18 words total. Choose default voice IDs. Return safety decision before generating any scene. Prefer registered complete person and prop assets; compose original setting and layout. Do not spend node output on each character component.`,signal); }
+   if(!plan) { job.stage='Coordinating your situation'; plan=await model('SessionPlan',{request,capabilities,issues,previous_plan:previous?.plan},`You coordinate Braive situational practice. ${authoring}\nUse current ability and explicit boundaries. Copy session_id/revision. Intro includes exact stop_reminder, at most 18 words total. Choose default voice IDs. Return safety decision before generating any scene. Prefer named registered GLB assets; generate layout and interactions. Every character uses character.base.neutral_humanoid_01; choose a solid hex color_hex for each Character. Do not invent mesh IDs. Primitives are architecture fill only; listed empty subcategories remain gaps.`,signal); }
    if(plan!.safety.decision==='refuse') throw new AppError('INVALID_INPUT',plan!.safety.reason+' '+plan!.safety.practice_preserving_alternative);
    if(plan!.session_id!==request.session_id || plan!.revision!==request.revision) throw new AppError('INVALID_MODEL_OUTPUT','Coordinator revision mismatch');
    const pIssues=planIssues(plan!); if(pIssues.length) throw new AppError('INVALID_MODEL_OUTPUT','Invalid coordinator invariants',pIssues);
    job.stage=attempt?'Repairing scene validation issues':'Authoring spatial scene and sound';
    // Audio first supplies a stable cue manifest to scene authoring.
    audio=await model('AudioPlan',{plan,available_assets:assets},'Select only supplied audio assets. Required whoosh. Keep narrative speech audible. Match plan revision.',signal);
-   scene=await model('SceneSpec',{plan,capabilities,asset_manifest:meshAssets,audio,previous_scene:scene??previous?.scene,issues},authoring+" Use registered complete person/prop assets to keep scene concise while generating original layout. Geometry for assets is {kind:asset,asset_id:registered_id}. Person assets include working idle/listen/speak/gesture; place character root at floor height.",signal,true);
+   scene=await model('SceneSpec',{plan,capabilities,audio,previous_scene:scene??previous?.scene,issues},authoring+" Use registered GLBs for characters and props; primitives only for architecture fill. Characters use only character.base.neutral_humanoid_01 and copy Character.color_hex to Material.color exactly. Place normalized asset bases at floor height. No unregistered IDs. Neutral behavior uses app-owned joint motions, not invented GLB animation clips. Return compact JSON with concise descriptions. Prefer 30-60 scene nodes when sufficient for all approved participants, setting, depth and interactions; never remove task semantics to meet that guideline.",signal,true);
    const errors=sceneIssues(plan!,scene!,audio!);
    for(const l of audio!.layers) if(!capabilities.audio_assets.includes(l.asset_id)) errors.push({path:'/layers',rule:'asset',message:'Unknown audio asset'});
    if(errors.length) throw new AppError('INVALID_MODEL_OUTPUT','Scene requires repair',errors);
@@ -55,7 +57,7 @@ app.post(['/v1/session-plans','/v1/scene-revisions'],(req,res,next)=>{
   void generate(input,job,controller.signal).catch(e=>{
    if(job.status==='cancelled') return;
    job.status='failed';job.error={code:controller.signal.aborted?'TIMEOUT':e.code??'PROVIDER_UNAVAILABLE',message:controller.signal.aborted?'Generation ended at two minutes. Retry, revise, or cancel.':e.message,retryable:true,request_id:job.job_id,issues:e.issues};
-  }).finally(()=>{clearTimeout(timer);running.delete(job.job_id);});
+  }).finally(()=>{clearTimeout(timer);running.delete(job.job_id);console.log('[generation]',JSON.stringify({job_id:job.job_id,status:job.status,elapsed_seconds:(Date.now()-(attempts.get(job.job_id)!.deadline-120000))/1000,error_code:job.error?.code,nodes:job.result?.scene.nodes.length}));});
   res.status(202).json(job);
  } catch(e){next(e);}
 });
@@ -108,19 +110,42 @@ for(const [path,requestSchema,resultSchema,instructions] of routes) app.post(`/v
 app.get('/v1/provenance/:id',(req,res)=>res.json({mode:'live',model_ids:[process.env.SPARK_MODEL??'muse-spark-1.3',process.env.WONDER_MODEL??'muse-wonder-1.0'],request_ids:provenance.get(req.params.id)??[]}));
 app.use((e:any,_req:express.Request,res:express.Response,_next:express.NextFunction)=>res.status(e.status??500).json({code:e.code??'INVALID_INPUT',message:e.message,issues:e.issues??[],request_id:randomUUID(),retryable:true}));
 const server=createServer(app); const wss=new WebSocketServer({noServer:true,maxPayload:100000});
-server.on('upgrade',(req,socket,head)=>{ if(req.url!=='/v1/transcribe' || !authorized(req.headers.authorization)) {socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');socket.destroy();return;} wss.handleUpgrade(req,socket,head,client=>wss.emit('connection',client)); });
+server.on('upgrade',(req,socket,head)=>{
+ const diagnostic=req.url==='/v1/diagnostics/audio' && process.env.BRAIVE_TEST_MODE==='true';
+ if((req.url!=='/v1/transcribe' && !diagnostic) || !authorized(req.headers.authorization)) {
+  socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');socket.destroy();return;
+ }
+ wss.handleUpgrade(req,socket,head,client=>{
+  if(!diagnostic){wss.emit('connection',client);return;}
+  // Local transport measurement only: count bytes, never retain audio or contact a provider.
+  let bytes=0;client.send(JSON.stringify({sessionId:'local-transport-check'}));
+  const timer=setTimeout(()=>client.close(1000,'Local check ended'),20000);
+  client.on('message',(data,binary)=>{if(binary){bytes+=Array.isArray(data)?data.reduce((n,b)=>n+b.byteLength,0):data.byteLength;client.send(JSON.stringify({type:'audioProgress',audioProcessedMs:bytes/48}));}});
+  client.on('close',()=>{clearTimeout(timer);console.log('[local audio check]',bytes,'bytes received');});
+ });
+});
 wss.on('connection',(client:WebSocket)=>{
  if(process.env.BRAIVE_ALLOW_AUDIO === 'false'){client.close(1008,'Audio disabled in bounded test');return;}
  if(process.env.BRAIVE_ALLOW_META !== 'true'){client.close(1008,'Meta spending disabled');return;}
  if(!process.env.MODEL_API_KEY){client.close(1011,'Meta key missing');return;}
- const upstream=new WebSocket('wss://api.meta.ai/v1/asr/realtime');let ready=false;
+ const maximumAudioSeconds=Number(process.env.BRAIVE_AUDIO_MAX_SECONDS??0);
+ if(!Number.isFinite(maximumAudioSeconds)||maximumAudioSeconds<=0||!activeBudget()){client.close(1008,'A cumulative budget and bounded duration are required for live transcription');return;}
+ try{activeBudget()!.reserve('transcription',maximumAudioSeconds*0.18/3600,{maximum_seconds:maximumAudioSeconds,rate_usd_per_hour:0.18})}catch{client.close(1008,'Cumulative Meta budget unavailable');return;}
+ const upstream=new WebSocket('wss://api.meta.ai/v1/asr/realtime');let ready=false;let audioBytes=0;const voiceStarted=Date.now();
+ const audioTimer=setTimeout(()=>{upstream.close();client.close(1000,'Bounded audio window ended');},maximumAudioSeconds*1000);
  const timeout=setTimeout(()=>{if(!ready){client.close(1011,'Transcribe handshake timed out');upstream.terminate();}},10000);
- upstream.on('open',()=>upstream.send(JSON.stringify({authorization:{accessToken:`Bearer ${process.env.MODEL_API_KEY}`},model:'muse-voice-transcribe-1.0',audioEncoding:'PCM_24KHZ',mode:'ENDPOINTING',partialMode:'CUMULATIVE',emitAudioProgress:false,languageBias:['English'],keywords:['STOP','START','hey builder']})));
- upstream.on('message',(data,binary)=>{if(!binary){try{const e=JSON.parse(data.toString());if(e.sessionId && !e.type){ready=true;clearTimeout(timeout);}}catch{}}if(client.readyState===WebSocket.OPEN) client.send(data,{binary});});
- client.on('message',(data,binary)=>{if(ready && upstream.readyState===WebSocket.OPEN) upstream.send(data,{binary});});
- const close=()=>{clearTimeout(timeout);upstream.close();client.close();};
- client.on('close',close);client.on('error',close);upstream.on('close',()=>{clearTimeout(timeout);client.close(1011,'Transcription disconnected');});upstream.on('error',()=>{clearTimeout(timeout);client.close(1011,'Transcription unavailable');});
+ upstream.on('open',()=>upstream.send(JSON.stringify({authorization:{accessToken:`Bearer ${process.env.MODEL_API_KEY}`},model:'muse-voice-transcribe-1.0',audioEncoding:'PCM_24KHZ',mode:'ENDPOINTING',partialMode:'CUMULATIVE',emitAudioProgress:true,languageBias:['English'],keywords:['STOP','START','hey builder']})));
+ upstream.on('message',(data,binary)=>{if(!binary){try{const e=JSON.parse(data.toString());if(e.sessionId && !e.type){ready=true;clearTimeout(timeout);console.log('[voice] ready');}if(e.type==='error')console.warn('[voice] provider error:',String(e.message).slice(0,400));}catch{}}if(client.readyState===WebSocket.OPEN) client.send(data,{binary});});
+ client.on('message',(data,binary)=>{if(binary){audioBytes+=Array.isArray(data)?data.reduce((n,b)=>n+b.byteLength,0):data.byteLength;if(audioBytes>maximumAudioSeconds*48000){upstream.close();client.close(1008,'Audio byte budget reached');return;}}if(ready && upstream.readyState===WebSocket.OPEN) upstream.send(data,{binary});});
+ const close=()=>{clearTimeout(audioTimer);clearTimeout(timeout);upstream.close();client.close();};
+ client.on('close',close);client.on('error',close);upstream.on('close',(code,reason)=>{clearTimeout(audioTimer);clearTimeout(timeout);console.log('[voice] closed',JSON.stringify({code,reason:reason.toString().slice(0,200),audio_bytes:audioBytes,wall_seconds:(Date.now()-voiceStarted)/1000,audio_seconds:audioBytes/48000}));client.close(1011,('Transcription '+code+': '+reason.toString()).slice(0,110));});upstream.on('error',(error)=>{clearTimeout(audioTimer);clearTimeout(timeout);console.warn('[voice] transport error:',error.message);client.close(1011,'Transcription transport unavailable');});
 });
 // Bound completed jobs; never store raw audio.
 setInterval(()=>{if(jobs.size>100)for(const [id,j] of jobs){if(!running.has(id)){jobs.delete(id);attempts.delete(id);approved.delete(j.session_id);revisions.delete(j.session_id);provenance.delete(j.session_id);}if(jobs.size<=100)break;}},60000).unref();
 server.listen(Number(process.env.PORT??8787),process.env.HOST??'127.0.0.1',()=>console.log(`Braive backend listening on ${process.env.PORT??8787}; Meta key ${process.env.MODEL_API_KEY?'configured':'missing'}`));
+
+if(process.env.BRAIVE_TEST_MODE==='true'){
+ const shutdown=()=>{for(const controller of running.values())controller.abort();for(const client of wss.clients)client.close();server.close();setTimeout(()=>process.exit(0),300).unref();};
+ const window=Number(process.env.BRAIVE_TEST_WINDOW_SECONDS??900);if(!Number.isFinite(window)||window<=0)throw Error('Bounded test window required');setTimeout(shutdown,window*1000).unref();process.on('SIGTERM',shutdown);process.on('SIGINT',shutdown);
+ app.get('/v1/test-budget',(_req,res)=>res.json(activeBudget()?.snapshot()));
+}

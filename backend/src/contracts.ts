@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import Ajv from 'ajv';
+import {assetIDs,characterIDs} from './assets.js';
 import addFormats from 'ajv-formats';
 import type { ValidationIssue, SceneSpec, SessionPlan, AudioPlan } from '../../docs/handoff/contracts.js';
 export const document = JSON.parse(readFileSync(new URL('../../docs/handoff/openapi.json', import.meta.url), 'utf8'));
@@ -26,7 +27,9 @@ export function sceneIssues(plan: SessionPlan, scene: SceneSpec, audio: AudioPla
   while(p && nodes.has(p)) { if(seen.has(p)) { fail(`/nodes/${i}`,'cycle','Cyclic hierarchy'); break; } seen.add(p); p=nodes.get(p)!.parent_id; }
   if(![...n.position,...n.rotation_radians,...n.scale].every(Number.isFinite) || n.scale.some(v=>v<=0)) fail(`/nodes/${i}`,'transform','Positive finite transforms required');
   const g=n.geometry;
-  if(g.kind==='asset' && !['person_standing','person_seated','chair','table','lectern','bookshelf','window_frame'].includes(g.asset_id)) fail(`/nodes/${i}/geometry`,'asset','Use only registered individual object assets.');
+  if(g.kind!=='asset' && n.role!=='environment') fail(`/nodes/${i}/geometry`,'architecture_only','Primitives are architecture fill only; use registered GLBs for props and characters');
+  if(n.role==='character' && (g.kind!=='asset' || !characterIDs.has(g.asset_id))) fail(`/nodes/${i}/geometry`,'neutral_character','Characters must use the sole character.base asset');
+  if(g.kind==='asset' && !assetIDs.has(g.asset_id)) fail(`/nodes/${i}/geometry`,'asset','Use only registered individual object assets.');
   if(g.kind==='box' && g.size.some(v=>v<=0) || g.kind==='sphere' && g.radius<=0 || g.kind==='cylinder' && (g.radius<=0 || g.height<=0) || g.kind==='plane' && (g.width<=0 || g.height<=0)) fail(`/nodes/${i}/geometry`,'size','Positive geometry dimensions required');
  }
  if(!scene.nodes.some(n=>n.role==='task_focus')) fail('/nodes','task_focus','Visible task_focus required');
@@ -34,7 +37,7 @@ export function sceneIssues(plan: SessionPlan, scene: SceneSpec, audio: AudioPla
  if(views.size!==scene.viewpoints.length || !views.has(scene.initial_viewpoint_id)) fail('/viewpoints','reference','Unique viewpoints including initial viewpoint required');
  const chars=new Set(plan.characters.map(c=>c.id));
  if(chars.size!==plan.characters.length) fail('/characters','unique','Duplicate characters');
- for(const c of plan.characters) if(!nodes.has(c.scene_node_id)) fail('/nodes','character','Character root missing: '+c.scene_node_id);
+ for(const c of plan.characters) {const n=nodes.get(c.scene_node_id);if(!n) fail('/nodes','character','Character root missing: '+c.scene_node_id);else {if(n.geometry.kind!=='asset' || !characterIDs.has(n.geometry.asset_id)) fail('/nodes','neutral_character','Every Character must resolve to character.base');if(c.color_hex && n.material.color.toLowerCase()!==c.color_hex.toLowerCase())fail('/nodes','character_color','Wonder must preserve coordinator color_hex in Material.color');}}
  if(['dialogue','mixed'].includes(plan.interaction_mode) && !chars.size) fail('/characters','interaction','Dialogue requires characters');
  if(['navigation','mixed'].includes(plan.interaction_mode) && !scene.interactions.some(i=>i.choices.some(c=>c.operations.some(o=>o.type==='viewpoint_transition')))) fail('/interactions','navigation','Need operational routes');
  if(plan.interaction_mode==='solo' && !scene.events.length && !scene.interactions.some(i=>i.choices.length)) fail('/interactions','solo','Need task events or inspection choices');

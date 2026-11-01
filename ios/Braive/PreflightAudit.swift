@@ -4,6 +4,10 @@ import Foundation
 @MainActor enum PreflightAudit {
   static func run(_ world: World) throws {
     let id = UUID().uuidString
+    let table = try AssetLibrary.first(category: "furniture", subcategory: "table")
+    let chair = try AssetLibrary.first(category: "furniture", subcategory: "chair")
+    let shelf = try AssetLibrary.first(category: "furniture", subcategory: "bookshelf")
+    let character = try AssetLibrary.first(category: "character", subcategory: "base")
     func node(
       _ id: String, _ role: String, _ geometry: [String: Any], _ position: [Double],
       rotation: [Double] = [0, 0, 0]
@@ -15,13 +19,13 @@ import Foundation
       ]
     }
     let nodes: [Any] = [
-      node("lectern", "task_focus", ["kind": "asset", "asset_id": "lectern"], [0, 0, -3]),
+      node("lectern", "task_focus", ["kind": "asset", "asset_id": table], [0, 0, -3]),
       node(
-        "neighbor", "character", ["kind": "asset", "asset_id": "person_seated"], [1.2, 0, -4],
+        "neighbor", "character", ["kind": "asset", "asset_id": character], [1.2, 0, -4],
         rotation: [0, Double.pi, 0]),
-      node("foreground_chair", "prop", ["kind": "asset", "asset_id": "chair"], [-0.8, 0, -1.8]),
+      node("foreground_chair", "prop", ["kind": "asset", "asset_id": chair], [-0.8, 0, -1.8]),
       node(
-        "bookcase", "environment", ["kind": "asset", "asset_id": "bookshelf"], [-2, 0, -6],
+        "bookcase", "environment", ["kind": "asset", "asset_id": shelf], [-2, 0, -6],
         rotation: [0, Double.pi, 0]),
       node("back_wall", "environment", ["kind": "box", "size": [12, 5, 0.1]], [0, 2, -10]),
       node("floor", "environment", ["kind": "box", "size": [20, 0.1, 20]], [0, -0.1, -5]),

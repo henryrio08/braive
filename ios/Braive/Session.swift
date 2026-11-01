@@ -21,6 +21,9 @@ import SwiftUI
   @Published var token = UserDefaults.standard.string(forKey: "token") ?? ""
   @Published var remoteConsent = false
   @Published var liveEnabled = false
+  @Published var connecting = false
+  @Published var voiceListening = false
+  @Published var setupNotice = ""
   let world = World(), audio = Audio(), store = SessionStore()
   var api: API { API(base: server.trimmingCharacters(in: .whitespacesAndNewlines), token: token) }
   var plan = JSON(), scene = JSON(), audioPlan = JSON(), record = JSON(), reflection = JSON()
@@ -49,10 +52,25 @@ import SwiftUI
   var pendingText = ""
   var adaptation = JSON()
   init() {
+    let pairingURL = store.root.appendingPathComponent("LocalPairing.json")
+    if let data = try? Data(contentsOf: pairingURL),
+      let config = try? JSONDecoder().decode(JSON.self, from: data)
+    {
+      if !config["server"].text.isEmpty {
+        server = config["server"].text
+        UserDefaults.standard.set(server, forKey: "server")
+      }
+      if !config["token"].text.isEmpty {
+        token = config["token"].text
+        UserDefaults.standard.set(token, forKey: "token")
+      }
+      try? FileManager.default.removeItem(at: pairingURL)
+    }
     world.onPortrait = { [weak self] portrait in self?.pause("portrait", enabled: portrait) }
+    audio.onStatus = { [weak self] status in self?.setupNotice = status }
     audio.onText = { [weak self] text, final, id in self?.heard(text, final: final, id: id) }
-    audio.onDisconnect = { [weak self] in
-      self?.connection = "Voice connection lost"
+    audio.onDisconnect = { [weak self] reason in
+      self?.connection = "Voice disconnected: " + reason
       self?.pause("command_channel_unavailable", enabled: true)
     }
     timer = Timer.publish(every: 0.05, on: .main, in: .common).autoconnect().sink { [weak self] _ in
@@ -60,8 +78,11 @@ import SwiftUI
     }
     if ProcessInfo.processInfo.arguments.contains("--asset-audit") {
       preview()
-      world.auditAssets()
-      message = "Offline renderer asset audit — reusable objects, no model calls"
+      do {
+        let count = try world.auditAssets()
+        message =
+          "Offline GLB audit passed: \(count) manifest assets; neutral skin and isolated bones verified"
+      } catch { message = "Offline GLB audit failed: " + error.localizedDescription }
     }
     if ProcessInfo.processInfo.arguments.contains("--preflight-audit") {
       preview()
@@ -102,48 +123,68 @@ import SwiftUI
     audio.lobby()
   }
   func connect() {
+    guard !connecting, !audio.ready else { return }
     guard remoteConsent, liveEnabled else {
-      message =
-        "Enable remote processing and live Meta use to connect. Live use requires permission from Henry."
+      setupNotice = "Allow speech processing to begin voice practice."
       return
     }
     UserDefaults.standard.set(server, forKey: "server")
     UserDefaults.standard.set(token, forKey: "token")
+    setupNotice = ""
+    connecting = true
     Task {
+      defer { connecting = false }
       do {
+        connection = "Preparing on-device voice…"
         try await audio.start(api: api)
-        connection = "Connecting voice…"
+        setupNotice = ""
+        connection = "On-device voice ready"
         go(.lobby, "When you’re ready to start, say START!")
         world.lobby()
+        world.scene.isPaused = !pauses.isEmpty
         audio.lobby()
-      } catch { fail(error) }
+      } catch {
+        audio.stopCapture()
+        phase = .setup
+        loading = false
+        pendingPhase = nil
+        connection = "Not connected"
+        setupNotice = "Voice couldn’t start: " + error.localizedDescription
+        connection = error.localizedDescription
+      }
     }
   }
   func reconnect() {
+    guard !connecting else { return }
+    connecting = true
     audio.stopCapture()
     Task {
+      defer { connecting = false }
       do {
         try await audio.start(api: api)
         pause("command_channel_unavailable", enabled: false)
+        pause("audio_interruption", enabled: false)
       } catch { message = error.localizedDescription }
     }
   }
   func pause(_ reason: String, enabled: Bool) {
+    if phase == .setup { pauses.remove(reason); return }
     let was = pauses.isEmpty
     if enabled { pauses.insert(reason) } else { pauses.remove(reason) }
     if was && !pauses.isEmpty {
       world.scene.isPaused = true
       audio.pause()
-      turnNonce = UUID()
-      turnTask?.cancel()
     } else if !was && pauses.isEmpty {
       world.scene.isPaused = false
       audio.resume()
       lastTick = ProcessInfo.processInfo.systemUptime
     }
   }
+  var canStop: Bool {
+    [.planning, .intro, .reveal, .active].contains(phase) || (loading && pendingPhase == .planning)
+  }
   func stop() {
-    guard phase != .setup else { return }
+    guard canStop else { return }
     guard !pauses.contains("user_stop") else { return }
     stopCount += 1
     pause("user_stop", enabled: true)
@@ -163,7 +204,7 @@ import SwiftUI
     transcript = text
     let words = text.lowercased().split(whereSeparator: { !$0.isLetter }).map(String.init)
     // Conservative STOP works on partials. Device voice processing handles playback echo; verify in goggles.
-    if words.contains("stop") {
+    if canStop && words.contains("stop") {
       stop()
       return
     }
@@ -220,7 +261,6 @@ import SwiftUI
     case .history:
       if yes || no {
         useHistory = yes
-        if no { history = [] }
         generate()
       }
     case .active: dialogue(text)
@@ -260,6 +300,7 @@ import SwiftUI
         adapt()
       } else if no {
         world.lobby()
+        world.scene.isPaused = !pauses.isEmpty
         audio.lobby()
         go(.lobby, "When you’re ready to start, say START!")
       }
@@ -348,9 +389,18 @@ import SwiftUI
     generation = Task {
       do {
         let job = try await api.call("/v1/session-plans", request())
-        guard !Task.isCancelled, rev == revision else { return }
+        guard !Task.isCancelled, rev == revision else {
+          _ = try? await api.call("/v1/jobs/" + job["job_id"].text, method: "DELETE")
+          return
+        }
         jobID = job["job_id"].text
         while !Task.isCancelled {
+          guard ProcessInfo.processInfo.systemUptime < generationDeadline else {
+            _ = try? await api.call("/v1/jobs/" + jobID, method: "DELETE")
+            throw NSError(domain: "Generation", code: 1, userInfo: [
+              NSLocalizedDescriptionKey: "Two-minute generation deadline reached."
+            ])
+          }
           try await Task.sleep(for: .milliseconds(600))
           let j = try await api.call("/v1/jobs/" + jobID)
           guard rev == revision, !Task.isCancelled else { return }
@@ -369,6 +419,11 @@ import SwiftUI
             guard rev == revision else { return }
             let fittedIntro = await audio.fitIntro(result["plan"]["narrator_intro_8s"].text)
             try Task.checkCancellation()
+            while !pauses.isEmpty {
+              try await Task.sleep(for: .milliseconds(100))
+              try Task.checkCancellation()
+            }
+            guard rev == revision else { return }
             guard ProcessInfo.processInfo.systemUptime < generationDeadline else {
               throw NSError(
                 domain: "Generation", code: 1,
@@ -406,6 +461,7 @@ import SwiftUI
             loading = false
             pendingPhase = nil
             audio.silence()
+            world.scene.isPaused = false
             phase = .intro
             message = plan["narrator_intro_8s"].text
             audio.say(message)
@@ -440,7 +496,9 @@ import SwiftUI
       }
       return
     }
-    if audio.ready { connection = "Voice connected" }
+    voiceListening = audio.ready && audio.engine.isRunning
+      && (audio.captureStats.snapshot(engineRunning: true)["callbacks"] as? Int ?? 0) > 0
+    if voiceListening { connection = "Listening" }
     if phase == .intro {
       introTime += dt
       if introTime >= 8 {
@@ -516,6 +574,12 @@ import SwiftUI
           "available_choices": scene["interactions"].list.flatMap { $0["choices"].list.map(\.raw) },
         ])
         let result = try await api.call("/v1/dialogue", req)
+        // Keep the completed answer pending during STOP/orientation interruptions.
+        // Ending the session or starting another turn still invalidates it.
+        while !pauses.isEmpty {
+          try await Task.sleep(for: .milliseconds(100))
+          try Task.checkCancellation()
+        }
         guard !Task.isCancelled, nonce == turnNonce, rev == revision, phase == .active,
           pauses.isEmpty
         else { return }
@@ -584,6 +648,7 @@ import SwiftUI
   func save() {
     if plan["session_id"].text.isEmpty {
       world.lobby()
+      world.scene.isPaused = !pauses.isEmpty
       audio.lobby()
       go(
         .lobby, "Setup ended before a practice scene began. When you’re ready to start, say START!")
@@ -624,8 +689,7 @@ import SwiftUI
         let summary = result["spoken_summary"].text
         let f = fear
         let a = ability
-        let oldHistory = history
-        let wasUsing = useHistory
+        let oldHistory = useHistory ? history : []
         newSession()
         parent = previous["session_id"].text
         fear = f
@@ -634,7 +698,6 @@ import SwiftUI
         useHistory = true
         additions = [summary]
         adaptation = result
-        _ = wasUsing
         audio.say(summary)
         generate()
       } catch {

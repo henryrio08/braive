@@ -113,15 +113,21 @@ extension UIColor {
       guard built[id] == nil else { throw failure("Duplicate node ID") }
       let n: SCNNode
       if j["geometry"]["kind"].text == "asset" {
-        n = try AssetLibrary.make(j["geometry"]["asset_id"].text)
+        let assetID = j["geometry"]["asset_id"].text
+        let character = plan["characters"].list.first(where: { $0["scene_node_id"].text == id })
+        if (j["role"].text == "character" || character != nil)
+          && !assetID.hasPrefix("character.base.")
+        {
+          throw failure("Character must use character.base")
+        }
+        let coordinatorColor = character?["color_hex"].string
+        n = try AssetLibrary.make(
+          assetID, colorHex: coordinatorColor ?? j["material"]["color"].string)
       } else {
         n = SCNNode(geometry: try geometry(j))
       }
       n.name = id
-      if let torso = n.childNode(withName: "torso", recursively: true) {
-        torso.geometry?.materials = [material(j["material"])]
-      }
-      n.geometry?.materials = [material(j["material"])]
+      if j["geometry"]["kind"].text != "asset" { n.geometry?.materials = [material(j["material"])] }
       n.position = vector(j["position"])
       n.eulerAngles = vector(j["rotation_radians"])
       n.scale = vector(j["scale"])
@@ -204,34 +210,21 @@ extension UIColor {
   }
   func animate(_ id: String, _ behavior: String) {
     guard let n = nodes[characters[id] ?? id] else { return }
-    n.removeAction(forKey: "behavior")
-    let amount: CGFloat = behavior == "gesture" ? 0.12 : behavior == "speak" ? 0.025 : 0.007
-    if behavior == "gesture", let arm = n.childNode(withName: "right_arm", recursively: true) {
-      arm.runAction(
-        .sequence([
-          .rotateBy(x: 0, y: 0, z: 0.55, duration: 0.3), .wait(duration: 0.4),
-          .rotateBy(x: 0, y: 0, z: -0.55, duration: 0.3),
-        ]))
-    }
-    if let mouth = n.childNode(withName: "mouth", recursively: true) {
-      mouth.removeAllActions()
-      if behavior == "speak" {
-        mouth.runAction(
-          .repeatForever(
-            .sequence([.scale(to: 1.4, duration: 0.15), .scale(to: 1, duration: 0.15)])))
-      }
-    }
-    n.runAction(
-      .repeatForever(
-        .sequence([
-          .rotateBy(x: 0, y: amount, z: 0, duration: 0.6),
-          .rotateBy(x: 0, y: -amount, z: 0, duration: 0.6),
-        ])), forKey: "behavior")
+    AssetLibrary.animate(n, behavior: behavior)
   }
+
   func operation(_ op: JSON, speak: (String) -> Void, sound: (String) -> Void) {
     switch op["type"].text {
     case "set_visible": nodes[op["node_id"].text]?.isHidden = !(op["visible"].bool ?? true)
-    case "set_material": nodes[op["node_id"].text]?.geometry?.materials = [material(op["material"])]
+    case "set_material":
+      if let node = nodes[op["node_id"].text] {
+        if AssetLibrary.isCharacter(node) {
+          AssetLibrary.recolor(node, hex: op["material"]["color"].string)
+        } else {
+          node.enumerateChildNodes { n, _ in n.geometry?.materials = [material(op["material"])] }
+          node.geometry?.materials = [material(op["material"])]
+        }
+      }
     case "character_action": animate(op["character_id"].text, op["behavior"].text)
     case "viewpoint_transition":
       if let p = viewpoints[op["destination_id"].text] { head.position = p }
@@ -240,33 +233,26 @@ extension UIColor {
     default: break
     }
   }
-  func auditAssets() {
+  func auditAssets() throws -> Int {
+    let count = try AssetLibrary.auditAll()
     clear()
     head.position = SCNVector3(0, 1.6, 0)
     scene.background.contents = UIColor(hex: "#35473f")
-    scene.fogStartDistance = 15
-    scene.fogEndDistance = 40
     let light = SCNNode()
     light.light = SCNLight()
     light.light?.type = .ambient
-    light.light?.intensity = 600
+    light.light?.intensity = 700
     scene.rootNode.addChildNode(light)
-    let sun = SCNNode()
-    sun.light = SCNLight()
-    sun.light?.type = .directional
-    sun.eulerAngles = SCNVector3(-0.6, -0.5, 0)
-    scene.rootNode.addChildNode(sun)
-    for (id, x, z) in [
-      ("person_standing", Float(-1.6), Float(-3.5)), ("person_seated", Float(1.6), Float(-3.5)),
-      ("lectern", Float(0), Float(-3)), ("bookshelf", Float(-3), Float(-5)),
-      ("table", Float(3), Float(-5)),
-    ] {
-      if let n = try? AssetLibrary.make(id) {
-        n.position = SCNVector3(x, 0, z)
-        if id.contains("person") { n.eulerAngles.y = .pi }
-        scene.rootNode.addChildNode(n)
-      }
+    let all = try AssetLibrary.entries
+    let sample =
+      Array(all.filter { $0.id.hasPrefix("character.base.") }.prefix(1))
+      + Array(all.filter { $0.category == "furniture" }.prefix(6))
+    for (i, entry) in sample.enumerated() {
+      let n = try AssetLibrary.make(entry.id, colorHex: "#3A8FBC")
+      n.position = SCNVector3(Float(i % 4) * 1.6 - 2.4, 0, -3 - Float(i / 4) * 3)
+      scene.rootNode.addChildNode(n)
     }
+    return count
   }
   func lobby() {
     clear()
@@ -298,48 +284,48 @@ extension UIColor {
       return geometry
     }
     let ground = SCNNode(
-      geometry: finish(SCNBox(width: 90, height: 0.1, length: 90, chamferRadius: 0), "#334b39"))
+      geometry: finish(SCNBox(width: 90, height: 0.1, length: 90, chamferRadius: 0), "#58743F"))
     ground.position.y = -0.1
     scene.rootNode.addChildNode(ground)
-    // A softly curving path establishes near/middle/far scale before practice begins.
-    for i in 0..<20 {
-      let z = Float(i) * (-1.3)
-      let path = SCNNode(geometry: finish(SCNCylinder(radius: 1.6, height: 0.015), "#8b8d6a"))
-      path.position = SCNVector3(sin(Float(i) * 0.16) * 2, 0.01, z)
-      scene.rootNode.addChildNode(path)
+    let all = (try? AssetLibrary.entries) ?? []
+    if let grass = try? AssetLibrary.make("nature.ground_patch.nature_ground_grass_01") {
+      let bounds = grass.boundingBox
+      let span = max(bounds.max.x - bounds.min.x, bounds.max.z - bounds.min.z)
+      let scale: Float = 90 / max(0.01, span)
+      grass.scale = SCNVector3(scale, scale, scale)
+      grass.position.y = -0.035
+      grass.name = "lobby_grass_floor"
+      scene.rootNode.addChildNode(grass)
     }
-    for i in 0..<75 {
-      let angle = Float(i) * 2.39996
-      let radius = Float(5 + i % 22)
-      let x = sin(angle) * radius
-      let z = cos(angle) * radius
-      if abs(x - sin(-z / 1.3 * 0.16) * 2) < 2 && z < 0 { continue }
-      let height = CGFloat(5 + Float(i % 5) * 0.55)
-      let trunkGeometry = SCNCylinder(radius: 0.16, height: height)
-      trunkGeometry.radialSegmentCount = 10
-      let trunk = SCNNode(geometry: finish(trunkGeometry, "#594d3d"))
-      trunk.position = SCNVector3(x, Float(height / 2), z)
-      scene.rootNode.addChildNode(trunk)
-      for layer in 0..<3 {
-        let crown = SCNCone(
-          topRadius: 0.06, bottomRadius: CGFloat(1.7 - Float(layer) * 0.32), height: 3.2)
-        crown.radialSegmentCount = 12
-        let leaves = SCNNode(
-          geometry: finish(crown, i % 3 == 0 ? "#345947" : i % 3 == 1 ? "#46715c" : "#2d5145"))
-        leaves.position = SCNVector3(x, Float(height) - 1 + Float(layer) * 1.15, z)
-        leaves.eulerAngles.y = Float(i) * 0.7
-        scene.rootNode.addChildNode(leaves)
+    for i in 0..<24 {
+      if let grass = try? AssetLibrary.make("nature.bush.nature_grass_large_01") {
+        let angle = Float(i) * 2.39996
+        let radius = Float(1.8 + Double(i % 5) * 0.8)
+        grass.position = SCNVector3(sin(angle) * radius, 0, cos(angle) * radius)
+        grass.eulerAngles.y = angle
+        scene.rootNode.addChildNode(grass)
       }
     }
-    for i in 0..<45 {
-      let a = Float(i) * 2.39996
-      let r = Float(2 + i % 8)
-      let rock = SCNSphere(radius: CGFloat(0.09 + Float(i % 4) * 0.04))
-      rock.segmentCount = 8
-      let n = SCNNode(geometry: finish(rock, "#6f8070"))
-      n.position = SCNVector3(sin(a) * r, 0.04, cos(a) * r)
-      n.scale = SCNVector3(1.4, 0.65, 1)
-      scene.rootNode.addChildNode(n)
+    let trees = all.filter { $0.category == "nature" && $0.subcategory == "tree" }
+    let rocks = all.filter { $0.category == "nature" && $0.subcategory == "rock" }
+    for i in 0..<45 where !trees.isEmpty {
+      let angle = Float(i) * 2.39996
+      let radius = Float(5 + i % 18)
+      let x = sin(angle) * radius
+      let z = cos(angle) * radius
+      if abs(x) < 2 && z < 0 { continue }
+      if let n = try? AssetLibrary.make(trees[i % trees.count].id) {
+        n.position = SCNVector3(x, 0, z)
+        n.eulerAngles.y = Float(i) * 0.7
+        scene.rootNode.addChildNode(n)
+      }
+    }
+    for i in 0..<20 where !rocks.isEmpty {
+      if let n = try? AssetLibrary.make(rocks[i % rocks.count].id) {
+        let angle = Float(i) * 2.39996
+        n.position = SCNVector3(sin(angle) * 4, 0, cos(angle) * 4)
+        scene.rootNode.addChildNode(n)
+      }
     }
   }
 }

@@ -9,6 +9,7 @@
 <key>CFBundleShortVersionString</key><string>0.1</string>
 <key>CFBundleVersion</key><string>1</string>
 <key>NSMicrophoneUsageDescription</key><string>Braive listens for commands, your practice answers, and optional reflections.</string>
+<key>NSSpeechRecognitionUsageDescription</key><string>Braive turns your speech into practice commands and answers on this iPhone.</string>
 <key>NSLocalNetworkUsageDescription</key><string>Connect to the Braive backend running on your Mac.</string>
 <key>NSAppTransportSecurity</key><dict><key>NSAllowsLocalNetworking</key><true/><key>NSAllowsArbitraryLoads</key><true/></dict>
 <key>UISupportedInterfaceOrientations</key><array><string>UIInterfaceOrientationLandscapeRight</string><string>UIInterfaceOrientationLandscapeLeft</string></array>

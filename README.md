@@ -4,9 +4,21 @@ Native, voice-first iPhone VR situational practice, with a Meta-powered backend 
 
 ## Current state
 
-This repository contains an initial implementation, **not yet a verified on-device demo**. Backend type checks and ten offline contract tests pass. The full iOS application, including its Metal shader, builds for the iPhone 17 simulator with Xcode 27.2. Two explicitly approved synthetic tests have run: the first timed out after three text requests; the second generated a library with eight characters in 35 scene nodes using three text requests. The second test passed native offscreen preflight in the simulator and reported approximately $0.17 in token-based usage before cache discounts. No audio streaming has been tested. Ordinary backend spending remains disabled. One generated scene has been reviewed and passed native visibility checks; broader scene quality, voice echo behavior, and the actual viewer optics still need testing.
+The native app and backend are implemented, but the complete practice journey remains under verification. On November 1, 2026, the backend type check, 19 offline backend tests, and five importer tests passed. The revised signed iPhone 17 build includes Apple on-device speech recognition, a voice-first headset interface, contextual STOP controls, and a grass floor. Installation succeeded, and the user confirmed that spoken START advanced to the headset question. The generated-scene walkthrough and sustained recognition still need completion before claiming the full loop. The inherited 349-asset native audit has not been independently rerun in this continuation.
 
-Meta spending is blocked unless `BRAIVE_ALLOW_META=true`. Henry requires explicit permission before any use of credits. **Do not enable this flag or run live provider tests without that permission.** Merely adding a key does not authorize spending. Keep this rule for subsequent development sessions.
+**Speech now stays on the iPhone.** At Henry’s request, the normal app uses Apple’s SpeechAnalyzer / SpeechTranscriber (iOS 26+) with voice-processed AVAudioEngine input and native speech detection. It does not open the Meta transcription relay. First use may install Apple’s on-device English speech assets. No silent cloud transcription fallback is configured. Meta receives the transcribed practice details/answers needed for coordination and dialogue, after consent.
+
+The old live relay failed because the campus phone-to-Mac stream could not sustain PCM delivery. Numeric on-device tests showed 12.29 seconds produced but about 3.30 seconds received; the same test over a phone hotspot delivered all 12.19 seconds in 12.31 seconds. This network dependency has been removed from transcription. See [verification evidence](docs/verification-2026-11-01.md) for the distinction between measurements, implemented changes, and remaining checks.
+
+Henry authorized **US$5 total for this development continuation**, shared across models, transcription, retries, restarts, processes, and chats. This replaces the old per-test approval requirement and is not a new allowance each time the server starts. The existing server keeps ordinary unattended spending disabled (`BRAIVE_ALLOW_META=false`). Bounded tests use the persistent, ignored `backend/data/meta-test-approval.json`; uncertain calls retain their full reservation. Never delete/reset this ledger to obtain more budget.
+
+After confirming no other billable process is active and reconciling prior usage, start an authorized phone test from the repository root:
+
+```sh
+node scripts/start-phone-test.mjs
+```
+
+This uses port 8788 and a 15-minute server window. Remote transcription is disabled; Apple processes speech locally. Historical audio reservations remain charged conservatively in the same ledger. All reservations share the same $5 ledger; restarting retains its balance. The phone needs the Mac's actual reachable local address with port 8788. Never expose the provider key, pairing secret, ledger, generated session records, or local test outputs in Git. Current standard pricing was checked against [Meta's official pricing](https://dev.meta.ai/docs/pricing-rate-limits) on November 1: Spark input/output $1.25/$4.25 per million tokens; Wonder $4/$20; transcription $0.18 per audio hour. No cache discount is assumed for reservations. Unknown models or a model in the wrong pricing role are rejected.
 
 ## Mac backend
 
@@ -21,7 +33,7 @@ The current checkout already has an ignored `backend/.env`; do not replace it. C
 
 - `MODEL_API_KEY`: Meta Model API key; backend only.
 - `BRAIVE_TOKEN`: a different random pairing secret, at least 20 characters. Enter this token on the phone.
-- `BRAIVE_ALLOW_META=false`: keep disabled until Henry explicitly approves a bounded live test.
+- `BRAIVE_ALLOW_META=false`: leave ordinary server spending disabled; use the bounded launcher under the existing cumulative authorization.
 - `HOST=0.0.0.0`, `PORT=8787`: listen on the Mac's local network for the phone.
 
 Start the local server (starting it does not make any Meta request):
@@ -42,35 +54,35 @@ npm --prefix backend test
 
 ## Native iPhone app
 
-1. Finish installing Xcode from Apple's App Store. Open it yourself to review/accept Apple's license and install iOS platform support.
-2. Open `ios/Braive.xcodeproj`. In the Braive target's Signing & Capabilities, choose your Apple ID Personal Team and a unique bundle identifier if necessary.
+1. Xcode and iOS platform support are already installed in this development environment. Open `ios/Braive.xcodeproj`.
+2. The existing checkout has working signing for `edu.uiuc.braive`. For a different machine, choose your own team in Signing & Capabilities.
 3. Connect and unlock the iPhone. Trust the Mac and enable Developer Mode if prompted. Select the phone as run destination and press Run.
-4. On the phone, enter the Mac backend URL and pairing token. The offline forest preview needs no provider access. Live mode additionally needs remote-processing consent and approved backend spending enablement.
+4. Pair the development server in Settings → Connection setup if it is not already paired. On the welcome screen, consent to processing transcribed practice details and tap Start practice. On-device voice requires iOS 26 or later; current device verification uses iOS 27.2.
 5. Outside the goggles, check mic, speaker/headphone route, network, physical orientation, and STOP before inserting the phone.
 6. In Settings, calibrate eye separation, field of view, and radial distortion against the actual viewer. The initial values are **unverified defaults**, not a Xiaokeis-specific optical profile. Recenter while facing forward.
 
 No App Store publication or paid distribution workflow is part of this project. Signing and physical-device testing still require your Apple account and phone.
 
-The project has no CocoaPods or Swift package dependency. Source list/audio resource changes can regenerate its project file with:
+The project uses pinned GLTFKit2 0.5.15 through Swift Package Manager for direct GLB loading; no CocoaPods setup is needed. Source list/audio resource changes can regenerate its project file with:
 
 ```sh
 python3 scripts/generate-audio.py
 python3 scripts/generate-project.py
 ```
 
-Audio is original procedural sound generated by the included script: piano-like music, forest/wind, room/crowd beds, and a whoosh. No third-party recordings are included. Original reusable person, chair, table, lectern, bookshelf, and window assemblies let the model generate a concise scene graph without enumerating every body part. They are individual objects, not preset practice scenes.
+Audio is original procedural sound generated by the included script: piano-like music, forest/wind, room/crowd beds, and a whoosh. No third-party recordings are included. The bundled library now contains 349 CC0 GLBs with a shared app/backend allowlist. Rebuild it with `python3 scripts/import-lowpoly-pack.py`; see [docs/asset-library.md](docs/asset-library.md) for licensing, normalization, character recoloring, gaps, and offline audit instructions.
 
 ## Data and controls
 
-Session details are written atomically into the app's Documents/Sessions directory. `SESSIONS.csv` is rebuilt automatically from those records. Optional reflection text files live in Documents/Reflections, with local display titles and sanitized filenames. Files are available through iOS Files/file sharing; Settings can share the CSV and delete local data. Raw audio is streamed and not written by the app or backend.
+Session details are written atomically into the app's Documents/Sessions directory. `SESSIONS.csv` is rebuilt automatically from those records. Optional reflection text files live in Documents/Reflections, with local display titles and sanitized filenames. Files are available through iOS Files/file sharing; Settings can share the CSV and delete local data. Raw microphone audio is processed locally by Apple Speech and is not streamed or persisted by the normal app.
 
-START begins setup; STOP opens the immediate quit overlay; YES ends; NO resumes only when no other pause reason remains. Portrait and lifecycle/audio/voice-channel interruptions independently pause. During scene setup, “hey builder” collects additions and supersedes old revisions. Dialogue uses actual recognized answers. Backup text/buttons and a direct Exit remain available outside the viewer.
+START begins setup. STOP applies during scene preparation, introduction, reveal, and active practice, opening the immediate quit overlay; YES ends; NO resumes only when no other pause reason remains. Portrait and lifecycle/audio/voice-channel interruptions independently pause. During scene setup, “hey builder” collects additions and supersedes old revisions. Dialogue uses actual recognized answers. Headset screens contain spoken prompts rather than button rows or text fields. Remove the viewer and hold the screen for 1.2 seconds to open manual phone controls, including typing and recovery. Connection fields are in Settings, outside the practice HUD.
 
 ## Runtime design
 
 - SwiftUI shell; SceneKit scene graph; Metal eye textures and lens correction; Core Motion rotational tracking; AVFoundation voice processing, TTS, and audio mixing.
 - Spark coordinates, reasons about dialogue, generates feedback, and proposes adaptation. Wonder authors the declarative scene. Spark selects bundled audio, as permitted by the handoff's Glimmer fallback. SAM/Image/Glimmer are optional and are not active dependencies.
-- Voice Transcribe runs through a server-side WebSocket relay. The Meta API key is never sent to the phone. Real-time handshake and PCM format follow Meta's speech-to-text documentation.
+- Apple SpeechAnalyzer / SpeechTranscriber handles on-device, long-form recognition and SpeechDetector supplies speech boundaries. The original Meta relay remains a disabled optional backend route; the app does not use it. The Meta API key stays on the Mac.
 - The project OpenAPI supplies schema validation. The server adds graph/reference/tool-phase/evidence checks. The phone builds scenes offscreen and checks both-eye focal/depth visibility before commit.
 - Model output cannot execute code or load arbitrary URLs. Invalid scenes get at most one repair shared with native preflight, within the original two-minute generation deadline. No preset practice-room fallback.
 
@@ -78,4 +90,4 @@ Contract extensions: persisted SessionRecord detail fields (`observations`, `ada
 
 ## Remaining verification and delivery work
 
-Run simulator and physical-device checks, measure native frame/memory behavior, calibrate the real goggles, and verify STOP echo/pause/resume plus one complete practice loop. Live provider requests require a separate explicit credit approval. Intro speech duration, actual scene appearance, interaction quality, and the one-minute generation target must be checked with real outputs. A three-minute submission video has not been recorded. See [docs/demo-walkthrough.md](docs/demo-walkthrough.md).
+Run simulator and physical-device checks, measure native frame/memory behavior, calibrate the real goggles, and verify STOP echo/pause/resume plus one complete practice loop. Necessary live provider checks are covered by the remaining shared $5 allowance; additional spending requires renewed authorization. Intro speech duration, actual scene appearance, interaction quality, and the one-minute generation target must be checked with real outputs. A three-minute submission video has not been recorded. See [docs/demo-walkthrough.md](docs/demo-walkthrough.md).
