@@ -1,0 +1,9 @@
+# Phone connection recovery — November 2, 2026
+
+The next physical test did not reach generation. The user reported “Could not connect to the server. Say retry, revise, or cancel.” Read-only checks found no listener on port 8788, the Mac still at the phone's paired address, and the same 25 ledger entries with $3.299909 remaining. The test launcher's fixed 15-minute process shutdown explains the unavailable backend. No new provider usage was recorded for the failed connection.
+
+The test backend now stays reachable and applies the 15-minute limit to provider activity. It begins with provider access paused. Only authenticated practice-generation, dialogue, feedback, adaptation, or native-validation POSTs can renew access. A launch without explicit live-test authorization cannot renew it. Health checks, job polling, deletions, and unauthorized requests cannot renew. Idle expiry disables provider access without terminating the local server. The existing cumulative ledger, per-call reservations, bounded generation/repair deadline, and disabled audio relay are unchanged; the ordinary ignored environment remains disabled.
+
+Type checking and 24 backend tests pass. Five added checks cover expiry/reopening, polling, disabled launches, duration validation, and an actual loopback server that stays healthy after idle expiry. The server integration test uses fake credentials, invalid input rejected before model invocation, and a loopback-only fake provider destination. It verifies zero provider requests; the actual cumulative ledger remained unchanged.
+
+The updated backend was started and its health endpoint returned status ok at the phone's paired LAN address. No iPhone reinstall or lost intake is required. The user was asked to say RETRY on the existing error screen. Physical scene reveal and the pending centering, speech coordination, STOP/NO, reflection, and adaptation checks still require confirmation.

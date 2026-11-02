@@ -1,4 +1,5 @@
 // Uses the single US$5 cumulative approval from the current continuation note. Never resets it.
+// Keep the local server reachable; paired practice actions renew a 15-minute provider activity window.
 import {spawn} from 'node:child_process';import path from 'node:path';import {fileURLToPath} from 'node:url';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const init=spawn(process.execPath,['--import','tsx','--input-type=module','-e',"import {TestBudget,APPROVED_LEDGER} from './src/budget.ts';const b=TestBudget.initialize(APPROVED_LEDGER,5);const l=b.snapshot();console.log('Cumulative approved budget: 5 USD; charged/reserved:',l.entries.reduce((n,e)=>n+e.charged_micro,0)/1e6,'USD');"],{cwd:path.join(root,'backend'),stdio:'inherit'});

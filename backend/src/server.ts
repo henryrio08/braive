@@ -1,4 +1,5 @@
 import {activeBudget} from './budget.js';
+import {PhoneTestWindow} from './phone-test-window.js';
 import {meshCatalog} from './assets.js';
 import express from 'express';
 import { createServer } from 'node:http';
@@ -11,8 +12,28 @@ const app=express(); app.use(express.json({limit:'2mb'})); app.disable('x-powere
 const secret=process.env.BRAIVE_TOKEN;
 if(!secret || secret.length<20) throw new Error('Set BRAIVE_TOKEN to a random string of at least 20 characters');
 function authorized(value: string | undefined) { const a=Buffer.from(value??''), b=Buffer.from(`Bearer ${secret}`); return a.length===b.length && timingSafeEqual(a,b); }
-app.get('/health',(_req,res)=>res.json({status:'ok',meta_configured:!!process.env.MODEL_API_KEY,meta_requests:requestCount,reserved_cost_usd:reservedCostUSD,usage:usageLog}));
+const phoneWindow=process.env.BRAIVE_TEST_MODE==='true'
+ ? new PhoneTestWindow(process.env.BRAIVE_ALLOW_META==='true',Number(process.env.BRAIVE_TEST_WINDOW_SECONDS??900)) : undefined;
+let idleTimer:NodeJS.Timeout|undefined;
+if(phoneWindow)process.env.BRAIVE_ALLOW_META='false';
+function scheduleIdlePause(){
+ clearTimeout(idleTimer);
+ idleTimer=setTimeout(()=>{
+  if(phoneWindow?.active){scheduleIdlePause();return;}
+  process.env.BRAIVE_ALLOW_META='false';
+  console.log('[phone test] Idle provider access paused; local server remains available.');
+ },Math.max(1,phoneWindow?.remainingMilliseconds??0)).unref();
+}
+app.get('/health',(_req,res)=>res.json({status:'ok',meta_configured:!!process.env.MODEL_API_KEY,meta_requests:requestCount,reserved_cost_usd:reservedCostUSD,usage:usageLog,
+ ...(phoneWindow?{live_test_active:phoneWindow.active,live_test_seconds_remaining:phoneWindow.remainingSeconds}:{})}));
 app.use((req,res,next)=> authorized(req.headers.authorization) ? next() : res.status(401).json({code:'UNAUTHORIZED',message:'Pair this phone with the Mac backend.'}));
+app.use((req,_res,next)=>{
+ if(phoneWindow?.renew(req.method,req.path)){
+  process.env.BRAIVE_ALLOW_META='true';
+  scheduleIdlePause();
+ }
+ next();
+});
 const approved=new Map<string,{plan:SessionPlan,scene:SceneSpec,audio:AudioPlan}>();
 const attempts=new Map<string,{deadline:number,repairs:number}>();
 const jobs=new Map<string,Job>(); const running=new Map<string,AbortController>(); const revisions=new Map<string,number>();
@@ -142,10 +163,13 @@ wss.on('connection',(client:WebSocket)=>{
 });
 // Bound completed jobs; never store raw audio.
 setInterval(()=>{if(jobs.size>100)for(const [id,j] of jobs){if(!running.has(id)){jobs.delete(id);attempts.delete(id);approved.delete(j.session_id);revisions.delete(j.session_id);provenance.delete(j.session_id);}if(jobs.size<=100)break;}},60000).unref();
-server.listen(Number(process.env.PORT??8787),process.env.HOST??'127.0.0.1',()=>console.log(`Braive backend listening on ${process.env.PORT??8787}; Meta key ${process.env.MODEL_API_KEY?'configured':'missing'}`));
+server.listen(Number(process.env.PORT??8787),process.env.HOST??'127.0.0.1',()=>{
+ const address=server.address();
+ console.log(`Braive backend listening on ${typeof address==='object'&&address?address.port:process.env.PORT??8787}; Meta key ${process.env.MODEL_API_KEY?'configured':'missing'}`);
+});
 
 if(process.env.BRAIVE_TEST_MODE==='true'){
- const shutdown=()=>{for(const controller of running.values())controller.abort();for(const client of wss.clients)client.close();server.close();setTimeout(()=>process.exit(0),300).unref();};
- const window=Number(process.env.BRAIVE_TEST_WINDOW_SECONDS??900);if(!Number.isFinite(window)||window<=0)throw Error('Bounded test window required');setTimeout(shutdown,window*1000).unref();process.on('SIGTERM',shutdown);process.on('SIGINT',shutdown);
+ const shutdown=()=>{clearTimeout(idleTimer);process.env.BRAIVE_ALLOW_META='false';for(const controller of running.values())controller.abort();for(const client of wss.clients)client.close();server.close();setTimeout(()=>process.exit(0),300).unref();};
+ process.on('SIGTERM',shutdown);process.on('SIGINT',shutdown);
  app.get('/v1/test-budget',(_req,res)=>res.json(activeBudget()?.snapshot()));
 }
