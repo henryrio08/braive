@@ -36,7 +36,7 @@ for level in ['project','target']:
  for config in ['Debug','Release']:
   settings='SDKROOT = iphoneos; IPHONEOS_DEPLOYMENT_TARGET = 18.0; SWIFT_VERSION = 5.0; CLANG_ENABLE_MODULES = YES; '
   if level=='target':settings+=team_setting+f'PRODUCT_BUNDLE_IDENTIFIER = {bundle}; PRODUCT_NAME = Braive; INFOPLIST_FILE = Braive/Info.plist; CODE_SIGN_STYLE = Automatic; TARGETED_DEVICE_FAMILY = 1; SWIFT_STRICT_CONCURRENCY = minimal; ENABLE_DEBUG_DYLIB = NO; LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks"; SUPPORTED_PLATFORMS = "iphoneos iphonesimulator"; '
-  if config=='Debug':settings+='SWIFT_OPTIMIZATION_LEVEL = "-Onone"; DEBUG_INFORMATION_FORMAT = dwarf; '
+  if config=='Debug':settings+='SWIFT_OPTIMIZATION_LEVEL = "-Onone"; DEBUG_INFORMATION_FORMAT = dwarf; SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG; '
   else:settings+='SWIFT_OPTIMIZATION_LEVEL = "-O"; '
   configs.append(add(level+config,f'isa = XCBuildConfiguration; buildSettings = {{ {settings} }}; name = {config};'))
  add(level+'configs',f'isa = XCConfigurationList; buildConfigurations = ({",".join(configs)}); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release;')

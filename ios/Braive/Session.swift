@@ -24,6 +24,9 @@ import SwiftUI
   @Published var connecting = false
   @Published var voiceListening = false
   @Published var setupNotice = ""
+  @Published var scenarioActions: [String] = []
+  var scenario: ScenarioRuntime?
+  var scenarioCompletedAt: Double?
   let world = World(), audio = Audio(), store = SessionStore()
   var api: API { API(base: server.trimmingCharacters(in: .whitespacesAndNewlines), token: token) }
   var plan = JSON(), scene = JSON(), audioPlan = JSON(), record = JSON(), reflection = JSON()
@@ -115,9 +118,21 @@ import SwiftUI
         let job = try JSONDecoder().decode(JSON.self, from: Data(contentsOf: url))
         let result = job["result"]
         try world.load(result["scene"], plan: result["plan"])
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("--render-scenario-review") {
+          try world.renderScenarioReview(result["scene"], to: store.root.appendingPathComponent("ScenarioReview"))
+        }
+        #endif
         message = "Generated-scene replay — native preflight passed; no live model calls"
       } catch {
         message = "Generated scene rejected by native preflight: " + error.localizedDescription
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("--render-scenario-review") {
+          let folder = store.root.appendingPathComponent("ScenarioReview")
+          try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+          try? JSONEncoder().encode(JSON(["status":"failed","error":error.localizedDescription])).write(to: folder.appendingPathComponent("result.json"))
+        }
+        #endif
       }
     }
     NotificationCenter.default.addObserver(
@@ -172,6 +187,7 @@ import SwiftUI
       defer { connecting = false }
       do {
         try await audio.start(api: api)
+        audio.setCommandPhrases(scenario?.definition.steps.flatMap { $0.actions.flatMap(\.phrases) } ?? [])
         pause("command_channel_unavailable", enabled: false)
         pause("audio_interruption", enabled: false)
       } catch { message = error.localizedDescription }
@@ -183,10 +199,12 @@ import SwiftUI
     if enabled { pauses.insert(reason) } else { pauses.remove(reason) }
     if was && !pauses.isEmpty {
       speechFloor = SpeechFloor()
+      world.pausePracticeClock()
       world.scene.isPaused = true
       audio.pause()
     } else if !was && pauses.isEmpty {
       world.scene.isPaused = false
+      if phase == .active { world.resumePracticeClock() }
       audio.resume()
       lastTick = ProcessInfo.processInfo.systemUptime
     }
@@ -292,7 +310,7 @@ import SwiftUI
         useHistory = yes
         generate()
       }
-    case .active: dialogue(text)
+    case .active: perform(text)
     case .selfReport:
       record["reported_difficulty"] = rating(text)
       observe("self_report", "user_report", text)
@@ -421,6 +439,8 @@ import SwiftUI
     reflectionDraft = SpokenReflection()
     observations = []
     turns = []
+    scenario = nil; scenarioActions = []; scenarioCompletedAt = nil
+    audio.setCommandPhrases([])
     turnTask?.cancel(); turnTask = nil; turnNonce = UUID()
     speechFloor = SpeechFloor()
     narration = NarrationQueue()
@@ -522,13 +542,22 @@ import SwiftUI
                 ])
             }
             result["plan"]["narrator_intro_8s"] = JSON(fittedIntro)
-            do { try world.load(result["scene"], plan: result["plan"]) } catch {
+            var nextScenario: ScenarioRuntime?
+            do {
+              if result["scene"]["scenario"].object != nil {
+                let definition = try JSONDecoder().decode(ScenarioDefinition.self, from: JSONEncoder().encode(result["scene"]["scenario"]))
+                nextScenario = try ScenarioRuntime(definition)
+              }
+              try world.load(result["scene"], plan: result["plan"])
+            } catch {
               _ = try await api.call(
                 "/v1/jobs/" + jobID + "/validation", JSON(["message": error.localizedDescription]))
               continue
             }
             plan = result["plan"]
             scene = result["scene"]
+            scenario = nextScenario; scenarioCompletedAt = nil; scenarioActions = []
+            audio.setCommandPhrases(nextScenario?.definition.steps.flatMap { $0.actions.flatMap(\.phrases) } ?? [])
             audioPlan = result["audio"]
             remaining = plan["duration_sec"].value
             introTime = 0
@@ -608,11 +637,15 @@ import SwiftUI
       reveal += dt / 1.5
       if reveal >= 1 {
         phase = .active
+        world.beginPracticeClock()
         audio.apply(audioPlan)
         message = plan["task_instruction"].text
+        if let update = scenario?.start(at: active) { applyScenario(update) }
       }
     } else if phase == .active {
-      active += dt
+      active = world.activeElapsed
+      let completedMotion = world.updateMotion()
+      if let update = scenario?.tick(at: active, completedMotions: completedMotion) { applyScenario(update) }
       audio.update(active: active)
       remaining = max(0, plan["duration_sec"].value - active)
       for (i, e) in scene["events"].list.enumerated()
@@ -625,7 +658,7 @@ import SwiftUI
         beatFired.insert(i)
         narration.enqueue(b["text"].text, at: active)
       }
-      if remaining <= 0 { finish(early: false) }
+      if remaining <= 0 || (scenarioCompletedAt.map { active - $0 >= 3 } == true && !audio.narrated && !narration.hasPending && speechFloor.available(now: now)) { finish(early: false) }
       else if turnTask == nil, !audio.narrated,
         speechFloor.available(now: now), let text = narration.take(at: active) {
         audio.say(text)
@@ -635,25 +668,45 @@ import SwiftUI
   func operation(_ op: JSON) {
     world.operation(op, speak: { narration.enqueue($0, at: active) }, sound: { audio.cue($0) })
   }
-  func dialogue(_ text: String) {
-    narration.clearPending()
+  func applyScenario(_ update: ScenarioUpdate) {
     turnTask?.cancel(); turnTask = nil; turnNonce = UUID()
-    audio.interruptSpeech()
+    narration.clearPending()
+    message = update.prompt
+    scenarioActions = scenario?.step.actions.map(\.label) ?? []
+    for op in update.operations { operation(op) }
+    narration.enqueue(update.prompt, at: active)
+    if let action = update.actionID { observe("task_action", "app_event", "Scenario action: " + action) }
+    observe("task_action", "app_event", "Scenario stage: " + update.stepID)
+    if update.terminal { scenarioCompletedAt = active }
+  }
+  func perform(_ text: String) {
     observe("speech_excerpt", "transcript", text)
-    for i in scene["interactions"].list {
-      for c in i["choices"].list {
-        let phrases = [c["label"].text] + c["intent_examples"].list.map(\.text)
-        if phrases.contains(where: { text.lowercased().contains($0.lowercased()) }) {
-          for op in c["operations"].list { operation(op) }
-          observe("task_action", "app_event", c["label"].text)
-          return
+    if let update = scenario?.hear(text, at: active) { applyScenario(update); return }
+    if scenario == nil {
+      for choice in scene["interactions"].list.flatMap({ $0["choices"].list }) {
+        let phrases = [choice["label"].text] + choice["intent_examples"].list.map(\.text)
+        if phrases.contains(where: { !$0.isEmpty && text.lowercased().contains($0.lowercased()) }) {
+          for op in choice["operations"].list { operation(op) }; return
         }
       }
     }
-    guard let character = plan["characters"].list.first else {
-      narration.enqueue("You can inspect the scene or choose one of the available actions.", at: active)
-      return
+    let words = VoiceAnswer.normalized(text)
+    if ["help", "what next", "what do i do", "repeat instructions"].contains(words) {
+      turnTask?.cancel(); turnTask = nil; turnNonce = UUID()
+      narration.enqueue(scenario?.step.prompt ?? plan["task_instruction"].text, at: active); return
     }
+    // Network conversation is an explicit optional action, never the fallback for arbitrary speech.
+    guard scenario?.definition.dialogue_policy != "disabled",
+      words.hasPrefix("ask ") || words.hasPrefix("talk to ") else { return }
+    let people = plan["characters"].list
+    let id = ScenarioRuntime.requestedCharacter(text, characters: people.map { (id: $0["id"].text, name: $0["name"].text, role: $0["role"].text) })
+    guard let character = people.first(where: { $0["id"].text == id }) else { narration.enqueue("Say ask followed by the character’s name and your question.", at: active); return }
+    dialogue(text, character: character)
+  }
+  func dialogue(_ text: String, character: JSON) {
+    narration.clearPending()
+    turnTask?.cancel(); turnTask = nil; turnNonce = UUID()
+    audio.interruptSpeech()
     let nonce = turnNonce
     let rev = revision
     let turn = UUID().uuidString
@@ -664,9 +717,9 @@ import SwiftUI
         let req = JSON([
           "schema_version": "1", "session_id": sessionID, "revision": rev, "turn_id": turn,
           "character_id": character["id"].text, "user_utterance": text,
-          "recent_turns": Array(turns.suffix(12)), "context_summary": plan["task_instruction"].text,
+          "recent_turns": Array(turns.suffix(6)), "context_summary": scenario?.step.prompt ?? plan["task_instruction"].text,
           "remaining_seconds": remaining,
-          "available_choices": scene["interactions"].list.flatMap { $0["choices"].list.map(\.raw) },
+          "available_choices": [],
         ])
         let result = try await api.call("/v1/dialogue", req)
         // A completed model reply must still yield to the user's current speech and any pause.
@@ -688,7 +741,8 @@ import SwiftUI
         audio.say(result["reply"].text) { self.world.animate(character["id"].text, "listen") }
       } catch {
         if !Task.isCancelled {
-          message = "Character connection interrupted. Try speaking again."
+          message = scenario?.step.prompt ?? "Continue with the available scenario actions."
+          setupNotice = "Optional character reply unavailable: " + error.localizedDescription
           observe("task_action", "app_event", "Character reply unavailable: " + error.localizedDescription)
         }
       }
@@ -709,6 +763,7 @@ import SwiftUI
     transitionID = UUID()
     loading = false
     audio.silence()
+    world.pausePracticeClock()
     world.scene.isPaused = true
     pendingPhase = nil
     if !jobID.isEmpty {

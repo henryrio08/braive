@@ -1,4 +1,5 @@
 import CoreMotion
+import Metal
 import SceneKit
 import SwiftUI
 
@@ -19,6 +20,18 @@ extension UIColor {
     characters: [String: String] = [:]
   var onPortrait: ((Bool) -> Void)?
   private var pose = HeadPose()
+  private var motionPaths: [String: ViewerPath] = [:]
+  private var viewerMotion: ViewerMotion?
+  private var nodeMotions: [String: (motion: ViewerMotion, face: Bool)] = [:]
+  private var practiceClock = PracticeClock()
+  private var animationOrigin = 0.0
+  var animationTime: Double { practiceClock.hasStarted ? animationOrigin + activeElapsed : renderTime }
+  private var attachmentRig: SCNNode?
+  private var attachmentOrigin = SIMD3<Float>(repeating: 0)
+  var activeElapsed: Double { practiceClock.elapsed }
+  func beginPracticeClock() { animationOrigin = renderTime; practiceClock.begin() }
+  func pausePracticeClock() { practiceClock.pause(); renderMotion() }
+  func resumePracticeClock() { practiceClock.resume() }
   var lensK1: Float = 0
   var lensK2: Float = 0
   var fov: Double = 70 {
@@ -66,6 +79,10 @@ extension UIColor {
     head.simdOrientation = pose.recenter()
   }
   func clear() {
+    motionPaths = [:]; viewerMotion = nil
+    nodeMotions = [:]
+    attachmentRig = nil
+    practiceClock = PracticeClock()
     for child in scene.rootNode.childNodes where child !== head { child.removeFromParentNode() }
     nodes = [:]
     viewpoints = [:]
@@ -75,6 +92,8 @@ extension UIColor {
     let m = SCNMaterial()
     m.diffuse.contents = UIColor(hex: value["color"].text)
     m.roughness.contents = value["roughness"].value
+    m.transparency = CGFloat(value["opacity"].number ?? 1)
+    m.isDoubleSided = value["double_sided"].bool ?? false
     m.lightingModel = .physicallyBased
     return m
   }
@@ -102,10 +121,32 @@ extension UIColor {
     guard spec["revision"] == plan["revision"], spec["session_id"] == plan["session_id"],
       spec["stereo"]["presentation"].text == "stereographic", spec["nodes"].list.count <= 350
     else { throw failure("Scene revision or renderer budget invalid") }
+    let paths = try JSONDecoder().decode([ViewerPath].self, from: JSONEncoder().encode(spec["motion_paths"].array == nil ? JSON([]) : spec["motion_paths"]))
+    guard Set(paths.map(\.id)).count == paths.count else { throw failure("Duplicate motion path") }
+    for path in paths {
+      var previous = 0.0
+      for point in path.points {
+        guard point.at_seconds > previous, point.position.count == 3, point.position.allSatisfy(\.isFinite) else { throw failure("Invalid motion path") }
+        previous = point.at_seconds
+      }
+      guard !path.points.isEmpty else { throw failure("Empty motion path") }
+    }
+    let viewDistance = spec["view_distance_meters"].number ?? 150
+    guard (150...10000).contains(viewDistance) else { throw failure("Invalid viewing distance") }
     // Build off-scene and attach only after structural and visibility checks.
     let root = SCNNode()
     var built: [String: SCNNode] = [:]
     let list = spec["nodes"].list
+    let props = Set(plan["props"].list.map(\.text))
+    if plan["experience"].object != nil {
+      guard props.allSatisfy({ prop in list.contains { $0["prop_name"].text == prop } }),
+        list.allSatisfy({ $0["prop_name"].string == nil || props.contains($0["prop_name"].text) })
+      else { throw failure("Scene props do not match the approved task") }
+    }
+    let attached = Set(spec["viewer_attached_node_ids"].list.map(\.text))
+    let expectedCharacters = Set(plan["characters"].list.map { $0["scene_node_id"].text })
+    let visibleCharacters = Set(list.filter { $0["role"].text == "character" || $0["geometry"]["asset_id"].text.hasPrefix("character.base.") }.map { $0["id"].text })
+    guard visibleCharacters == expectedCharacters else { throw failure("Scene cast does not match the approved characters") }
     for j in list {
       let id = j["id"].text
       guard built[id] == nil else { throw failure("Duplicate node ID") }
@@ -148,6 +189,29 @@ extension UIColor {
         root.addChildNode(built[id]!)
       }
     }
+    for id in attached {
+      guard let node = built[id] else { throw failure("Unknown viewer attachment") }
+      var parent = node.parent
+      while let p = parent {
+        guard !attached.contains(p.name ?? "") else { throw failure("Attach only the assembly root") }
+        parent = p.parent
+      }
+    }
+    if plan["experience"].object != nil && spec["scenario"].object == nil { throw failure("Missing executable scenario") }
+    if spec["scenario"].object != nil {
+      let definition = try JSONDecoder().decode(ScenarioDefinition.self, from: JSONEncoder().encode(spec["scenario"]))
+      _ = try ScenarioRuntime(definition)
+      let planned = plan["experience"]["stages"].list
+      if !planned.isEmpty {
+        guard planned.map({ $0["id"].text }) == definition.steps.map(\.id),
+          zip(planned, definition.steps).allSatisfy({ $0.0["action_ids"].list.map(\.text).sorted() == $0.1.actions.map(\.id).sorted() })
+        else { throw failure("Scene stages/actions differ from the approved experience") }
+      }
+      let pathIDs = Set(paths.map(\.id))
+      for op in definition.steps.flatMap({ $0.start_operations + $0.actions.flatMap(\.operations) }) where ["move_viewer","move_node"].contains(op["type"].text) {
+        guard pathIDs.contains(op["path_id"].text), op["type"].text != "move_node" || built[op["node_id"].text] != nil else { throw failure("Scenario motion reference missing") }
+      }
+    }
     guard Set(spec["viewpoints"].list.map { $0["id"].text }).count == spec["viewpoints"].list.count
     else { throw failure("Duplicate viewpoints") }
     let views = Dictionary(
@@ -155,7 +219,19 @@ extension UIColor {
     guard let initial = views[spec["initial_viewpoint_id"].text] else {
       throw failure("Missing initial viewpoint")
     }
-    let focus = list.filter { $0["role"].text == "task_focus" }.compactMap { built[$0["id"].text] }
+    let focusEntries = list.filter { $0["role"].text == "task_focus" }
+    // A procedural object's nearby named parts form one visible target, like a GLB subtree.
+    // Otherwise a buoy's own stripe/cap is incorrectly counted as an occluder of the buoy.
+    let focus = list.filter { entry in
+      if entry["role"].text == "task_focus" { return true }
+      guard let prop = entry["prop_name"].string, let part = built[entry["id"].text] else { return false }
+      let p = part.convertPosition(SCNVector3Zero, to: root)
+      return focusEntries.contains { focus in
+        guard focus["prop_name"].text == prop, let node = built[focus["id"].text] else { return false }
+        let q = node.convertPosition(SCNVector3Zero, to: root)
+        return simd_length(SIMD3(p.x-q.x,p.y-q.y,p.z-q.z)) <= 2
+      }
+    }.compactMap { built[$0["id"].text] }
     guard !focus.isEmpty else { throw failure("Missing task focus") }
     // Structural checks followed by offscreen both-eye geometry visibility checks.
     guard
@@ -164,8 +240,24 @@ extension UIColor {
         return p.z < initial.z - 0.15
       })
     else { throw failure("Task focus is behind the initial viewer") }
-    try ScenePreflight.check(
-      root: root, focus: focus, position: initial, ipd: ipd, fov: fov, aspect: eyeAspect)
+    do {
+      try ScenePreflight.check(root: root, focus: focus, position: initial, ipd: ipd, fov: fov, aspect: eyeAspect, far: viewDistance)
+    } catch {
+      #if DEBUG
+      if ProcessInfo.processInfo.arguments.contains("--render-scenario-review") {
+        let diagnostic = SCNScene(); diagnostic.rootNode.addChildNode(root)
+        diagnostic.background.contents = UIColor(hex: spec["atmosphere"]["background_color"].text)
+        let light = SCNNode(); light.light = SCNLight(); light.light?.type = .ambient; light.light?.intensity = CGFloat(spec["lighting"]["ambient_intensity"].value * 650); diagnostic.rootNode.addChildNode(light)
+        let camera = SCNNode(); camera.camera = SCNCamera(); camera.camera?.fieldOfView = fov; camera.camera?.zFar = viewDistance; camera.position = initial; diagnostic.rootNode.addChildNode(camera)
+        let renderer = SCNRenderer(device: MTLCreateSystemDefaultDevice(), options: nil); renderer.scene = diagnostic; renderer.pointOfView = camera; renderer.autoenablesDefaultLighting = true
+        let folder = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("ScenarioReview")
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try? renderer.snapshot(atTime: 0, with: CGSize(width:900,height:900), antialiasingMode:.multisampling4X).pngData()?.write(to: folder.appendingPathComponent("rejected-initial.png"))
+        root.removeFromParentNode()
+      }
+      #endif
+      throw error
+    }
     var actualNodes = 0
     var bytes = 0
     var triangles = 0
@@ -176,23 +268,35 @@ extension UIColor {
         for element in g.elements { triangles += element.primitiveCount }
       }
     }
-    guard actualNodes <= 650, triangles <= 180000, bytes < 24_000_000 else {
+    guard actualNodes + (attached.isEmpty ? 0 : 1) <= 650, triangles <= 180000, bytes < 24_000_000 else {
       throw failure(
         "Resolved scene exceeds phone geometry budget: \(actualNodes) nodes, \(triangles) primitives, \(bytes) geometry bytes"
       )
     }
     clear()
+    motionPaths = Dictionary(uniqueKeysWithValues: paths.map { ($0.id, $0) })
     scene.rootNode.addChildNode(root)
     nodes = built
     viewpoints = views
     head.position = initial
+    attachmentOrigin = SIMD3(initial.x, initial.y, initial.z)
+    if !attached.isEmpty {
+      let rig = SCNNode(); root.addChildNode(rig)
+      for id in attached {
+        let node = built[id]!, transform = node.simdWorldTransform
+        rig.addChildNode(node); node.simdWorldTransform = transform
+      }
+      attachmentRig = rig
+    }
+    left.camera?.zFar = viewDistance; right.camera?.zFar = viewDistance
     scene.background.contents = UIColor(hex: spec["atmosphere"]["background_color"].text)
     scene.fogColor = UIColor(hex: spec["atmosphere"]["background_color"].text)
     scene.fogStartDistance = 5
-    scene.fogEndDistance = max(8, 70 * (1 - spec["atmosphere"]["fog_density"].value))
+    scene.fogEndDistance = max(8, (spec["view_distance_meters"].number == nil ? 70 : viewDistance) * (1 - spec["atmosphere"]["fog_density"].value))
     let light = SCNNode()
     light.light = SCNLight()
     light.light?.type = .ambient
+    light.name = "braive_ambient"
     light.light?.intensity = CGFloat(spec["lighting"]["ambient_intensity"].value * 650)
     scene.rootNode.addChildNode(light)
     let sun = SCNNode()
@@ -225,12 +329,93 @@ extension UIColor {
       }
     case "character_action": animate(op["character_id"].text, op["behavior"].text)
     case "viewpoint_transition":
-      if let p = viewpoints[op["destination_id"].text] { head.position = p }
+      if let p = viewpoints[op["destination_id"].text] { viewerMotion = nil; setViewerPosition(SIMD3(p.x,p.y,p.z)) }
+    case "move_viewer":
+      if let path = motionPaths[op["path_id"].text] {
+        renderMotion()
+        let forward = head.simdWorldOrientation.act(SIMD3<Float>(0,0,-1))
+        let flat = SIMD3<Float>(forward.x,0,forward.z)
+        let heading = simd_length(flat) > 0.001 ? simd_quatf(from: SIMD3<Float>(0,0,-1), to: simd_normalize(flat)) : simd_quatf(angle: 0, axis: SIMD3(0,1,0))
+        viewerMotion = ViewerMotion.start(path: path, origin: head.simdPosition, at: activeElapsed, frame: heading, replacing: viewerMotion)
+      }
+    case "move_node":
+      if let path = motionPaths[op["path_id"].text], let node = nodes[op["node_id"].text] {
+        renderMotion()
+        nodeMotions[op["node_id"].text] = (ViewerMotion.start(path: path, origin: node.simdWorldPosition, at: activeElapsed, frame: node.simdWorldOrientation, replacing: nodeMotions[op["node_id"].text]?.motion), op["face_motion"].bool ?? false)
+      }
+    case "set_environment":
+      scene.background.contents = UIColor(hex: op["background_color"].text)
+      scene.fogColor = UIColor(hex: op["background_color"].text)
+      scene.fogEndDistance = max(8, (left.camera?.zFar ?? 150) * (1 - op["fog_density"].value))
+      if let intensity = op["ambient_intensity"].number { scene.rootNode.childNode(withName: "braive_ambient", recursively: false)?.light?.intensity = CGFloat(intensity * 650) }
     case "narrate": speak(op["text"].text)
     case "play_sound": sound(op["cue_id"].text)
     default: break
     }
   }
+  func updateMotion() -> Set<String> {
+    renderMotion()
+    var completed = Set<String>()
+    if let motion = viewerMotion, motion.sample(at: activeElapsed).complete { completed.insert(motion.path.id); viewerMotion = nil }
+    for (id, value) in nodeMotions where value.motion.sample(at: activeElapsed).complete {
+      completed.insert(value.motion.path.id); nodeMotions.removeValue(forKey: id)
+    }
+    return completed
+  }
+  func renderMotion() {
+    if let motion = viewerMotion { setViewerPosition(motion.sample(at: activeElapsed).position) }
+    for (id, value) in nodeMotions {
+      guard let node = nodes[id] else { continue }
+      let sample = value.motion.sample(at: activeElapsed)
+      node.simdWorldPosition = sample.position
+      let ahead = value.motion.sample(at: activeElapsed + 0.02).position
+      if value.face && simd_length(ahead - sample.position) > 0.001 { node.look(at: SCNVector3(ahead.x,ahead.y,ahead.z)) }
+    }
+  }
+  private func setViewerPosition(_ position: SIMD3<Float>) {
+    head.simdPosition = position
+    attachmentRig?.simdPosition = position - attachmentOrigin
+  }
+  #if DEBUG
+  /// Explicit offline review of a previously generated scene; never a normal-practice fallback.
+  func renderScenarioReview(_ spec: JSON, to folder: URL) throws {
+    try ScenePreflight.verifyRejections()
+    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+    let origin = head.simdPosition, orientation = head.simdOrientation
+    defer { setViewerPosition(origin); head.simdOrientation = orientation; viewerMotion = nil; nodeMotions = [:] }
+    let renderer = SCNRenderer(device: MTLCreateSystemDefaultDevice(), options: nil)
+    renderer.scene = scene; renderer.pointOfView = left; renderer.autoenablesDefaultLighting = false
+    var names: [String] = []
+    var reviewedPaths = Set<String>()
+    func capture(_ raw: String, pitch: Float = 0) throws {
+      let name = raw.replacingOccurrences(of: "[^A-Za-z0-9_-]", with: "_", options: .regularExpression)
+      head.simdOrientation = simd_quatf(angle: pitch, axis: SIMD3(1,0,0))
+      let frame = renderer.snapshot(atTime: 0, with: CGSize(width: 900, height: 900), antialiasingMode: .multisampling4X)
+      guard let png = frame.pngData() else { throw failure("Scene review image unavailable") }
+      try png.write(to: folder.appendingPathComponent(name + ".png")); names.append(name)
+    }
+    func review(_ op: JSON) throws {
+      if op["type"].text == "move_viewer", let path = motionPaths[op["path_id"].text], let last = path.points.last {
+        guard reviewedPaths.insert(path.id).inserted else { return }
+        let motion = ViewerMotion(path: path, origin: head.simdPosition, startedAt: 0)
+        setViewerPosition(motion.sample(at: last.at_seconds * 0.5).position)
+        try capture(path.id + "-mid")
+        try capture(path.id + "-mid-down", pitch: -0.65)
+        try capture(path.id + "-mid-up", pitch: 0.65)
+        setViewerPosition(motion.sample(at: last.at_seconds).position)
+        try capture(path.id + "-end", pitch: -0.3)
+      } else { operation(op, speak: { _ in }, sound: { _ in }) }
+    }
+    for (i, step) in spec["scenario"]["steps"].list.enumerated() {
+      for op in step["start_operations"].list { try review(op) }
+      if i == 0 { try capture("initial") }
+      for action in step["actions"].list {
+        for op in action["operations"].list { try review(op) }
+      }
+    }
+    try JSONEncoder().encode(JSON(["status":"passed","mode":"offline generated-scene review","frames":names])).write(to: folder.appendingPathComponent("result.json"))
+  }
+  #endif
   func auditAssets() throws -> Int {
     let count = try AssetLibrary.auditAll()
     clear()
@@ -253,6 +438,7 @@ extension UIColor {
     return count
   }
   func lobby() {
+    left.camera?.zFar = 150; right.camera?.zFar = 150
     clear()
     head.position = SCNVector3(0, 1.6, 0)
     scene.background.contents = UIColor(hex: "#9dbbb0")

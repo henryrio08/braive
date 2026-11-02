@@ -1,0 +1,154 @@
+{
+  "_purpose": "Offline deterministic control fixture, never a practice fallback",
+  "initial_position": [
+    0,
+    80,
+    0
+  ],
+  "experience": {
+    "kind": "action",
+    "objective": "Complete a simulated descent",
+    "requires_motion": true,
+    "stages": [
+      {
+        "id": "exit",
+        "goal": "Leave the cabin",
+        "action_ids": [
+          "jump"
+        ]
+      },
+      {
+        "id": "fall",
+        "goal": "Deploy the parachute",
+        "action_ids": [
+          "deploy"
+        ]
+      },
+      {
+        "id": "glide",
+        "goal": "Reach the landing area",
+        "action_ids": []
+      },
+      {
+        "id": "land",
+        "goal": "Finish the landing",
+        "action_ids": []
+      }
+    ]
+  },
+  "motion_paths": [
+    {
+      "id": "freefall",
+      "purpose": "fall",
+      "interpolation": "linear",
+      "points": [
+        {
+          "at_seconds": 8,
+          "position": [
+            0,
+            40,
+            -10
+          ]
+        },
+        {
+          "at_seconds": 20,
+          "position": [
+            0,
+            15,
+            -20
+          ]
+        }
+      ]
+    },
+    {
+      "id": "glide_path",
+      "purpose": "glide",
+      "interpolation": "smooth",
+      "points": [
+        {
+          "at_seconds": 10,
+          "position": [
+            10,
+            1.6,
+            -40
+          ]
+        }
+      ]
+    }
+  ],
+  "scenario": {
+    "objective": "Complete a simulated descent",
+    "initial_step_id": "exit",
+    "dialogue_policy": "disabled",
+    "steps": [
+      {
+        "id": "exit",
+        "prompt": "Say JUMP to leave the cabin.",
+        "terminal": false,
+        "start_operations": [],
+        "actions": [
+          {
+            "id": "jump",
+            "label": "JUMP",
+            "phrases": [
+              "jump"
+            ],
+            "operations": [
+              {
+                "type": "move_viewer",
+                "path_id": "freefall"
+              }
+            ],
+            "next_step_id": "fall"
+          }
+        ]
+      },
+      {
+        "id": "fall",
+        "prompt": "You are falling. Say DEPLOY PARACHUTE.",
+        "terminal": false,
+        "start_operations": [],
+        "actions": [
+          {
+            "id": "deploy",
+            "label": "DEPLOY PARACHUTE",
+            "phrases": [
+              "deploy parachute"
+            ],
+            "operations": [],
+            "next_step_id": "glide"
+          }
+        ],
+        "completion": {
+          "trigger": "motion_complete",
+          "motion_path_id": "freefall",
+          "next_step_id": "glide"
+        }
+      },
+      {
+        "id": "glide",
+        "prompt": "The canopy is open. Approach the landing area.",
+        "terminal": false,
+        "start_operations": [
+          {
+            "type": "move_viewer",
+            "path_id": "glide_path"
+          }
+        ],
+        "actions": [],
+        "completion": {
+          "trigger": "motion_complete",
+          "motion_path_id": "glide_path",
+          "next_step_id": "land"
+        }
+      },
+      {
+        "id": "land",
+        "prompt": "You reached the landing area.",
+        "terminal": true,
+        "start_operations": [],
+        "actions": []
+      }
+    ]
+  }
+}

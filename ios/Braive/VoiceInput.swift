@@ -3,6 +3,7 @@ import Foundation
 /// Speech-model finality is about a range of audio, not the user's intent to move on.
 /// Keep provisional words visible, but never submit them as a finished turn.
 struct SpeechTurnBuffer {
+  var fastPhrases = Set<String>()
   private(set) var stable = "", draft = ""
   private(set) var id = UUID().uuidString
   private(set) var consumedThrough = -Double.infinity
@@ -31,7 +32,7 @@ struct SpeechTurnBuffer {
   func delay(now: Double) -> Double? {
     guard !speaking, draft.isEmpty, !stable.isEmpty else { return nil }
     let quick = ["start", "yes", "no", "retry", "cancel", "begin practice", "start over"]
-      .contains(VoiceAnswer.normalized(stable))
+      .contains(VoiceAnswer.normalized(stable)) || fastPhrases.contains(VoiceAnswer.normalized(stable))
     return max(0, quietSince + (quick ? 0.7 : 1.8) - now)
   }
   mutating func take(now: Double) -> (text: String, id: String)? {

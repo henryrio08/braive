@@ -5,7 +5,7 @@ import UIKit
 /// Offscreen object-mask passes test actual geometry/occlusion before attaching a generated world.
 @MainActor enum ScenePreflight {
   static func check(
-    root: SCNNode, focus: [SCNNode], position: SCNVector3, ipd: Float, fov: Double, aspect: Double
+    root: SCNNode, focus: [SCNNode], position: SCNVector3, ipd: Float, fov: Double, aspect: Double, far viewDistance: Double = 150
   ) throws {
     guard let device = MTLCreateSystemDefaultDevice() else {
       throw error("Metal renderer unavailable")
@@ -41,7 +41,7 @@ import UIKit
     camera.camera = SCNCamera()
     camera.camera?.fieldOfView = fov
     camera.camera?.zNear = 0.05
-    camera.camera?.zFar = 150
+    camera.camera?.zFar = viewDistance
     staging.rootNode.addChildNode(camera)
     renderer.pointOfView = camera
     defer { camera.removeFromParentNode() }
@@ -64,14 +64,17 @@ import UIKit
         throw error(
           "Task focal point is occluded or too small in one eye (\(visible) visible pixels)")
       }
-      // Second pass: visible near/middle/far geometry masks. Hidden depth nodes do not count.
+      // Second pass: distance at each visible surface fragment, rather than object origins.
+      // A large floor/water plane spans several depths even when its origin is far away.
       root.enumerateChildNodes { n, _ in
         guard let g = n.geometry else { return }
-        let p = n.convertPosition(SCNVector3Zero, to: root)
-        let d = simd_length(SIMD3(p.x - position.x, p.y - position.y, p.z - position.z))
         let m = SCNMaterial()
         m.lightingModel = .constant
-        m.diffuse.contents = d <= near ? UIColor.red : d >= far ? UIColor.blue : UIColor.green
+        m.shaderModifiers = [.fragment: """
+          float distanceFromEye = max(0.0, -_surface.position.z);
+          _output.color = float4(distanceFromEye <= \(near) ? float3(1.0, 0.0, 0.0)
+            : distanceFromEye >= \(far) ? float3(0.0, 0.0, 1.0) : float3(0.0, 1.0, 0.0), 1.0);
+          """]
         g.materials = [m]
       }
       let mask = try pixels(
@@ -107,6 +110,40 @@ import UIKit
   static func error(_ message: String) -> NSError {
     NSError(domain: "ScenePreflight", code: 1, userInfo: [NSLocalizedDescriptionKey: message])
   }
+  #if DEBUG
+  /// Negative controls for the actual GPU passes, run only by explicit scene review.
+  static func verifyRejections() throws {
+    for mode in ["occluded", "tiny", "flat"] {
+      let root = SCNNode()
+      var focus: [SCNNode] = []
+      if mode == "flat" {
+        for x: Float in [0, 2, 5] {
+          let node = SCNNode(geometry: SCNBox(width: 6, height: 4, length: 0.01, chamferRadius: 0))
+          node.position = SCNVector3(x, 1.6, -4); root.addChildNode(node); focus.append(node)
+        }
+      } else {
+        let target = SCNNode(geometry: SCNSphere(radius: mode == "tiny" ? 0.005 : 0.7))
+        target.position = SCNVector3(0, 1.6, -5); root.addChildNode(target); focus = [target]
+        for (x, z): (Float, Float) in [(-2, -2), (2, -8)] {
+          let node = SCNNode(geometry: SCNSphere(radius: 0.4))
+          node.position = SCNVector3(x, 1.6, z); root.addChildNode(node)
+        }
+        if mode == "occluded" {
+          let wall = SCNNode(geometry: SCNBox(width: 3, height: 3, length: 0.2, chamferRadius: 0))
+          wall.position = SCNVector3(0, 1.6, -3); root.addChildNode(wall)
+        }
+      }
+      var rejected = false
+      do { try check(root: root, focus: focus, position: SCNVector3(0, 1.6, 0), ipd: 0.064, fov: 70, aspect: 1) }
+      catch {
+        let expected = mode == "flat" ? "Foreground, middle, and far" : "Task focal point"
+        guard error.localizedDescription.contains(expected) else { throw error }
+        rejected = true
+      }
+      guard rejected else { throw error("Native visibility negative control accepted \(mode) geometry") }
+    }
+  }
+  #endif
 }
 extension Array where Element == UInt8 {
   fileprivate func strideCount(_ test: (UInt8, UInt8, UInt8) -> Bool) -> Int {

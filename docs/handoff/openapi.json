@@ -1011,6 +1011,9 @@
           },
           "safety": {
             "$ref": "#/components/schemas/SafetyDecision"
+          },
+          "experience": {
+            "$ref": "#/components/schemas/ExperiencePlan"
           }
         },
         "required": [
@@ -1235,6 +1238,14 @@
           "texture_asset_id": {
             "type": "string",
             "maxLength": 100
+          },
+          "opacity": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "double_sided": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -1308,6 +1319,11 @@
           "description": {
             "type": "string",
             "maxLength": 500
+          },
+          "prop_name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160
           }
         },
         "required": [
@@ -1384,7 +1400,10 @@
                   "idle",
                   "listen",
                   "speak",
-                  "gesture"
+                  "gesture",
+                  "walk",
+                  "run",
+                  "swim"
                 ]
               }
             },
@@ -1447,6 +1466,81 @@
             "required": [
               "type",
               "cue_id"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "move_viewer"
+              },
+              "path_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 80
+              }
+            },
+            "required": [
+              "type",
+              "path_id"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "move_node"
+              },
+              "node_id": {
+                "type": "string",
+                "maxLength": 80
+              },
+              "path_id": {
+                "type": "string",
+                "maxLength": 80
+              },
+              "face_motion": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "type",
+              "node_id",
+              "path_id",
+              "face_motion"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "set_environment"
+              },
+              "background_color": {
+                "type": "string",
+                "pattern": "^#[0-9a-fA-F]{6}$"
+              },
+              "fog_density": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "ambient_intensity": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 2
+              }
+            },
+            "required": [
+              "type",
+              "background_color",
+              "fog_density"
             ],
             "additionalProperties": false
           }
@@ -1677,6 +1771,32 @@
           },
           "reveal": {
             "$ref": "#/components/schemas/RevealSpec"
+          },
+          "scenario": {
+            "$ref": "#/components/schemas/ScenarioSpec"
+          },
+          "motion_paths": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MotionPath"
+            },
+            "maxItems": 16,
+            "minItems": 0
+          },
+          "view_distance_meters": {
+            "type": "number",
+            "minimum": 150,
+            "maximum": 10000
+          },
+          "viewer_attached_node_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80
+            },
+            "uniqueItems": true,
+            "maxItems": 16
           }
         },
         "required": [
@@ -2803,6 +2923,305 @@
       },
       "SessionFeedback": {
         "$ref": "#/components/schemas/FeedbackResult"
+      },
+      "ExperiencePlan": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "enum": [
+              "action",
+              "conversation"
+            ],
+            "type": "string"
+          },
+          "objective": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "requires_motion": {
+            "type": "boolean"
+          },
+          "stages": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 80
+                },
+                "goal": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 400
+                },
+                "action_ids": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "maxItems": 8,
+                  "minItems": 0
+                }
+              },
+              "required": [
+                "id",
+                "goal",
+                "action_ids"
+              ],
+              "additionalProperties": false
+            },
+            "maxItems": 12,
+            "minItems": 1
+          }
+        },
+        "required": [
+          "kind",
+          "objective",
+          "requires_motion",
+          "stages"
+        ],
+        "additionalProperties": false
+      },
+      "MotionPath": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "purpose": {
+            "type": "string",
+            "enum": [
+              "walk",
+              "run",
+              "swim",
+              "climb",
+              "fall",
+              "glide",
+              "ride",
+              "other"
+            ]
+          },
+          "interpolation": {
+            "type": "string",
+            "enum": [
+              "linear",
+              "smooth"
+            ]
+          },
+          "points": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "at_seconds": {
+                  "type": "number",
+                  "exclusiveMinimum": 0,
+                  "maximum": 300
+                },
+                "position": {
+                  "type": "array",
+                  "items": {
+                    "type": "number",
+                    "minimum": -10000,
+                    "maximum": 10000
+                  },
+                  "minItems": 3,
+                  "maxItems": 3
+                }
+              },
+              "required": [
+                "at_seconds",
+                "position"
+              ],
+              "additionalProperties": false
+            },
+            "maxItems": 16,
+            "minItems": 1
+          },
+          "coordinate_space": {
+            "type": "string",
+            "enum": [
+              "world",
+              "relative"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "purpose",
+          "interpolation",
+          "points"
+        ],
+        "additionalProperties": false
+      },
+      "ScenarioAction": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "phrases": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 120
+            },
+            "maxItems": 8,
+            "minItems": 1
+          },
+          "operations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorldOperation"
+            },
+            "maxItems": 12,
+            "minItems": 0
+          },
+          "next_step_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 80
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "phrases",
+          "operations",
+          "next_step_id"
+        ],
+        "additionalProperties": false
+      },
+      "ScenarioCompletion": {
+        "type": "object",
+        "properties": {
+          "trigger": {
+            "type": "string",
+            "enum": [
+              "after_seconds",
+              "motion_complete"
+            ]
+          },
+          "after_seconds": {
+            "type": "number",
+            "minimum": 0.5,
+            "maximum": 3600
+          },
+          "motion_path_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "next_step_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          }
+        },
+        "required": [
+          "trigger",
+          "next_step_id"
+        ],
+        "additionalProperties": false
+      },
+      "ScenarioStep": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "prompt": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "terminal": {
+            "type": "boolean"
+          },
+          "start_operations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorldOperation"
+            },
+            "maxItems": 12,
+            "minItems": 0
+          },
+          "actions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ScenarioAction"
+            },
+            "maxItems": 8,
+            "minItems": 0
+          },
+          "completion": {
+            "$ref": "#/components/schemas/ScenarioCompletion"
+          }
+        },
+        "required": [
+          "id",
+          "prompt",
+          "terminal",
+          "start_operations",
+          "actions"
+        ],
+        "additionalProperties": false
+      },
+      "ScenarioSpec": {
+        "type": "object",
+        "properties": {
+          "objective": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "initial_step_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "dialogue_policy": {
+            "type": "string",
+            "enum": [
+              "disabled",
+              "on_request"
+            ]
+          },
+          "steps": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ScenarioStep"
+            },
+            "maxItems": 12,
+            "minItems": 1
+          }
+        },
+        "required": [
+          "objective",
+          "initial_step_id",
+          "dialogue_policy",
+          "steps"
+        ],
+        "additionalProperties": false
       }
     }
   }

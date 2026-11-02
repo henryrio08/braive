@@ -15,6 +15,7 @@ import AVFoundation
   var onActivity: ((Bool) -> Void)?
   var onDisconnect: ((String) -> Void)?
   private var stopRecognition: (() -> Void)?
+  private var updateRecognitionContext: (([String]) -> Void)?
   var onStatus: ((String) -> Void)?
   private var tapped = false
   let captureStats = CaptureStats()
@@ -52,6 +53,7 @@ import AVFoundation
       self?.onDisconnect?(reason)
     }, onActivity: { [weak self] speaking in self?.onActivity?(speaking) })
     stopRecognition = { recognition.stop() }
+    updateRecognitionContext = { phrases in Task { await recognition.setCommandPhrases(phrases) } }
     let sink = try await recognition.prepare(inputFormat: format) { [weak self] message in
       self?.onStatus?(message)
     }
@@ -71,7 +73,9 @@ import AVFoundation
     engine.stop()
     if tapped { engine.inputNode.removeTap(onBus: 0); tapped = false }
     stopRecognition?(); stopRecognition = nil
+    updateRecognitionContext = nil
   }
+  func setCommandPhrases(_ phrases: [String]) { updateRecognitionContext?(phrases) }
   func fitIntro(_ text: String) async -> String {
     introVoice = SpeechVoice.selected
     let duration = await measure(text, voice: introVoice)
