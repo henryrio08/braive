@@ -68,6 +68,8 @@ Fifteen deterministic speech-coordination checks pass, including speech at a tim
 
 The user checked Settings → Voice and reported **Samantha · Standard · en-US**. This confirms the phone was still using a basic voice; the new selection policy alone cannot improve an undownloaded asset. The user was given Apple's Read & Speak voice-download path and asked to preview an Enhanced/Premium voice after returning to Braive. That download/subjective quality check is pending.
 
+The user subsequently answered “yes it works” to the download-and-preview check. The selected voice name/quality was not supplied, so this records successful user-reported preview rather than an independently verified Premium asset. The bounded backend was restarted with the same $3.299909 remaining for a new centering, immediate STOP/NO, and speech-turn test. No allowance was reset.
+
 ## Reflection save correction
 
 The prior handler saved the existing draft as soon as any transcript contained “save reflection,” losing words spoken in the same turn as the command. A dedicated reflection accumulator now requires a trailing command, preserves preceding words plus earlier segments, refuses empty saves, and supports SKIP. Seven additional voice-input checks cover inline/separate save, pauses, thinking, embedded command text, and skipping. The voice suite now passes 33 checks (56 across all three focused suites). The signed correction was installed without foregrounding Braive while the user downloads a voice; physical reflection content verification remains pending. Existing saved records and reflection files are preserved.
