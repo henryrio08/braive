@@ -45,6 +45,16 @@ import Foundation
     check(VoiceAnswer.confirmsHeadset("My headset is ready."), "Spoken readiness centers the scene")
     check(!VoiceAnswer.confirmsHeadset("Not ready"), "Negative readiness cannot center or advance")
     check(!VoiceAnswer.confirmsHeadset("Say yes to center your practice here"), "Prompt echo cannot confirm readiness")
+    var reflection = SpokenReflection()
+    check(reflection.receive("Save reflection.") == .empty, "Do not write an empty reflection")
+    check(reflection.receive("I finished my opening. Save reflection!") == .save("I finished my opening."), "Preserve words in the same turn as the save command")
+    reflection = SpokenReflection()
+    check(reflection.receive("I took my time.") == .listening, "Reflection stays open across pauses")
+    check(reflection.receive("One second") == .listening && reflection.text == "I took my time.", "Thinking does not pollute a reflection")
+    check(reflection.receive("And answered a question. Save reflection.") == .save("I took my time. And answered a question."), "A later save keeps all reflection segments")
+    reflection = SpokenReflection()
+    check(reflection.receive("I can save reflection later") == .listening, "Internal save words do not save prematurely")
+    check(reflection.receive("skip") == .skip, "Reflection can be skipped explicitly")
     print("Voice turn checks passed: \(count). No microphone, network, or paid API calls.")
   }
 }

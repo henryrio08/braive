@@ -80,3 +80,19 @@ struct VoiceAnswer {
     return text.isEmpty ? .empty : .complete(text)
   }
 }
+
+struct SpokenReflection {
+  enum Action: Equatable { case listening, empty, skip, save(String) }
+  private(set) var text = ""
+  mutating func receive(_ input: String) -> Action {
+    if VoiceAnswer.normalized(input) == "skip" { return .skip }
+    if VoiceAnswer.needsTime(input) { return .listening }
+    let ending = input.range(of: #"(?i)(?<![\p{L}\p{N}])save reflection[\s.!?]*$"#,
+      options: .regularExpression)
+    let content = (ending.map { String(input[..<$0.lowerBound]) } ?? input)
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+    if !content.isEmpty { text = [text, content].filter { !$0.isEmpty }.joined(separator: " ") }
+    guard ending != nil else { return .listening }
+    return text.isEmpty ? .empty : .save(text)
+  }
+}

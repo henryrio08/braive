@@ -35,6 +35,7 @@ import SwiftUI
   var seen = Set<String>()
   var fear = "", ability = "", additions: [String] = [], history: [JSON] = []
   var answer = VoiceAnswer()
+  var reflectionDraft = SpokenReflection()
   var intakeApproved = false
   var repeatAfterHeadset = false
   var adapting = false
@@ -302,15 +303,17 @@ import SwiftUI
       go(.reflectionPrompt, "Would you like to save a spoken reflection?")
     case .reflectionPrompt:
       if yes {
-        go(.reflection, "Share your reflection. Say save reflection when you’re finished.")
+        reflectionDraft = SpokenReflection()
+        go(.reflection, "Share your reflection. Say save reflection when you’re finished, or skip to leave it.")
       } else if no {
         go(.feedbackPrompt, "Would you like to hear feedback on your experience?")
       }
     case .reflection:
-      if text.lowercased().contains("save reflection") {
+      switch reflectionDraft.receive(text) {
+      case .save(let content):
         do {
           reflection = try store.reflection(
-            reflection["transcript"].text, topic: plan["topic_short"].text)
+            content, topic: plan["topic_short"].text)
           reflection["session_id"] = JSON(sessionID)
           reflection["topic"] = plan["topic"]
           record["reflection"] = reflection
@@ -318,8 +321,12 @@ import SwiftUI
           record["reflection_file"] = reflection["relative_file_path"]
           go(.feedbackPrompt, "Would you like to hear feedback on your experience?")
         } catch { fail(error) }
-      } else {
-        reflection["transcript"] = JSON(reflection["transcript"].text + " " + text)
+      case .empty:
+        message = "Share a reflection first, then say save reflection. Or say skip to leave it."
+        audio.say(message)
+      case .skip:
+        go(.feedbackPrompt, "Would you like to hear feedback on your experience?")
+      case .listening: break
       }
     case .feedbackPrompt: if yes { feedback() } else if no { save() }
     case .feedback: if yes || text.lowercased().contains("continue") { save() }
@@ -411,6 +418,7 @@ import SwiftUI
     audioPlan = JSON()
     record = JSON()
     reflection = JSON()
+    reflectionDraft = SpokenReflection()
     observations = []
     turns = []
     turnTask?.cancel(); turnTask = nil; turnNonce = UUID()
