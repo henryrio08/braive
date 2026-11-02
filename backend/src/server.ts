@@ -1,5 +1,6 @@
 import {activeBudget} from './budget.js';
 import {PhoneTestWindow} from './phone-test-window.js';
+import {assertCurrentDialogue} from './dialogue.js';
 import {meshCatalog} from './assets.js';
 import express from 'express';
 import { createServer } from 'node:http';
@@ -111,18 +112,17 @@ for(const [path,requestSchema,resultSchema,instructions] of routes) app.post(`/v
   let context:any=req.body;
   if(path==='dialogue') {
    const saved=approved.get(req.body.session_id);
-   if(!saved || saved.plan.revision!==req.body.revision) throw new AppError('CONFLICT','Dialogue revision has no approved scene',[],409);
-   if(!saved.plan.characters.some(c=>c.id===req.body.character_id)) throw new AppError('INVALID_INPUT','Unknown character');
-   context={...req.body,approved_plan:saved.plan,scene:saved.scene};
+   assertCurrentDialogue(req.body,saved?.plan,revisions.get(req.body.session_id));
+   context={...req.body,approved_plan:saved!.plan,scene:saved!.scene};
   }
   const result=await model(resultSchema,context,instructions,AbortSignal.timeout(25000));
   const observations=req.body.observations??[];const ids=new Set(observations.map((o:any)=>o.id));
   const evidence=[...(result.evidence_ids??[]),...(result.did_well??[]).flatMap((i:any)=>i.evidence_ids),...(result.noticed??[]).flatMap((i:any)=>i.evidence_ids)];
   if(evidence.some((id:string)=>!ids.has(id))) throw new AppError('INVALID_MODEL_OUTPUT','Unknown evidence ID');
-  if(path==='dialogue' && ['session_id','revision','turn_id','character_id'].some(k=>result[k]!==req.body[k])) throw new AppError('INVALID_MODEL_OUTPUT','Stale dialogue result');
   if(path==='dialogue') {
-   const saved=approved.get(req.body.session_id)!;
-   const valid=sceneIssues(saved.plan,{...saved.scene,events:result.operations.map((operation:any)=>({at_active_second:0,operation}))},saved.audio);
+   const saved=approved.get(req.body.session_id);
+   assertCurrentDialogue(req.body,saved?.plan,revisions.get(req.body.session_id));
+   const valid=sceneIssues(saved!.plan,{...saved!.scene,events:result.operations.map((operation:any)=>({at_active_second:0,operation}))},saved!.audio);
    if(valid.length) throw new AppError('INVALID_MODEL_OUTPUT','Invalid dialogue operation',valid);
   }
   res.json(result);
