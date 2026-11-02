@@ -153,7 +153,7 @@ struct ContentView: View {
       Text(s.message).font(.system(size: 17, weight: .medium, design: .rounded))
         .multilineTextAlignment(.center).lineLimit(6).shadow(radius: 5)
       if s.phase == .active {
-        Text(s.scene["interactions"].list.flatMap { $0["choices"].list.map { $0["label"].text } }.joined(separator: " · "))
+        Text(s.scenarioActions.joined(separator: " · "))
           .font(.system(size: 10)).foregroundStyle(accent).lineLimit(2)
       }
       if !s.transcript.isEmpty {

@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import Ajv from 'ajv';
 import {assetIDs,characterIDs} from './assets.js';
 import addFormats from 'ajv-formats';
-import type { ValidationIssue, SceneSpec, SessionPlan, AudioPlan } from '../../docs/handoff/contracts.js';
+import type { ValidationIssue, SceneSpec, SessionPlan, AudioPlan, WorldOperation } from '../../docs/handoff/contracts.js';
 export const document = JSON.parse(readFileSync(new URL('../../docs/handoff/openapi.json', import.meta.url), 'utf8'));
 const ajv = new (Ajv as any)({ strict: false, allErrors: true });
 (addFormats as any)(ajv);
@@ -19,6 +19,13 @@ export function sceneIssues(plan: SessionPlan, scene: SceneSpec, audio: AudioPla
  const fail = (path: string, rule: string, message: string) => issues.push({path,rule,message});
  for (const [key, output] of Object.entries({scene,audio})) if(output.session_id !== plan.session_id || output.revision !== plan.revision) fail(`/${key}/revision`,'revision','Must match approved plan');
  const nodes = new Map(scene.nodes.map(n => [n.id,n]));
+ const attached=new Set(scene.viewer_attached_node_ids??[]);
+ const carried=(id:string)=>{const seen=new Set<string>();let current:string|null=id;while(current&&!seen.has(current)){if(attached.has(current))return true;seen.add(current);current=nodes.get(current)?.parent_id??null;}return false;};
+ for(const id of attached){
+  if(!nodes.has(id))fail('/viewer_attached_node_ids','reference','Attached node must exist');
+  const seen=new Set<string>();let parent=nodes.get(id)?.parent_id;
+  while(parent&&!seen.has(parent)){seen.add(parent);if(attached.has(parent))fail('/viewer_attached_node_ids','hierarchy','Attach only the highest assembly root, not its descendants too');parent=nodes.get(parent)?.parent_id;}
+ }
  if(nodes.size !== scene.nodes.length) fail('/nodes','unique','Duplicate node IDs');
  if(scene.nodes.length > 350) fail('/nodes','budget','Maximum 350 nodes for initial phone profile');
  for(const [i,n] of scene.nodes.entries()) {
@@ -27,7 +34,9 @@ export function sceneIssues(plan: SessionPlan, scene: SceneSpec, audio: AudioPla
   while(p && nodes.has(p)) { if(seen.has(p)) { fail(`/nodes/${i}`,'cycle','Cyclic hierarchy'); break; } seen.add(p); p=nodes.get(p)!.parent_id; }
   if(![...n.position,...n.rotation_radians,...n.scale].every(Number.isFinite) || n.scale.some(v=>v<=0)) fail(`/nodes/${i}`,'transform','Positive finite transforms required');
   const g=n.geometry;
-  if(g.kind!=='asset' && n.role!=='environment') fail(`/nodes/${i}/geometry`,'architecture_only','Primitives are architecture fill only; use registered GLBs for props and characters');
+  const approvedProp=!!n.prop_name&&!!plan.props?.includes(n.prop_name);
+  if(n.prop_name&&!approvedProp)fail(`/nodes/${i}/prop_name`,'prop_match','Scene prop name must match an approved plan prop');
+  if(g.kind!=='asset' && n.role!=='environment' && !(plan.experience&&(n.role==='task_focus'||n.role==='prop'&&(approvedProp||carried(n.id))))) fail(`/nodes/${i}/geometry`,'architecture_only','Use GLBs or coherent procedural assemblies bound to an approved plan prop; characters require the registered rig');
   if(n.role==='character' && (g.kind!=='asset' || !characterIDs.has(g.asset_id))) fail(`/nodes/${i}/geometry`,'neutral_character','Characters must use the sole character.base asset');
   if(g.kind==='asset' && !assetIDs.has(g.asset_id)) fail(`/nodes/${i}/geometry`,'asset','Use only registered individual object assets.');
   if(g.kind==='box' && g.size.some(v=>v<=0) || g.kind==='sphere' && g.radius<=0 || g.kind==='cylinder' && (g.radius<=0 || g.height<=0) || g.kind==='plane' && (g.width<=0 || g.height<=0)) fail(`/nodes/${i}/geometry`,'size','Positive geometry dimensions required');
@@ -36,22 +45,64 @@ export function sceneIssues(plan: SessionPlan, scene: SceneSpec, audio: AudioPla
  const views=new Set(scene.viewpoints.map(v=>v.id));
  if(views.size!==scene.viewpoints.length || !views.has(scene.initial_viewpoint_id)) fail('/viewpoints','reference','Unique viewpoints including initial viewpoint required');
  const chars=new Set(plan.characters.map(c=>c.id));
+ const characterRoots=new Set(plan.characters.map(c=>c.scene_node_id));
+ for(const n of scene.nodes)if((n.role==='character'||(n.geometry.kind==='asset'&&characterIDs.has(n.geometry.asset_id)))&&!characterRoots.has(n.id))fail('/nodes','unplanned_character','Every visible character must belong to the approved cast');
  if(chars.size!==plan.characters.length) fail('/characters','unique','Duplicate characters');
  for(const c of plan.characters) {const n=nodes.get(c.scene_node_id);if(!n) fail('/nodes','character','Character root missing: '+c.scene_node_id);else {if(n.geometry.kind!=='asset' || !characterIDs.has(n.geometry.asset_id)) fail('/nodes','neutral_character','Every Character must resolve to character.base');if(c.color_hex && n.material.color.toLowerCase()!==c.color_hex.toLowerCase())fail('/nodes','character_color','Wonder must preserve coordinator color_hex in Material.color');}}
  if(['dialogue','mixed'].includes(plan.interaction_mode) && !chars.size) fail('/characters','interaction','Dialogue requires characters');
- if(['navigation','mixed'].includes(plan.interaction_mode) && !scene.interactions.some(i=>i.choices.some(c=>c.operations.some(o=>o.type==='viewpoint_transition')))) fail('/interactions','navigation','Need operational routes');
- if(plan.interaction_mode==='solo' && !scene.events.length && !scene.interactions.some(i=>i.choices.length)) fail('/interactions','solo','Need task events or inspection choices');
+ if(!scene.scenario && ['navigation','mixed'].includes(plan.interaction_mode) && !scene.interactions.some(i=>i.choices.some(c=>c.operations.some(o=>o.type==='viewpoint_transition')))) fail('/interactions','navigation','Need operational routes');
+ if(!scene.scenario && plan.interaction_mode==='solo' && !scene.events.length && !scene.interactions.some(i=>i.choices.length)) fail('/interactions','solo','Need task events or inspection choices');
  const cues=new Set(audio.layers.map(l=>l.id));
  const choices=new Set<string>();
  for(const [i,interaction] of scene.interactions.entries()) for(const c of interaction.choices) { if(choices.has(c.id)) fail(`/interactions/${i}`,'unique','Duplicate choice ID'); choices.add(c.id); }
- const ops=[...scene.events.map(e=>e.operation),...scene.interactions.flatMap(i=>i.choices.flatMap(c=>c.operations))];
+ const ops:WorldOperation[]=[...scene.events.map(e=>e.operation),...scene.interactions.flatMap(i=>i.choices.flatMap(c=>c.operations)),...(scene.scenario?.steps.flatMap(s=>[...s.start_operations,...s.actions.flatMap(a=>a.operations)])??[])];
+ const paths=new Map((scene.motion_paths??[]).map(p=>[p.id,p]));
+ if(paths.size!==(scene.motion_paths??[]).length)fail('/motion_paths','unique','Duplicate motion path IDs');
+ for(const [i,p] of (scene.motion_paths??[]).entries()){
+  let previous=0;
+  for(const point of p.points){if(point.at_seconds<=previous||point.at_seconds>plan.duration_sec||point.position.length!==3||!point.position.every(Number.isFinite))fail(`/motion_paths/${i}`,'motion','Motion points require increasing positive times within session duration and finite 3D positions');previous=point.at_seconds;}
+ }
  for(const o of ops) {
   if('node_id' in o && !nodes.has(o.node_id)) fail('/operations','reference','Unknown node');
   if(o.type==='viewpoint_transition' && !views.has(o.destination_id)) fail('/operations','reference','Unknown destination');
   if(o.type==='character_action' && !chars.has(o.character_id)) fail('/operations','reference','Unknown character');
   if(o.type==='play_sound' && !cues.has(o.cue_id)) fail('/operations','reference','Unknown cue');
+  if((o.type==='move_viewer'||o.type==='move_node') && !paths.has(o.path_id)) fail('/operations','reference','Unknown motion path');
+  if(o.type==='move_node'&&carried(o.node_id))fail('/operations','motion','A viewer-carried assembly cannot also have independent world motion');
  }
  if(scene.events.some(e=>e.at_active_second>plan.duration_sec)) fail('/events','clock','Event exceeds duration');
+ if(plan.experience && !scene.scenario)fail('/scenario','experience','The approved experience requires an executable scenario');
+ if(plan.experience)for(const prop of plan.props??[])if(!scene.nodes.some(n=>n.prop_name===prop))fail('/nodes','prop_match','Scene must realize approved prop: '+prop);
+ if(scene.scenario){
+  const scenario=scene.scenario,steps=new Map(scenario.steps.map(s=>[s.id,s]));
+  if(steps.size!==scenario.steps.length||!steps.has(scenario.initial_step_id))fail('/scenario','reference','Unique scenario steps and a valid initial step required');
+  const planned=plan.experience?.stages;
+  if(planned && (scenario.initial_step_id!==planned[0].id || JSON.stringify(scenario.steps.map(s=>s.id))!==JSON.stringify(planned.map(s=>s.id))))fail('/scenario/steps','plan_match','Scenario must realize the approved stages in order');
+  for(const [i,step] of scenario.steps.entries()){
+   const actionIDs=new Set<string>();
+   const next=scenario.steps[i+1]?.id;
+   if(step.terminal!==(i===scenario.steps.length-1))fail(`/scenario/steps/${i}`,'terminal','Only the final approved stage is terminal');
+   const transitions=[...step.actions.map(a=>a.next_step_id),step.completion?.next_step_id].filter((x):x is string=>!!x);
+   if(transitions.some(id=>!steps.has(id)||id!==next))fail(`/scenario/steps/${i}`,'sequence','Transitions must advance to the next approved stage');
+   if(!step.terminal&&!transitions.includes(next!))fail(`/scenario/steps/${i}`,'progress','Every nonterminal stage must offer a way forward');
+   if(planned && JSON.stringify([...step.actions.map(a=>a.id)].sort())!==JSON.stringify([...planned[i]?.action_ids??[]].sort()))fail(`/scenario/steps/${i}/actions`,'plan_match','Action IDs must match the approved stage');
+   for(const action of step.actions){
+    if(actionIDs.has(action.id))fail('/scenario','unique','Action IDs must be unique within their stage');actionIDs.add(action.id);
+    const effects=[...action.operations,...(steps.get(action.next_step_id??'')?.start_operations??[])];
+    if(plan.experience?.kind==='action' && !effects.some(o=>!['narrate','play_sound','character_action'].includes(o.type)))fail(`/scenario/steps/${i}/actions`,'task_action','Action practice must change the world or move the viewer, not just trigger speech');
+   }
+   const completion=step.completion;
+   if(completion?.trigger==='after_seconds' && !(completion.after_seconds!>0&&completion.after_seconds!<=plan.duration_sec))fail('/scenario','clock','Timed stage requires a valid duration');
+   if(completion?.trigger==='motion_complete' && (!paths.has(completion.motion_path_id??'') || !ops.some(o=>(o.type==='move_viewer'||o.type==='move_node')&&o.path_id===completion.motion_path_id)))fail('/scenario','motion','Motion completion must reference an executed path');
+  }
+  if(plan.experience?.requires_motion && !ops.some(o=>o.type==='move_viewer'))fail('/scenario','motion','The requested activity requires actual viewer motion');
+  if(plan.experience?.requires_motion){
+   const origin=scene.viewpoints.find(v=>v.id===scene.initial_viewpoint_id)?.position;
+   const moving=origin&&ops.some(o=>o.type==='move_viewer'&&paths.get(o.path_id)?.points.some(p=>Math.hypot(...p.position.map((x,i)=>x-(paths.get(o.path_id)?.coordinate_space==='relative'?0:origin[i])))>0.25));
+   if(!moving)fail('/motion_paths','motion','A stationary path cannot satisfy a movement experience');
+  }
+  if(plan.experience?.kind==='action' && scenario.dialogue_policy!=='disabled')fail('/scenario/dialogue_policy','task_focus','Action experiences run locally; optional conversation is reserved for conversation experiences');
+ }
  return issues;
 }
 
@@ -67,6 +118,11 @@ export function planIssues(plan: SessionPlan): ValidationIssue[] {
   if(t.tool==='plan_audio' && t.arguments.duration_sec!==plan.duration_sec) fail(`/tool_calls/${i}/arguments/duration_sec`,'duration','Audio duration differs from plan');
  }
  if(plan.characters.some(c=>c.voice_id!=='default')) fail('/characters','voice','Only app-selected default voice is registered');
+ if(plan.experience){
+  const stages=plan.experience.stages;
+  if(!stages.length||new Set(stages.map(s=>s.id)).size!==stages.length)fail('/experience/stages','unique','Unique executable stages required');
+  if(plan.experience.kind==='action'&&plan.interaction_mode==='dialogue')fail('/experience','task_focus','An action experience cannot be replaced by a conversation');
+ }
  return issues;
 }
 
@@ -86,5 +142,9 @@ export function outputSchema(name: string): any {
   }
   return value;
  }
- const root=rewrite(document.components.schemas[name]);return {...root,$defs:defs};
+ const root=rewrite(document.components.schemas[name]);
+ // Additive wire fields keep old saved records readable; newly authored outputs must realize them.
+ const required=name==='SessionPlan'?['experience']:name==='SceneSpec'?['scenario','motion_paths','view_distance_meters','viewer_attached_node_ids']:[];
+ if(required.length)root.required=[...new Set([...root.required,...required])];
+ return {...root,$defs:defs};
 }

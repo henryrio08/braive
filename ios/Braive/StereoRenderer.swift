@@ -43,6 +43,7 @@ struct StereoWorld: UIViewRepresentable {
     }
     func mtkView(_ view: MTKView, drawableSizeWillChange newSize: CGSize) { size = .zero }
     func draw(in view: MTKView) {
+      world.renderMotion()
       guard let device = view.device, let drawable = view.currentDrawable, let queue, let pipeline,
         let buffer = queue.makeCommandBuffer()
       else { return }
@@ -77,7 +78,7 @@ struct StereoWorld: UIViewRepresentable {
         pass.depthAttachment.storeAction = .dontCare
         pass.depthAttachment.clearDepth = 1
         renderers[i].render(
-          atTime: world.renderTime,
+          atTime: world.animationTime,
           viewport: CGRect(x: 0, y: 0, width: textures[i].width, height: textures[i].height),
           commandBuffer: buffer, passDescriptor: pass)
       }

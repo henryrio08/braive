@@ -12,7 +12,7 @@ export type ToolCall = ({ "tool": "compose_scene"; "execute_when": "setup" | "af
 
 export type NarratorBeat = { "at_active_second": number; "text": string };
 
-export type SessionPlan = { "schema_version": "1"; "session_id": string; "revision": number; "topic": string; "task_instruction": string; "setting_brief": string; "props": Array<string>; "intensity": Intensity; "intro_target_seconds": 8; "narrator_beats": Array<NarratorBeat>; "characters": Array<Character>; "interaction_mode": "solo" | "dialogue" | "navigation" | "mixed"; "tool_calls": Array<ToolCall>; "adaptation_rationale"?: string; "intensity_1_10": number; "topic_short": string; "duration_sec": number; "narrator_intro_8s": string; "stop_reminder": "To stop at any time, just say STOP!"; "audio_brief": string; "safety": SafetyDecision };
+export type SessionPlan = { "schema_version": "1"; "session_id": string; "revision": number; "topic": string; "task_instruction": string; "setting_brief": string; "props": Array<string>; "intensity": Intensity; "intro_target_seconds": 8; "narrator_beats": Array<NarratorBeat>; "characters": Array<Character>; "interaction_mode": "solo" | "dialogue" | "navigation" | "mixed"; "tool_calls": Array<ToolCall>; "adaptation_rationale"?: string; "intensity_1_10": number; "topic_short": string; "duration_sec": number; "narrator_intro_8s": string; "stop_reminder": "To stop at any time, just say STOP!"; "audio_brief": string; "safety": SafetyDecision; "experience"?: ExperiencePlan };
 
 export type Asset = { "id": string; "kind": "mesh" | "texture" | "audio"; "description": string; "origin": "bundled" | "generated"; "bounds_meters"?: Array<number> };
 
@@ -20,17 +20,17 @@ export type SceneRequest = { "plan": SessionPlan; "capabilities_version": string
 
 export type Geometry = ({ "kind": "box"; "size": Array<number> }) | ({ "kind": "plane"; "width": number; "height": number }) | ({ "kind": "sphere"; "radius": number }) | ({ "kind": "cylinder"; "radius": number; "height": number }) | ({ "kind": "asset"; "asset_id": string });
 
-export type Material = { "color": string; "roughness": number; "texture_asset_id"?: string };
+export type Material = { "color": string; "roughness": number; "texture_asset_id"?: string; "opacity"?: number; "double_sided"?: boolean };
 
-export type SceneNode = { "id": string; "parent_id": string | null; "role": "environment" | "prop" | "character" | "task_focus"; "geometry": Geometry; "position": Array<number>; "rotation_radians": Array<number>; "scale": Array<number>; "material": Material; "animation": "none" | "idle" | "listen" | "speak" | "gesture"; "description": string };
+export type SceneNode = { "id": string; "parent_id": string | null; "role": "environment" | "prop" | "character" | "task_focus"; "geometry": Geometry; "position": Array<number>; "rotation_radians": Array<number>; "scale": Array<number>; "material": Material; "animation": "none" | "idle" | "listen" | "speak" | "gesture"; "description": string; "prop_name"?: string };
 
-export type WorldOperation = ({ "type": "set_visible"; "node_id": string; "visible": boolean }) | ({ "type": "set_material"; "node_id": string; "material": Material }) | ({ "type": "character_action"; "character_id": string; "behavior": "idle" | "listen" | "speak" | "gesture" }) | ({ "type": "viewpoint_transition"; "destination_id": string; "transition": "fade" }) | ({ "type": "narrate"; "text": string }) | ({ "type": "play_sound"; "cue_id": string });
+export type WorldOperation = ({ "type": "set_visible"; "node_id": string; "visible": boolean }) | ({ "type": "set_material"; "node_id": string; "material": Material }) | ({ "type": "character_action"; "character_id": string; "behavior": "idle" | "listen" | "speak" | "gesture" | "walk" | "run" | "swim" }) | ({ "type": "viewpoint_transition"; "destination_id": string; "transition": "fade" }) | ({ "type": "narrate"; "text": string }) | ({ "type": "play_sound"; "cue_id": string }) | ({ "type": "move_viewer"; "path_id": string }) | ({ "type": "move_node"; "node_id": string; "path_id": string; "face_motion": boolean }) | ({ "type": "set_environment"; "background_color": string; "fog_density": number; "ambient_intensity"?: number });
 
 export type Choice = { "id": string; "label": string; "intent_examples": Array<string>; "operations": Array<WorldOperation> };
 
 export type Interaction = { "id": string; "prompt": string; "trigger": "user_request" | "scene_start" | "scheduled" | "choice_completed"; "at_active_second"?: number; "choices": Array<Choice> };
 
-export type SceneSpec = { "schema_version": "1"; "session_id": string; "revision": number; "description": string; "nodes": Array<SceneNode>; "viewpoints": Array<{ "id": string; "position": Array<number>; "description": string }>; "initial_viewpoint_id": string; "lighting": { "ambient_color": string; "ambient_intensity": number; "key_direction": Array<number>; "key_intensity": number }; "atmosphere": { "background_color": string; "fog_density": number }; "interactions": Array<Interaction>; "events": Array<{ "at_active_second": number; "operation": WorldOperation }>; "stereo": StereoSpec; "reveal": RevealSpec };
+export type SceneSpec = { "schema_version": "1"; "session_id": string; "revision": number; "description": string; "nodes": Array<SceneNode>; "viewpoints": Array<{ "id": string; "position": Array<number>; "description": string }>; "initial_viewpoint_id": string; "lighting": { "ambient_color": string; "ambient_intensity": number; "key_direction": Array<number>; "key_intensity": number }; "atmosphere": { "background_color": string; "fog_density": number }; "interactions": Array<Interaction>; "events": Array<{ "at_active_second": number; "operation": WorldOperation }>; "stereo": StereoSpec; "reveal": RevealSpec; "scenario"?: ScenarioSpec; "motion_paths"?: Array<MotionPath>; "view_distance_meters"?: number; "viewer_attached_node_ids"?: Array<string> };
 
 export type AudioRequest = { "plan": SessionPlan; "available_assets": Array<Asset> };
 
@@ -81,3 +81,15 @@ export type RevealSpec = { "black_intro_seconds": 8; "fade_seconds": number; "bl
 export type EnvironmentSpec = SceneSpec;
 
 export type SessionFeedback = FeedbackResult;
+
+export type ExperiencePlan = { "kind": "action" | "conversation"; "objective": string; "requires_motion": boolean; "stages": Array<{ "id": string; "goal": string; "action_ids": Array<string> }> };
+
+export type MotionPath = { "id": string; "purpose": "walk" | "run" | "swim" | "climb" | "fall" | "glide" | "ride" | "other"; "interpolation": "linear" | "smooth"; "coordinate_space"?: "world" | "relative"; "points": Array<{ "at_seconds": number; "position": Array<number> }> };
+
+export type ScenarioAction = { "id": string; "label": string; "phrases": Array<string>; "operations": Array<WorldOperation>; "next_step_id": string | null };
+
+export type ScenarioCompletion = { "trigger": "after_seconds" | "motion_complete"; "after_seconds"?: number; "motion_path_id"?: string; "next_step_id": string };
+
+export type ScenarioStep = { "id": string; "prompt": string; "terminal": boolean; "start_operations": Array<WorldOperation>; "actions": Array<ScenarioAction>; "completion"?: ScenarioCompletion };
+
+export type ScenarioSpec = { "objective": string; "initial_step_id": string; "dialogue_policy": "disabled" | "on_request"; "steps": Array<ScenarioStep> };

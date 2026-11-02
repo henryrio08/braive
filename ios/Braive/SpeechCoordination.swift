@@ -20,6 +20,7 @@ struct SpeechFloor {
 
 /// Timed guidance yields to conversation. Identical scene events and narrator beats speak once.
 struct NarrationQueue {
+  var hasPending: Bool { !cues.isEmpty }
   private struct Cue { let text: String; let at: Double }
   private var cues: [Cue] = []
   private var lastSpoken = ""

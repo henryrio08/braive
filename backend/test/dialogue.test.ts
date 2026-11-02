@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {assertCurrentDialogue,completeDialogueResult,dialogueContentSchema} from '../src/dialogue.js';
+import {assertCurrentDialogue,completeDialogueResult,dialogueContentSchema,dialogueContext} from '../src/dialogue.js';
 import type {DialogueRequest,SessionPlan} from '../../docs/handoff/contracts.js';
 
 const request={schema_version:'1',session_id:'0D7F874A-A86C-4C9B-9913-4077E3E24729',revision:3,
@@ -23,6 +23,14 @@ test('character content gets exact request routing even when metadata is missing
 test('server-owned metadata does not bypass reply or operation validation',()=>{
  assert.throws(()=>completeDialogueResult(request,{...content,reply:42}));
  assert.throws(()=>completeDialogueResult(request,{...content,operations:[{type:'execute_code',code:'untrusted'}]}));
+ assert.throws(()=>completeDialogueResult(request,{...content,operations:[{type:'move_viewer',path_id:'unexpected'}]}));
+});
+test('optional conversation gets concise character context, not the entire generated scene',()=>{
+ const saved={plan:{characters:[{id:'neighbor_1',name:'Maya'}],task_instruction:'Present the garden proposal',setting_brief:'Library'},scene:{description:'Sunny library',nodes:[{id:'chair',geometry:{large:'mesh description'}}],viewpoints:[{id:'start'}]},audio:{layers:[]}} as any;
+ const context=dialogueContext(request,saved);
+ assert.equal(context.character!.name,'Maya');assert.deepEqual(context.world_references.node_ids,['chair']);
+ assert.equal('scene' in context,false);assert.equal('approved_plan' in context,false);
+ assert.equal(dialogueContentSchema().$defs.WorldOperation.oneOf.length,1);
 });
 test('dialogue cannot complete against a superseded or missing approved scene',()=>{
  const plan={session_id:request.session_id,revision:3,characters:[{id:'neighbor_1'}]} as SessionPlan;

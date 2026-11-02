@@ -1,10 +1,11 @@
 import {activeBudget} from './budget.js';
 import {PhoneTestWindow} from './phone-test-window.js';
-import {assertCurrentDialogue} from './dialogue.js';
+import {assertCurrentDialogue,dialogueContext} from './dialogue.js';
 import {meshCatalog} from './assets.js';
 import express from 'express';
 import { createServer } from 'node:http';
 import { randomUUID, timingSafeEqual } from 'node:crypto';
+import {writeFileSync} from 'node:fs';
 import { WebSocketServer, WebSocket } from 'ws';
 import { AppError, validate, sceneIssues, planIssues } from './contracts.js';
 import { authoring, model, provenance, requestCount, reservedCostUSD, usageLog } from './meta.js';
@@ -40,27 +41,35 @@ const attempts=new Map<string,{deadline:number,repairs:number}>();
 const jobs=new Map<string,Job>(); const running=new Map<string,AbortController>(); const revisions=new Map<string,number>();
 
 const capabilities={version:'iphone-initial-1',nodes:350,resolved_nodes:650,draw_calls:700,texture_bytes:16000000,resident_bytes:180000000,units:'meters',eye_height:1.6,initial_forward:'negative Z',geometry:['box','plane','sphere','cylinder','asset'],characters:'Use only character.base.neutral_humanoid_01. Solid Material.color from Character.color_hex. Skin preserved; app supplies subtle idle/listen/speak/gesture joint motions on known neutral bones; unknown rigs safely no-op. Never use crowd_proxy as a character.',voices:['default'],asset_catalog_format:'category.subcategory: [[asset_id, triangle_count], ...]. All assets normalized to meters, base y=0, forward -Z. Use each GLB intact; do not author its mesh or skeleton children.',assets:meshCatalog, audio_assets:['forest','piano','wind','room','crowd','whoosh']};
+capabilities.version='iphone-scenarios-2';
+Object.assign(capabilities,{scenario_engine:'Ordered executable stages, local voice actions, timed/motion-completion transitions, terminal goal. Optional conversation only by explicit ASK name. No automatic chat fallback.',movement:'move_viewer follows an authored motion_paths trajectory in meters; each path starts at the current camera position, points are absolute destinations at increasing positive seconds. Preserve head-tracked orientation. Paths can be interrupted by another path without teleporting; STOP freezes the active clock. walk, run, swim, climb, fall, glide, ride and other trajectories use the same generic system. move_node animates another actor/prop along a path, optionally facing its travel direction.',view_distance_meters:10000});
 const assets=capabilities.audio_assets.map(id=>({id,kind:'audio',description:`Bundled synthesized ${id}`,origin:'bundled'}));
 async function generate(request:PlanRequest, job:Job, signal:AbortSignal) {
  let plan:SessionPlan|undefined, scene:SceneSpec|undefined, audio:AudioPlan|undefined, issues:unknown;
  const previous=approved.get(request.session_id)??(request.parent_session_id?approved.get(request.parent_session_id):undefined);
  for(let attempt=0;attempt<2;attempt++) {
   try {
-   if(!plan) { job.stage='Coordinating your situation'; plan=await model('SessionPlan',{request,capabilities,issues,previous_plan:previous?.plan},`You coordinate Braive situational practice. ${authoring}\nUse current ability and explicit boundaries. Copy session_id/revision. Intro includes exact stop_reminder, at most 18 words total. Choose default voice IDs. Return safety decision before generating any scene. Prefer named registered GLB assets; generate layout and interactions. Every character uses character.base.neutral_humanoid_01; choose a solid hex color_hex for each Character. Do not invent mesh IDs. Primitives are architecture fill only; listed empty subcategories remain gaps.`,signal); }
+   if(!plan) { job.stage='Coordinating your situation'; plan=await model('SessionPlan',{request,capabilities,issues,previous_plan:previous?.plan},`You coordinate Braive situational practice. ${authoring}\nUse current ability and explicit boundaries. Copy session_id/revision. Intro includes exact stop_reminder, at most 18 words total. Choose default voice IDs. Return safety decision before generating any scene. Prefer named registered GLB assets; generate layout and interactions. Every character uses character.base.neutral_humanoid_01; choose a solid hex color_hex for each Character. Do not invent mesh IDs. Procedural primitives are environment/task geometry only; listed empty subcategories remain gaps.`,signal); }
    if(plan!.safety.decision==='refuse') throw new AppError('INVALID_INPUT',plan!.safety.reason+' '+plan!.safety.practice_preserving_alternative);
    if(plan!.session_id!==request.session_id || plan!.revision!==request.revision) throw new AppError('INVALID_MODEL_OUTPUT','Coordinator revision mismatch');
    const pIssues=planIssues(plan!); if(pIssues.length) throw new AppError('INVALID_MODEL_OUTPUT','Invalid coordinator invariants',pIssues);
+   if(!plan!.experience)throw new AppError('INVALID_MODEL_OUTPUT','Coordinator must plan executable experience stages');
    job.stage=attempt?'Repairing scene validation issues':'Authoring spatial scene and sound';
    // Audio first supplies a stable cue manifest to scene authoring.
    audio=await model('AudioPlan',{plan,available_assets:assets},'Select only supplied audio assets. Required whoosh. Keep narrative speech audible. Match plan revision.',signal);
-   scene=await model('SceneSpec',{plan,capabilities,audio,previous_scene:scene??previous?.scene,issues},authoring+" Use registered GLBs for characters and props; primitives only for architecture fill. Characters use only character.base.neutral_humanoid_01 and copy Character.color_hex to Material.color exactly. Place normalized asset bases at floor height. No unregistered IDs. Neutral behavior uses app-owned joint motions, not invented GLB animation clips. Return compact JSON with concise descriptions. Prefer 30-60 scene nodes when sufficient for all approved participants, setting, depth and interactions; never remove task semantics to meet that guideline.",signal,true);
+   scene=await model('SceneSpec',{plan,capabilities,audio,previous_scene:scene??previous?.scene,issues},authoring+" Use registered GLBs for characters and props; primitives for environment/task geometry. Characters use only character.base.neutral_humanoid_01 and copy Character.color_hex to Material.color exactly. Place normalized asset bases at floor height. No unregistered IDs. Neutral behavior uses app-owned joint motions, not invented GLB animation clips. Return compact JSON with concise descriptions. Prefer 30-60 scene nodes when sufficient for all approved participants, setting, depth and interactions; never remove task semantics to meet that guideline.",signal,true);
    const errors=sceneIssues(plan!,scene!,audio!);
    for(const l of audio!.layers) if(!capabilities.audio_assets.includes(l.asset_id)) errors.push({path:'/layers',rule:'asset',message:'Unknown audio asset'});
    if(errors.length) throw new AppError('INVALID_MODEL_OUTPUT','Scene requires repair',errors);
    signal.throwIfAborted();
    if(revisions.get(request.session_id)!==request.revision) throw new AppError('CANCELLED','Superseded revision');
    job.result={plan:plan!,scene:scene!,audio:audio!};approved.set(request.session_id,job.result); job.status='succeeded'; job.stage='Ready for device validation'; return;
-  } catch(e) { if(e instanceof AppError && e.code==='INVALID_MODEL_OUTPUT' && attempt===0) { attempts.get(job.job_id)!.repairs++;issues=e.issues.length?e.issues:[{message:e.message}]; if(plan && planIssues(plan).length) plan=undefined; continue; } throw e; }
+  } catch(e) {
+   if(process.env.BRAIVE_TEST_MODE==='true' && plan && scene && audio){
+    try{writeFileSync(new URL('../data/last-rejected-scene.json',import.meta.url),JSON.stringify({plan,scene,audio,issues:e instanceof AppError?e.issues:[]},null,2),{mode:0o600});}catch{}
+   }
+   if(e instanceof AppError && e.code==='INVALID_MODEL_OUTPUT' && attempt===0) { attempts.get(job.job_id)!.repairs++;issues=e.issues.length?e.issues:[{message:e.message}]; if(plan && planIssues(plan).length) plan=undefined; continue; } throw e;
+  }
  }
 }
 app.post(['/v1/session-plans','/v1/scene-revisions'],(req,res,next)=>{
@@ -106,14 +115,15 @@ app.post('/v1/jobs/:id/validation',async(req,res,next)=>{
 });
 app.get('/v1/jobs/:id',(req,res)=>{const j=jobs.get(req.params.id); j?res.json(j):res.status(404).json({message:'Job not found'});});
 app.delete('/v1/jobs/:id',(req,res)=>{const j=jobs.get(req.params.id); if(j){running.get(j.job_id)?.abort();j.status='cancelled';}res.sendStatus(204);});
-const routes=[['dialogue','DialogueRequest','DialogueResult','Respond as the specified character to the actual user answer. Brief natural reply. One speaker. Use only available validated world operations. Never invent observations.'],['feedback','FeedbackRequest','FeedbackResult','Only cite supplied observation IDs. Maximum three positive did_well and three noticed. Include a quick improvement if supported. No diagnosis or inferred eye contact.'],['adaptations','AdaptationRequest','AdaptationResult','Use self-report, preferences, and supplied evidence IDs. Maintain if evidence is missing; ease or maintain after early quit/high difficulty. Preserve scenario identity.']] as const;
+const routes=[['dialogue','DialogueRequest','DialogueResult','Respond as the specified character to the actual user answer. At most two short sentences, 35 words total. One speaker. Use character gestures only; scenario actions own movement and world changes. Never invent observations.'],['feedback','FeedbackRequest','FeedbackResult','Only cite supplied observation IDs. Maximum three positive did_well and three noticed. Include a quick improvement if supported. No diagnosis or inferred eye contact.'],['adaptations','AdaptationRequest','AdaptationResult','Use self-report, preferences, and supplied evidence IDs. Maintain if evidence is missing; ease or maintain after early quit/high difficulty. Preserve scenario identity.']] as const;
 for(const [path,requestSchema,resultSchema,instructions] of routes) app.post(`/v1/${path}`,async(req,res,next)=>{
  try {validate(requestSchema,req.body);
   let context:any=req.body;
   if(path==='dialogue') {
    const saved=approved.get(req.body.session_id);
    assertCurrentDialogue(req.body,saved?.plan,revisions.get(req.body.session_id));
-   context={...req.body,approved_plan:saved!.plan,scene:saved!.scene};
+   if(saved!.scene.scenario?.dialogue_policy==='disabled')throw new AppError('INVALID_INPUT','This experience uses local scenario actions, not character dialogue');
+   context=dialogueContext(req.body,saved!);
   }
   const result=await model(resultSchema,context,instructions,AbortSignal.timeout(25000));
   const observations=req.body.observations??[];const ids=new Set(observations.map((o:any)=>o.id));

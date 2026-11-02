@@ -177,7 +177,7 @@ struct AssetEntry: Decodable {
   }
   /// Preserve authored clips. The neutral rig gets small app-controlled joint motions, never new mesh data.
   static func animate(_ node: SCNNode, behavior: String) {
-    guard ["idle", "listen", "speak", "gesture"].contains(behavior) else { return }
+    guard ["idle", "listen", "speak", "gesture", "walk", "run", "swim"].contains(behavior) else { return }
     var usedClip = false
     node.enumerateChildNodes { n, _ in
       for key in n.animationKeys {
@@ -201,6 +201,28 @@ struct AssetEntry: Decodable {
     for (bone, orientation) in pose.bones {
       bone.removeAction(forKey: "braive_behavior")
       bone.simdOrientation = orientation
+    }
+    if ["walk", "run", "swim"].contains(behavior) {
+      // Verified neutral rig: .011/.013 thighs, .012/.014 knees, .004/.005 upper arms.
+      let period = behavior == "run" ? 0.65 : behavior == "swim" ? 1.1 : 1.4
+      let stride: Float = behavior == "run" ? 0.65 : behavior == "swim" ? 0.2 : 0.3
+      for (bone, rest) in pose.bones {
+        let name = bone.name ?? ""
+        guard ["Bone.011","Bone.013","Bone.012","Bone.014","Bone.004","Bone.005"].contains(name) else { continue }
+        let opposite = ["Bone.013","Bone.014","Bone.004"].contains(name)
+        let phase: Float = opposite ? .pi : 0
+        let arm = ["Bone.004","Bone.005"].contains(name)
+        let knee = ["Bone.012","Bone.014"].contains(name)
+        let lower: Float = arm ? (name == "Bone.004" ? 1 : -1) * (behavior == "swim" ? 0.2 : 1.25) : 0
+        let base = rest * simd_quatf(angle: lower, axis: SIMD3(0,0,1))
+        let movement = SCNAction.customAction(duration: period) { n, t in
+          let wave = sin(Float(t / period) * 2 * .pi + phase)
+          let amplitude = arm ? (behavior == "swim" ? 1.1 : stride * 0.8) : knee ? stride * 0.8 : stride
+          n.simdOrientation = base * simd_quatf(angle: (knee ? max(0,wave) : wave) * amplitude, axis: SIMD3(1,0,0))
+        }
+        bone.runAction(.repeatForever(movement), forKey: "braive_behavior")
+      }
+      return
     }
     let target: String
     let axis: SIMD3<Float>

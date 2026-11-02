@@ -86,6 +86,14 @@ import Speech
       }
     }
   }
+  func setCommandPhrases(_ phrases: [String]) async {
+    turn.fastPhrases = Set(phrases.map(VoiceAnswer.normalized))
+    let context = AnalysisContext()
+    var seen = Set<String>()
+    context.contextualStrings[.general] = (["START","STOP","yes","no","that's all","begin practice","save reflection"] + phrases)
+      .filter { seen.insert(VoiceAnswer.normalized($0)).inserted }.prefix(100).map { $0 }
+    try? await analyzer?.setContext(context)
+  }
   func stop() {
     stopped = true
     sink?.finish(); sink = nil

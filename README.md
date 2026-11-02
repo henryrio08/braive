@@ -4,7 +4,11 @@ Native, voice-first iPhone VR situational practice, with a Meta-powered backend 
 
 ## Current state
 
-The tested core practice loop passed on the physical phone on November 2, 2026: complete voice intake through pauses, centered reveal/countdown, STOP/NO resumption, speech waiting, relevant character replies, a nonempty saved reflection, grounded feedback, and a centered adapted repeat. The saved 90-second parent practice contains two character replies, zero recorded reply errors, and feedback whose evidence IDs resolve. The adapted record links to that parent and preserves the same 90-second duration/intensity 3. The latest fresh scene generated in 48.835 seconds; the adapted scene took 62.149 seconds. Backend type checking and 28 tests pass, along with 33 voice-input, eight head-pose, and 15 speech-coordination checks; five importer tests passed in the prior day's check. Actual viewer optics, device performance, interruption recovery beyond the tested STOP/NO path, and final video capture remain outstanding. The inherited 349-asset native audit has not been independently rerun in this continuation.
+The earlier core practice loop passed on the physical phone on November 2, 2026: complete voice intake through pauses, centered reveal/countdown, STOP/NO resumption, speech waiting, relevant character replies, a nonempty saved reflection, grounded feedback, and a centered adapted repeat. Fresh and adapted library generations took 48.835 and 62.149 seconds. These are historical checks of the earlier interaction engine, not verification of every subsequent change.
+
+The current update replaces automatic character conversation with AI-authored executable stages and local voice actions. Generated paths move the participant and other actors through the world; stage events and motion share the countdown's pause-aware clock. There are no topic-specific scene generators or preset practice fallback. An actual generated swimming scene passed native both-eye preflight and was reviewed at surface, travel, underwater and return positions through explicit offline replay. That replay is excluded from normal app builds. Physical-phone verification of the new movement flow remains pending. Type checking, 38 backend tests, 37 scenario/movement checks, 33 voice-input checks, eight head-pose checks and 15 speech-coordination checks pass. See [scenario engine](docs/scenario-engine.md) and [verification evidence](docs/verification-2026-11-02.md).
+
+Actual viewer optics, sustained device performance, interruption recovery beyond the previously tested STOP/NO path, broader generated visual quality and final video capture remain outstanding. The inherited 349-asset native audit has not been independently rerun in this continuation.
 
 **Speech now stays on the iPhone.** At Henry’s request, the normal app uses Apple’s SpeechAnalyzer / SpeechTranscriber (iOS 26+) with voice-processed AVAudioEngine input and native speech detection. It does not open the Meta transcription relay. First use may install Apple’s on-device English speech assets. No silent cloud transcription fallback is configured. Meta receives the transcribed practice details/answers needed for coordination and dialogue, after consent.
 
@@ -82,7 +86,7 @@ Situation and ability answers stay open across pauses. Each prompt explains **�
 
 Headset readiness sets the current facing direction as the scene's forward direction. The reference is kept through generation and reveal; adapted repeats ask for headset confirmation again. Settings → Voice selects from installed English voices, preferring Premium then Enhanced quality automatically, with a local preview. [Apple's higher-quality voices](https://developer.apple.com/documentation/avfaudio/avspeechsynthesisvoicequality) must be downloaded through iPhone Settings → Accessibility → Read & Speak → Voices if absent. The actual voice quality available on the phone must be checked there; do not claim a Premium voice is installed just because the code prefers one. Intro duration measurement and playback use the same selected voice and rate. Opening phone controls pauses practice; edited server/pairing settings persist immediately.
 
-During practice, timed narration waits for detected speech and provisional transcription to finish. Repeated scene/narrator lines are queued once; prompts more than 15 active seconds late are dropped. User speech interrupts app speech. Character responses wait for a completed turn and quiet gap, and a newer completed user turn supersedes a stale response. STOP and other pauses retain pending responses until resumption.
+During practice, the current stage explains its available voice actions. These execute on the phone without a dialogue request. HELP repeats the current instructions. Conversation, when the plan permits it, requires ASK followed by a character name or a uniquely matching role; arbitrary speech does not trigger a network reply. Timed narration waits for detected speech and provisional transcription to finish. Repeated scene/narrator lines are queued once; prompts more than 15 active seconds late are dropped. User speech interrupts app speech. Optional character responses wait for a completed turn and quiet gap, and a newer request supersedes a stale response. STOP and other pauses retain pending responses until resumption.
 
 Dialogue routing identifiers come from the validated request. The model supplies reply content and permitted world operations; it is not responsible for reproducing UUIDs or revisions. The server checks the approved scene and active revision before and after the model call, validates the final response schema, and verifies operation references.
 
@@ -97,6 +101,8 @@ xcrun swiftc -module-cache-path /tmp/braive-swift-module-cache ios/Braive/HeadPo
 /tmp/braive-check-head-pose
 xcrun swiftc -module-cache-path /tmp/braive-swift-module-cache ios/Braive/VoiceInput.swift ios/Braive/SpeechCoordination.swift scripts/check-speech-coordination.swift -o /tmp/braive-check-speech-coordination
 /tmp/braive-check-speech-coordination
+xcrun swiftc -module-cache-path /tmp/braive-swift-module-cache ios/Braive/JSON.swift ios/Braive/VoiceInput.swift ios/Braive/ScenarioRuntime.swift scripts/check-scenarios.swift -o /tmp/braive-check-scenarios
+/tmp/braive-check-scenarios
 ```
 
 ## Runtime design
@@ -107,7 +113,7 @@ xcrun swiftc -module-cache-path /tmp/braive-swift-module-cache ios/Braive/VoiceI
 - The project OpenAPI supplies schema validation. The server adds graph/reference/tool-phase/evidence checks. The phone builds scenes offscreen and checks both-eye focal/depth visibility before commit.
 - Model output cannot execute code or load arbitrary URLs. Invalid scenes get at most one repair shared with native preflight, within the original two-minute generation deadline. No preset practice-room fallback.
 
-Contract extensions: persisted SessionRecord detail fields (`observations`, `adaptation`, reflection metadata/file); `/v1/jobs/{id}/validation` accepts a bounded native validation explanation and requests the shared repair. SceneSpec remains unchanged. Specialist generation is internal to the single backend.
+Contract extensions: persisted SessionRecord detail fields (`observations`, `adaptation`, reflection metadata/file); `/v1/jobs/{id}/validation` accepts a bounded native validation explanation and requests the shared repair. SessionPlan now includes an experience with ordered stages; SceneSpec adds executable scenarios, motion paths, viewer-carried assemblies and viewing distance. These fields are additive for saved records and required from new provider output. Specialist generation remains internal to the single backend.
 
 ## Remaining verification and delivery work
 
