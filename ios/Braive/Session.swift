@@ -36,6 +36,8 @@ import SwiftUI
   var fear = "", ability = "", additions: [String] = [], history: [JSON] = []
   var answer = VoiceAnswer()
   var intakeApproved = false
+  var repeatAfterHeadset = false
+  var adapting = false
   var useHistory = false
   var parent: String?
   var builder = false
@@ -44,6 +46,8 @@ import SwiftUI
   var turns: [Any] = []
   var turnTask: Task<Void, Never>?
   var turnNonce = UUID()
+  var speechFloor = SpeechFloor()
+  var narration = NarrationQueue()
   var outcome = "completed"
   var generationDeadline = 0.0
   var timer: AnyCancellable?
@@ -71,6 +75,9 @@ import SwiftUI
     world.onPortrait = { [weak self] portrait in self?.pause("portrait", enabled: portrait) }
     audio.onStatus = { [weak self] status in self?.setupNotice = status }
     audio.onText = { [weak self] text, final, id in self?.heard(text, final: final, id: id) }
+    audio.onActivity = { [weak self] speaking in
+      self?.speechFloor.detect(speaking, now: ProcessInfo.processInfo.systemUptime)
+    }
     audio.onDisconnect = { [weak self] reason in
       self?.connection = "Voice disconnected: " + reason
       self?.pause("command_channel_unavailable", enabled: true)
@@ -174,6 +181,7 @@ import SwiftUI
     let was = pauses.isEmpty
     if enabled { pauses.insert(reason) } else { pauses.remove(reason) }
     if was && !pauses.isEmpty {
+      speechFloor = SpeechFloor()
       world.scene.isPaused = true
       audio.pause()
     } else if !was && pauses.isEmpty {
@@ -203,12 +211,21 @@ import SwiftUI
 
   }
   func heard(_ text: String, final: Bool, id: String) {
+    if pauses.contains("phone_controls") {
+      // Consume partial IDs too, so a delayed final from voice preview cannot replay on dismissal.
+      seen.insert(id)
+      return
+    }
     transcript = text
     let words = text.lowercased().split(whereSeparator: { !$0.isLetter }).map(String.init)
     // Conservative STOP works on partials. Device voice processing handles playback echo; verify in goggles.
     if canStop && words.contains("stop") {
       stop()
       return
+    }
+    if phase == .active && pauses.isEmpty && !seen.contains(id) {
+      speechFloor.receive(final: final, now: ProcessInfo.processInfo.systemUptime)
+      if !final { audio.interruptSpeech() }
     }
     guard final else { return }
     guard seen.insert(id).inserted else { return }
@@ -243,11 +260,18 @@ import SwiftUI
     }
     switch phase {
     case .lobby:
-      if words.contains("start") { go(.headset, "Is your headset ready? Say yes to begin.") }
+      if words.contains("start") {
+        repeatAfterHeadset = false
+        go(.headset, headsetPrompt)
+      }
     case .headset:
-      if yes {
-        newSession()
-        go(.intake, intakePrompt)
+      if VoiceAnswer.confirmsHeadset(text) {
+        world.recenter()
+        if repeatAfterHeadset { adapt() }
+        else {
+          newSession()
+          go(.intake, intakePrompt)
+        }
       }
     case .intake, .ability: collectAnswer(text)
     case .review:
@@ -301,7 +325,8 @@ import SwiftUI
     case .feedback: if yes || text.lowercased().contains("continue") { save() }
     case .repeatPrompt:
       if yes {
-        adapt()
+        repeatAfterHeadset = true
+        go(.headset, headsetPrompt)
       } else if no {
         world.lobby()
         world.scene.isPaused = !pauses.isEmpty
@@ -319,6 +344,9 @@ import SwiftUI
       }
     default: break
     }
+  }
+  var headsetPrompt: String {
+    "Look straight ahead in a comfortable position. Is your headset ready? Say yes to center your practice here."
   }
   var intakePrompt: String {
     "What would you like to practice? Describe the situation, where you are, and who’s there. Take your time. Say ‘that’s all’ when you’ve finished."
@@ -385,6 +413,9 @@ import SwiftUI
     reflection = JSON()
     observations = []
     turns = []
+    turnTask?.cancel(); turnTask = nil; turnNonce = UUID()
+    speechFloor = SpeechFloor()
+    narration = NarrationQueue()
     active = 0
     stopCount = 0
     fired = []
@@ -394,6 +425,7 @@ import SwiftUI
     adaptation = JSON()
     answer = VoiceAnswer()
     fear = ""; ability = ""; intakeApproved = false; builder = false
+    repeatAfterHeadset = false
   }
   func request() -> JSON {
     var preferences: [String] = []
@@ -514,13 +546,13 @@ import SwiftUI
             world.scene.isPaused = false
             phase = .intro
             message = plan["narrator_intro_8s"].text
-            audio.say(message)
+            audio.say(message, intro: true)
             if plan["safety"]["decision"].text == "soften" {
               phase = .planning
               audio.say(plan["safety"]["reason"].text) {
                 self.phase = .intro
                 self.introTime = 0
-                self.audio.say(fittedIntro)
+                self.audio.say(fittedIntro, intro: true)
               }
             }
             return
@@ -583,15 +615,22 @@ import SwiftUI
       for (i, b) in plan["narrator_beats"].list.enumerated()
       where b["at_active_second"].value <= active && !beatFired.contains(i) {
         beatFired.insert(i)
-        audio.say(b["text"].text)
+        narration.enqueue(b["text"].text, at: active)
       }
       if remaining <= 0 { finish(early: false) }
+      else if turnTask == nil, !audio.narrated,
+        speechFloor.available(now: now), let text = narration.take(at: active) {
+        audio.say(text)
+      }
     }
   }
   func operation(_ op: JSON) {
-    world.operation(op, speak: { audio.say($0) }, sound: { audio.cue($0) })
+    world.operation(op, speak: { narration.enqueue($0, at: active) }, sound: { audio.cue($0) })
   }
   func dialogue(_ text: String) {
+    narration.clearPending()
+    turnTask?.cancel(); turnTask = nil; turnNonce = UUID()
+    audio.interruptSpeech()
     observe("speech_excerpt", "transcript", text)
     for i in scene["interactions"].list {
       for c in i["choices"].list {
@@ -604,17 +643,15 @@ import SwiftUI
       }
     }
     guard let character = plan["characters"].list.first else {
-      audio.say("You can inspect the scene or choose one of the available actions.")
+      narration.enqueue("You can inspect the scene or choose one of the available actions.", at: active)
       return
     }
-    audio.speech.stopSpeaking(at: .immediate)
-    turnTask?.cancel()
-    turnNonce = UUID()
     let nonce = turnNonce
     let rev = revision
     let turn = UUID().uuidString
     world.animate(character["id"].text, "listen")
     turnTask = Task {
+      defer { if nonce == turnNonce { turnTask = nil } }
       do {
         let req = JSON([
           "schema_version": "1", "session_id": sessionID, "revision": rev, "turn_id": turn,
@@ -624,9 +661,10 @@ import SwiftUI
           "available_choices": scene["interactions"].list.flatMap { $0["choices"].list.map(\.raw) },
         ])
         let result = try await api.call("/v1/dialogue", req)
-        // Keep the completed answer pending during STOP/orientation interruptions.
-        // Ending the session or starting another turn still invalidates it.
-        while !pauses.isEmpty {
+        // A completed model reply must still yield to the user's current speech and any pause.
+        // A newer completed user turn cancels this stale reply through the nonce.
+        while !pauses.isEmpty || !speechFloor.available(now: ProcessInfo.processInfo.systemUptime)
+          || audio.narrated {
           try await Task.sleep(for: .milliseconds(100))
           try Task.checkCancellation()
         }
@@ -637,10 +675,14 @@ import SwiftUI
         turns.append(["speaker_id": character["id"].text, "text": result["reply"].text])
         observe("dialogue_turn", "app_event", result["reply"].text)
         for op in result["operations"].list { operation(op) }
+        narration.markSpoken(result["reply"].text, at: active)
         world.animate(character["id"].text, "speak")
         audio.say(result["reply"].text) { self.world.animate(character["id"].text, "listen") }
       } catch {
-        if !Task.isCancelled { message = "Character connection interrupted. Try speaking again." }
+        if !Task.isCancelled {
+          message = "Character connection interrupted. Try speaking again."
+          observe("task_action", "app_event", "Character reply unavailable: " + error.localizedDescription)
+        }
       }
     }
   }
@@ -653,7 +695,9 @@ import SwiftUI
   func finish(early: Bool) {
     generation?.cancel()
     turnTask?.cancel()
+    turnTask = nil
     turnNonce = UUID()
+    narration.clearPending()
     transitionID = UUID()
     loading = false
     audio.silence()
@@ -727,7 +771,11 @@ import SwiftUI
     }
   }
   func adapt() {
+    guard !adapting else { return }
+    adapting = true
+    message = "Getting your next practice ready…"
     Task {
+      defer { adapting = false }
       do {
         let result = try await api.call(
           "/v1/adaptations",
@@ -752,6 +800,7 @@ import SwiftUI
         audio.say(summary)
         generate()
       } catch {
+        phase = .repeatPrompt
         message = "Adaptation unavailable. Say yes to retry, or no to return."
         audio.say(message)
       }

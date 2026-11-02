@@ -4,12 +4,15 @@ import AVFoundation
   let speech = AVSpeechSynthesizer()
   let promptSpeech = AVSpeechSynthesizer()
   let measureSpeech = AVSpeechSynthesizer()
+  private let previewSpeech = AVSpeechSynthesizer()
+  private var introVoice: AVSpeechSynthesisVoice?
   let engine = AVAudioEngine()
   var players: [String: AVAudioPlayer] = [:]
   var ready = false
   var receivedAudioSeconds = 0.0
   var lastProgressAt = 0.0
   var onText: ((String, Bool, String) -> Void)?
+  var onActivity: ((Bool) -> Void)?
   var onDisconnect: ((String) -> Void)?
   private var stopRecognition: (() -> Void)?
   var onStatus: ((String) -> Void)?
@@ -47,7 +50,7 @@ import AVFoundation
     }, onError: { [weak self] reason in
       self?.ready = false
       self?.onDisconnect?(reason)
-    })
+    }, onActivity: { [weak self] speaking in self?.onActivity?(speaking) })
     stopRecognition = { recognition.stop() }
     let sink = try await recognition.prepare(inputFormat: format) { [weak self] message in
       self?.onStatus?(message)
@@ -70,29 +73,26 @@ import AVFoundation
     stopRecognition?(); stopRecognition = nil
   }
   func fitIntro(_ text: String) async -> String {
-    let duration = await measure(text)
+    introVoice = SpeechVoice.selected
+    let duration = await measure(text, voice: introVoice)
     if duration <= 8 && duration > 0 { return text }
     let concise = "Practice your opening. To stop at any time, just say STOP!"
-    _ = await measure(concise)
+    _ = await measure(concise, voice: introVoice)
     return concise
   }
-  private func measure(_ text: String) async -> Double {
+  private func measure(_ text: String, voice: AVSpeechSynthesisVoice?) async -> Double {
     await withCheckedContinuation { continuation in
-      let u = AVSpeechUtterance(string: text)
-      u.voice = AVSpeechSynthesisVoice(language: "en-US")
-      u.rate = 0.48
+      let u = SpeechVoice.utterance(text, voice: voice)
       let accumulator = SpeechDuration(continuation)
       measureSpeech.write(u) { buffer in accumulator.add(buffer) }
     }
   }
-  func say(_ text: String, completion: (() -> Void)? = nil) {
+  func say(_ text: String, intro: Bool = false, completion: (() -> Void)? = nil) {
     speech.stopSpeaking(at: .immediate)
     finished = completion
     narrated = true
     for p in players.values { p.volume *= 0.25 }
-    let u = AVSpeechUtterance(string: text)
-    u.voice = AVSpeechSynthesisVoice(language: "en-US")
-    u.rate = 0.48
+    let u = SpeechVoice.utterance(text, voice: intro ? introVoice : SpeechVoice.selected)
     utteranceID = ObjectIdentifier(u)
     speech.speak(u)
   }
@@ -112,10 +112,21 @@ import AVFoundation
     for p in players.values { p.volume = min(0.2, p.volume * 4) }
     f?()
   }
+  func interruptSpeech() {
+    guard narrated || speech.isSpeaking else { return }
+    utteranceID = nil
+    speech.stopSpeaking(at: .immediate)
+    speechFinished()
+  }
   func confirmQuit() {
-    let utterance = AVSpeechUtterance(string: "Quit simulation?")
+    let utterance = SpeechVoice.utterance("Would you like to end this practice? Say yes to finish, or no to continue.")
     promptSpeech.speak(utterance)
   }
+  func previewVoice() {
+    previewSpeech.stopSpeaking(at: .immediate)
+    previewSpeech.speak(SpeechVoice.utterance("Take your time. We’ll practice this together, one step at a time."))
+  }
+  func stopVoicePreview() { previewSpeech.stopSpeaking(at: .immediate) }
   func pause() {
     speech.pauseSpeaking(at: .immediate)
     for p in players.values { p.pause() }
@@ -126,6 +137,9 @@ import AVFoundation
     for p in players.values { p.play() }
   }
   func silence() {
+    stopVoicePreview()
+    utteranceID = nil
+    narrated = false
     promptSpeech.stopSpeaking(at: .immediate)
     speech.stopSpeaking(at: .immediate)
     finished = nil

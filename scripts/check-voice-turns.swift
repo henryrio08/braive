@@ -41,6 +41,10 @@ import Foundation
     check(!VoiceAnswer.confirmsPractice("don't begin practice"), "Negation cannot create a scene")
     check(!VoiceAnswer.confirmsPractice("Say begin practice to create it or start over to change it"), "Readback echo cannot authorize generation")
     check(VoiceAnswer.confirmsPractice("Begin practice!"), "Deliberate spoken creation command")
+    check(VoiceAnswer.confirmsHeadset("Yes."), "Headset confirmation remains compatible")
+    check(VoiceAnswer.confirmsHeadset("My headset is ready."), "Spoken readiness centers the scene")
+    check(!VoiceAnswer.confirmsHeadset("Not ready"), "Negative readiness cannot center or advance")
+    check(!VoiceAnswer.confirmsHeadset("Say yes to center your practice here"), "Prompt echo cannot confirm readiness")
     print("Voice turn checks passed: \(count). No microphone, network, or paid API calls.")
   }
 }

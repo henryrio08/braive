@@ -9,6 +9,7 @@ Before capture, install the native app, confirm phone/viewer fit, calibrate ster
 Walk through:
 
 1. Forest lobby has depth, both music and atmosphere, and the START prompt.
+   Face a new direction before confirming headset readiness. Confirm it becomes forward and that turning away during generation does not move the reference. Check this again on an adapted repeat. Preview the selected voice in phone Settings; verify whether a Premium/Enhanced voice is actually installed.
 2. First say “one second,” pause, then describe the situation with a deliberate pause after “I need to present.” The app must keep listening. Say “that's all” after the complete situation, then provide current ability and finish with “that's all.” Check the spoken readback before saying “begin practice.” If history matches, decline it once and verify it isn't supplied to generation.
 3. During setup say “hey builder,” then “Give the room large windows and a clear speaking area. That's all.” Confirm the newest revision is the only result that starts and the old scene cannot reveal during the addition.
 4. Confirm black intro fits eight seconds including STOP, followed by blur/fade and the countdown starting after reveal.

@@ -1,3 +1,4 @@
+import AVFoundation
 import SwiftUI
 
 @main struct BraiveApp: App {
@@ -22,6 +23,8 @@ struct ContentView: View {
   @AppStorage("viewerK1") var k1 = 0.0
   @AppStorage("viewerK2") var k2 = 0.0
   @AppStorage("viewerFOV") var fov = 70.0
+  @AppStorage("speechVoiceID") var speechVoiceID = ""
+  @State private var speechVoices: [AVSpeechSynthesisVoice] = []
   private let accent = Color(red: 0.94, green: 0.74, blue: 0.58)
   private let ink = Color(red: 0.045, green: 0.075, blue: 0.07)
   var body: some View {
@@ -78,6 +81,12 @@ struct ContentView: View {
       UIApplication.shared.isIdleTimerDisabled = true
       applyViewer()
     }
+    .onChange(of: panel) { _, value in
+      s.pause("phone_controls", enabled: value != nil)
+      if value != .settings { s.audio.stopVoicePreview() }
+    }
+    .onChange(of: s.server) { _, value in UserDefaults.standard.set(value, forKey: "server") }
+    .onChange(of: s.token) { _, value in UserDefaults.standard.set(value, forKey: "token") }
   }
   var welcome: some View {
     HStack(alignment: .center, spacing: 40) {
@@ -183,7 +192,11 @@ struct ContentView: View {
       }
     }.padding(24)
   }
-  func send(_ text: String) { s.heard(text, final: true, id: UUID().uuidString) }
+  func send(_ text: String) {
+    // Sheet dismissal's onChange runs later; release only this pause before a manual command.
+    s.pause("phone_controls", enabled: false)
+    s.heard(text, final: true, id: UUID().uuidString)
+  }
   func applyViewer() {
     s.world.ipd = Float(ipd / 1000); s.world.fov = fov
     s.world.lensK1 = Float(k1); s.world.lensK2 = Float(k2)
@@ -247,6 +260,22 @@ struct ContentView: View {
   var settingsView: some View {
     NavigationStack {
       Form {
+        Section("Voice") {
+          Picker("Speaking voice", selection: $speechVoiceID) {
+            Text("Automatic · best available").tag("")
+            ForEach(speechVoices, id: \.identifier) { voice in
+              Text(SpeechVoice.label(voice)).tag(voice.identifier)
+            }
+          }
+          if let current = speechVoices.first(where: { $0.identifier == speechVoiceID }) ?? speechVoices.first {
+            Text("Using \(SpeechVoice.label(current))").font(.caption).foregroundStyle(.secondary)
+            if current.quality == .default {
+              Text("For a more natural voice, download an Enhanced or Premium English voice in iPhone Settings → Accessibility → Read & Speak → Voices. Return here when it’s ready.")
+                .font(.caption).foregroundStyle(.secondary)
+            }
+          }
+          Button("Listen to voice") { s.audio.previewVoice() }
+        }
         Section("Headset fit") {
           Slider(value: $ipd, in: 55...75, step: 1)
           Text("Eye separation: \(Int(ipd)) mm")
@@ -273,11 +302,21 @@ struct ContentView: View {
           }
         }
       }.tint(accent).navigationTitle("Settings").toolbar { Button("Done") { panel = nil } }
+        .onAppear { refreshVoices() }
+        .onDisappear { s.audio.stopVoicePreview() }
+        .onReceive(NotificationCenter.default.publisher(for: AVSpeechSynthesizer.availableVoicesDidChangeNotification)) { _ in refreshVoices() }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in refreshVoices() }
         .confirmationDialog("Delete your sessions and reflections?", isPresented: $confirmDelete) {
           Button("Delete all", role: .destructive) {
             do { try s.store.deleteAll() } catch { s.fail(error) }
           }
         }
+    }
+  }
+  func refreshVoices() {
+    speechVoices = SpeechVoice.available
+    if !speechVoiceID.isEmpty && !speechVoices.contains(where: { $0.identifier == speechVoiceID }) {
+      speechVoiceID = ""
     }
   }
 }

@@ -61,6 +61,10 @@ struct VoiceAnswer {
   static func confirmsPractice(_ text: String) -> Bool {
     ["begin practice", "begin practice please"].contains(normalized(text))
   }
+  static func confirmsHeadset(_ text: String) -> Bool {
+    ["yes", "yes please", "yes it is", "ready", "i'm ready", "i am ready", "yes i'm ready",
+      "my headset is ready", "headset ready", "yes my headset is ready"].contains(normalized(text))
+  }
   mutating func receive(_ input: String) -> Action {
     if Self.needsTime(input) { return .waiting }
     if Self.normalized(input) == "start over" { text = ""; return .cleared }

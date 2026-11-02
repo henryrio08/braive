@@ -4,7 +4,7 @@ Native, voice-first iPhone VR situational practice, with a Meta-powered backend 
 
 ## Current state
 
-The native app and backend are implemented, but the complete practice journey remains under verification. On November 1, 2026, the backend type check, 19 offline backend tests, and five importer tests passed. The revised signed iPhone 17 build includes Apple on-device speech recognition, a voice-first headset interface, contextual STOP controls, and a grass floor. After a premature-cutoff report, a further signed build added explicit answer completion and spoken review before creation, with 22 deterministic voice checks passing. The user has now confirmed on the physical phone that it waits through pauses and reads back both complete answers. The generated-scene walkthrough and sustained in-scene recognition still need completion before claiming the full loop. The inherited 349-asset native audit has not been independently rerun in this continuation.
+The native app and backend are implemented, but the complete practice journey remains under verification. On November 1, 2026, the backend type check, 19 offline backend tests, and five importer tests passed. The user has confirmed on the physical phone that native speech waits through pauses, reads back both complete answers, and proceeds to a generated scene with a running countdown. The successful 40-node, eight-character scene took 44.488 seconds to generate. The saved record contains one delivered character reply and a feedback payload; its reflection is empty. The user reported unwanted speech, and the generated scene contained duplicate timed narration. The latest source adds speech coordination, headset-confirmation centering, and downloaded-voice selection; 26 voice checks, eight head-pose checks, and 15 speech-coordination checks pass. Sustained dialogue, interruption behavior, STOP/NO resumption, optics, meaningful reflection capture, and adapted repeat still need verification. The inherited 349-asset native audit has not been independently rerun in this continuation.
 
 **Speech now stays on the iPhone.** At Henry’s request, the normal app uses Apple’s SpeechAnalyzer / SpeechTranscriber (iOS 26+) with voice-processed AVAudioEngine input and native speech detection. It does not open the Meta transcription relay. First use may install Apple’s on-device English speech assets. No silent cloud transcription fallback is configured. Meta receives the transcribed practice details/answers needed for coordination and dialogue, after consent.
 
@@ -80,11 +80,19 @@ START begins setup. STOP applies during scene preparation, introduction, reveal,
 
 Situation and ability answers stay open across pauses. Each prompt explains **“say that's all when you've finished.”** “One second” and similar requests wait without advancing; START OVER replaces the current answer. After both answers, Braive reads them back and requires BEGIN PRACTICE before creating a scene. Builder additions use the same explicit finish. These are local controls, with no model call to determine whether the user finished. Provisional Apple transcripts appear immediately, but only finalized segments are submitted; dialogue has a 1.8-second quiet window and short commands 0.7 seconds. STOP still works immediately on partial speech in the relevant phases.
 
+Headset readiness sets the current facing direction as the scene's forward direction. The reference is kept through generation and reveal; adapted repeats ask for headset confirmation again. Settings → Voice selects from installed English voices, preferring Premium then Enhanced quality automatically, with a local preview. [Apple's higher-quality voices](https://developer.apple.com/documentation/avfaudio/avspeechsynthesisvoicequality) must be downloaded through iPhone Settings → Accessibility → Read & Speak → Voices if absent. The actual voice quality available on the phone must be checked there; do not claim a Premium voice is installed just because the code prefers one. Intro duration measurement and playback use the same selected voice and rate. Opening phone controls pauses practice; edited server/pairing settings persist immediately.
+
+During practice, timed narration waits for detected speech and provisional transcription to finish. Repeated scene/narrator lines are queued once; prompts more than 15 active seconds late are dropped. User speech interrupts app speech. Character responses wait for a completed turn and quiet gap, and a newer completed user turn supersedes a stale response. STOP and other pauses retain pending responses until resumption.
+
 Run the deterministic voice checks without a microphone or paid calls:
 
 ```sh
 xcrun swiftc -module-cache-path /tmp/braive-swift-module-cache ios/Braive/VoiceInput.swift scripts/check-voice-turns.swift -o /tmp/braive-check-voice-turns
 /tmp/braive-check-voice-turns
+xcrun swiftc -module-cache-path /tmp/braive-swift-module-cache ios/Braive/HeadPose.swift scripts/check-head-pose.swift -o /tmp/braive-check-head-pose
+/tmp/braive-check-head-pose
+xcrun swiftc -module-cache-path /tmp/braive-swift-module-cache ios/Braive/VoiceInput.swift ios/Braive/SpeechCoordination.swift scripts/check-speech-coordination.swift -o /tmp/braive-check-speech-coordination
+/tmp/braive-check-speech-coordination
 ```
 
 ## Runtime design

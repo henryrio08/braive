@@ -18,7 +18,7 @@ extension UIColor {
   var nodes: [String: SCNNode] = [:], viewpoints: [String: SCNVector3] = [:],
     characters: [String: String] = [:]
   var onPortrait: ((Bool) -> Void)?
-  private var baseline: simd_quatf?
+  private var pose = HeadPose()
   var lensK1: Float = 0
   var lensK2: Float = 0
   var fov: Double = 70 {
@@ -58,14 +58,12 @@ extension UIColor {
     let phone = simd_quatf(ix: Float(q.x), iy: Float(q.y), iz: Float(q.z), r: Float(q.w))
     let correction = simd_quatf(angle: -.pi / 2, axis: SIMD3<Float>(0, 0, 1))
     let oriented = phone * correction
-    if baseline == nil { baseline = oriented }
-    head.simdOrientation = baseline!.inverse * oriented
+    head.simdOrientation = pose.update(oriented)
     let g = data.gravity
     if abs(g.y) > 0.78 { onPortrait?(true) } else if abs(g.x) > 0.65 { onPortrait?(false) }
   }
   func recenter() {
-    baseline = nil
-    head.eulerAngles = SCNVector3Zero
+    head.simdOrientation = pose.recenter()
   }
   func clear() {
     for child in scene.rootNode.childNodes where child !== head { child.removeFromParentNode() }

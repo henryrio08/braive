@@ -14,8 +14,10 @@ import Speech
   private var stopped = false
   private let onText: (String, Bool, String) -> Void
   private let onError: (String) -> Void
-  init(onText: @escaping (String, Bool, String) -> Void, onError: @escaping (String) -> Void) {
-    self.onText = onText; self.onError = onError
+  private let onActivity: (Bool) -> Void
+  init(onText: @escaping (String, Bool, String) -> Void, onError: @escaping (String) -> Void,
+    onActivity: @escaping (Bool) -> Void) {
+    self.onText = onText; self.onError = onError; self.onActivity = onActivity
   }
   func prepare(inputFormat: AVAudioFormat, status: (String) -> Void) async throws -> LocalSpeechSink {
     guard let locale = await SpeechTranscriber.supportedLocale(equivalentTo: Locale(identifier: "en-US")) else {
@@ -62,6 +64,7 @@ import Speech
         for try await result in detector.results {
           guard let self, !self.stopped, !Task.isCancelled else { return }
           self.turn.detectSpeech(result.speechDetected, now: ProcessInfo.processInfo.systemUptime)
+          self.onActivity(result.speechDetected)
           self.scheduleEndpoint()
         }
       } catch { if !Task.isCancelled { self?.reportFailure(error.localizedDescription) } }
