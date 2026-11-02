@@ -10,11 +10,7 @@ import Speech
   private var detectorTask: Task<Void, Never>?
   private var endpointTask: Task<Void, Never>?
   private var sink: LocalSpeechSink?
-  private var speaking = false
-  private var stable = "", draft = ""
-  private var turnID = UUID().uuidString
-  private var consumedThrough = -Double.infinity
-  private var latestEnd = 0.0
+  private var turn = SpeechTurnBuffer()
   private var stopped = false
   private let onText: (String, Bool, String) -> Void
   private let onError: (String) -> Void
@@ -40,7 +36,8 @@ import Speech
     let analyzer = SpeechAnalyzer(modules: modules)
     self.analyzer = analyzer
     let context = AnalysisContext()
-    context.contextualStrings[.general] = ["START", "STOP", "yes", "no", "hey builder", "save reflection"]
+    context.contextualStrings[.general] = ["START", "STOP", "yes", "no", "hey builder",
+      "that's all", "begin practice", "start over", "save reflection"]
     try await analyzer.setContext(context)
     let (inputs, continuation) = AsyncStream<AnalyzerInput>.makeStream(bufferingPolicy: .bufferingNewest(20))
     let sink = try LocalSpeechSink(input: inputFormat, target: target, continuation: continuation) { [weak self] reason in
@@ -53,14 +50,9 @@ import Speech
           guard let self, !self.stopped, !Task.isCancelled else { return }
           let start = CMTimeGetSeconds(result.range.start)
           let end = CMTimeGetSeconds(CMTimeRangeGetEnd(result.range))
-          // A late final for an already-delivered utterance must not replay its commands.
-          guard end > self.consumedThrough + 0.02, start >= self.consumedThrough - 0.02 else { continue }
-          let text = String(result.text.characters).trimmingCharacters(in: .whitespacesAndNewlines)
-          guard !text.isEmpty else { continue }
-          if result.isFinal { self.stable = self.join(self.stable, text); self.draft = "" }
-          else { self.draft = text }
-          self.latestEnd = max(self.latestEnd, end)
-          self.onText(self.join(self.stable, self.draft), false, self.turnID)
+          guard self.turn.receive(String(result.text.characters), final: result.isFinal,
+            start: start, end: end, now: ProcessInfo.processInfo.systemUptime) else { continue }
+          self.onText(self.turn.text, false, self.turn.id)
           self.scheduleEndpoint()
         }
       } catch { if !Task.isCancelled { self?.reportFailure(error.localizedDescription) } }
@@ -69,9 +61,8 @@ import Speech
       do {
         for try await result in detector.results {
           guard let self, !self.stopped, !Task.isCancelled else { return }
-          self.speaking = result.speechDetected
-          if self.speaking { self.endpointTask?.cancel(); self.endpointTask = nil }
-          else { self.scheduleEndpoint() }
+          self.turn.detectSpeech(result.speechDetected, now: ProcessInfo.processInfo.systemUptime)
+          self.scheduleEndpoint()
         }
       } catch { if !Task.isCancelled { self?.reportFailure(error.localizedDescription) } }
     }
@@ -80,17 +71,16 @@ import Speech
     return sink
   }
   private func scheduleEndpoint() {
-    guard !speaking, endpointTask == nil, !join(stable, draft).isEmpty else { return }
+    endpointTask?.cancel()
+    endpointTask = nil
+    guard let delay = turn.delay(now: ProcessInfo.processInfo.systemUptime) else { return }
     endpointTask = Task { [weak self] in
-      do { try await Task.sleep(for: .milliseconds(650)) } catch { return }
-      guard let self, !self.stopped, !self.speaking, !Task.isCancelled else { return }
+      do { try await Task.sleep(for: .seconds(delay)) } catch { return }
+      guard let self, !self.stopped, !Task.isCancelled else { return }
       self.endpointTask = nil
-      let text = self.join(self.stable, self.draft)
-      guard !text.isEmpty else { return }
-      let id = self.turnID
-      self.consumedThrough = self.latestEnd
-      self.stable = ""; self.draft = ""; self.turnID = UUID().uuidString
-      self.onText(text, true, id)
+      if let result = self.turn.take(now: ProcessInfo.processInfo.systemUptime) {
+        self.onText(result.text, true, result.id)
+      }
     }
   }
   func stop() {
@@ -101,7 +91,6 @@ import Speech
     analyzer = nil
   }
   private func reportFailure(_ reason: String) { if !stopped { stop(); onError(reason) } }
-  private func join(_ a: String, _ b: String) -> String { [a, b].filter { !$0.isEmpty }.joined(separator: " ") }
   private func failure(_ message: String) -> NSError {
     NSError(domain: "LocalSpeech", code: 1, userInfo: [NSLocalizedDescriptionKey: message])
   }

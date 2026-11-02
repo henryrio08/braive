@@ -4,7 +4,7 @@ import SwiftUI
 
 @MainActor final class Session: ObservableObject {
   enum Phase: String {
-    case setup, lobby, headset, intake, ability, history, planning, intro, reveal, active,
+    case setup, lobby, headset, intake, ability, review, history, planning, intro, reveal, active,
       selfReport, readiness, reflectionPrompt, reflection, feedbackPrompt, feedback, saving,
       repeatPrompt, error
   }
@@ -34,6 +34,8 @@ import SwiftUI
   var jobID = ""
   var seen = Set<String>()
   var fear = "", ability = "", additions: [String] = [], history: [JSON] = []
+  var answer = VoiceAnswer()
+  var intakeApproved = false
   var useHistory = false
   var parent: String?
   var builder = false
@@ -209,8 +211,7 @@ import SwiftUI
       return
     }
     guard final else { return }
-    let key = "\(id):\(text)"
-    guard seen.insert(key).inserted else { return }
+    guard seen.insert(id).inserted else { return }
     if pauses.contains("user_stop") {
       if words.contains("yes") {
         pauses.remove("user_stop")
@@ -225,12 +226,18 @@ import SwiftUI
     let no = words.contains("no")
     if phase == .planning {
       if builder {
-        additions.append(text)
-        builder = false
-        generate()
+        collectAnswer(text)
       } else if text.lowercased().contains("hey builder") {
+        // A scene must not reveal while the user is still adding details.
+        generation?.cancel()
+        revision += 1
+        let old = jobID, api = api
+        jobID = ""
+        if !old.isEmpty { Task { _ = try? await api.call("/v1/jobs/" + old, method: "DELETE") } }
         builder = true
-        audio.say("What would you like to add?")
+        answer = VoiceAnswer()
+        message = builderPrompt
+        audio.say(builderPrompt)
       }
       return
     }
@@ -240,23 +247,20 @@ import SwiftUI
     case .headset:
       if yes {
         newSession()
-        go(.intake, "What situation would you like to practice?")
+        go(.intake, intakePrompt)
       }
-    case .intake:
-      fear = text
-      go(
-        .ability,
-        "How comfortable are you with this situation, and what boundaries should I respect?")
-    case .ability:
-      ability = text
-      history = store.relevant(fear)
-      if history.isEmpty {
-        generate()
-      } else {
-        go(
-          .history,
-          "I see we’ve explored this situation before! Would you like to consider past sessions for this simulation?"
-        )
+    case .intake, .ability: collectAnswer(text)
+    case .review:
+      if VoiceAnswer.confirmsPractice(text) {
+        guard !fear.isEmpty, !ability.isEmpty else { restartIntake(); return }
+        intakeApproved = true
+        history = store.relevant(fear)
+        if history.isEmpty { generate() }
+        else { go(.history, "Would you like to use your past sessions for this practice? Say yes or no.") }
+      } else if VoiceAnswer.normalized(text) == "start over" || VoiceAnswer.normalized(text) == "no" {
+        restartIntake()
+      } else if VoiceAnswer.needsTime(text) {
+        message = "Take your time. Say BEGIN PRACTICE when you’re ready, or START OVER to change it."
       }
     case .history:
       if yes || no {
@@ -308,12 +312,52 @@ import SwiftUI
       if text.lowercased().contains("retry") {
         generate()
       } else if text.lowercased().contains("revise") {
-        go(.intake, "Describe the situation you’d like instead.")
+        restartIntake()
       } else if text.lowercased().contains("cancel") {
         world.lobby()
         go(.lobby, "When you’re ready to start, say START!")
       }
     default: break
+    }
+  }
+  var intakePrompt: String {
+    "What would you like to practice? Describe the situation, where you are, and who’s there. Take your time. Say ‘that’s all’ when you’ve finished."
+  }
+  var abilityPrompt: String {
+    "What feels manageable, and what should we avoid? Take your time. Say ‘that’s all’ when you’ve finished."
+  }
+  var builderPrompt: String { "What would you like to add? Take your time. Say ‘that’s all’ when you’ve finished." }
+  var isCollectingAnswer: Bool { ([.intake, .ability].contains(phase) || (phase == .planning && builder)) && !loading }
+  func restartIntake() {
+    answer = VoiceAnswer(); fear = ""; ability = ""; intakeApproved = false
+    additions = []; history = []; useHistory = false; adaptation = JSON(); builder = false
+    go(.intake, intakePrompt)
+  }
+  func collectAnswer(_ text: String) {
+    switch answer.receive(text) {
+    case .waiting:
+      message = "Take your time. I’ll wait. Say ‘that’s all’ when you’ve finished your answer."
+    case .listening:
+      message = "Keep going whenever you’re ready. Say ‘that’s all’ when you’ve finished."
+    case .cleared:
+      message = phase == .intake ? intakePrompt : phase == .ability ? abilityPrompt : builderPrompt
+      audio.say(message)
+    case .empty:
+      message = phase == .intake ? intakePrompt : phase == .ability ? abilityPrompt : builderPrompt
+      audio.say(message)
+    case .complete(let value):
+      answer = VoiceAnswer()
+      if phase == .intake {
+        fear = value
+        go(.ability, abilityPrompt)
+      } else if phase == .ability {
+        ability = value
+        go(.review, "Here’s what I heard. Your situation: \(fear). Your comfort and boundaries: \(ability). Say BEGIN PRACTICE to create it, or START OVER to change it.")
+      } else if phase == .planning && builder {
+        additions.append(value)
+        builder = false
+        generate()
+      }
     }
   }
   func rating(_ text: String) -> JSON {
@@ -348,6 +392,8 @@ import SwiftUI
     seen = []
     outcome = "completed"
     adaptation = JSON()
+    answer = VoiceAnswer()
+    fear = ""; ability = ""; intakeApproved = false; builder = false
   }
   func request() -> JSON {
     var preferences: [String] = []
@@ -369,6 +415,10 @@ import SwiftUI
     return JSON(r)
   }
   func generate() {
+    guard intakeApproved else {
+      go(.review, "Say BEGIN PRACTICE to create this situation, or START OVER to change it.")
+      return
+    }
     guard liveEnabled else {
       message = "This is an offline forest preview. Live practice needs approved Meta access."
       audio.say(message)
@@ -694,6 +744,7 @@ import SwiftUI
         parent = previous["session_id"].text
         fear = f
         ability = a
+        intakeApproved = true // The explicit repeat-session answer authorizes the adapted rerun.
         history = oldHistory + [previous]
         useHistory = true
         additions = [summary]

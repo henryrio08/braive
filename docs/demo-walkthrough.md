@@ -9,8 +9,8 @@ Before capture, install the native app, confirm phone/viewer fit, calibrate ster
 Walk through:
 
 1. Forest lobby has depth, both music and atmosphere, and the START prompt.
-2. Describe the situation and current ability. If history matches, decline it once and verify it isn't supplied to generation.
-3. During setup say “hey builder,” then “Give the room large windows and a clear speaking area.” Confirm the newest revision is the only result that starts.
+2. First say “one second,” pause, then describe the situation with a deliberate pause after “I need to present.” The app must keep listening. Say “that's all” after the complete situation, then provide current ability and finish with “that's all.” Check the spoken readback before saying “begin practice.” If history matches, decline it once and verify it isn't supplied to generation.
+3. During setup say “hey builder,” then “Give the room large windows and a clear speaking area. That's all.” Confirm the newest revision is the only result that starts and the old scene cannot reveal during the addition.
 4. Confirm black intro fits eight seconds including STOP, followed by blur/fade and the countdown starting after reveal.
 5. Give an opening statement; answer an audience question; verify the response depends on what was actually said.
 6. Say STOP. Confirm time, scene motion, audio, and dialogue pause. Say NO and check exact resumption.

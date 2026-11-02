@@ -151,7 +151,13 @@ struct ContentView: View {
         Text("“" + s.transcript + "”").font(.system(size: 12)).foregroundStyle(.white.opacity(0.6)).lineLimit(2)
       }
       Spacer(minLength: 5)
-      if s.canStop {
+      if s.isCollectingAnswer {
+        Text("Say THAT’S ALL when finished · START OVER to replace your answer")
+          .font(.system(size: 10)).foregroundStyle(accent).multilineTextAlignment(.center)
+      } else if s.phase == .review {
+        Text("Say BEGIN PRACTICE · START OVER to change it")
+          .font(.system(size: 10)).foregroundStyle(accent).multilineTextAlignment(.center)
+      } else if s.canStop {
         Text("Say STOP to pause").font(.system(size: 10)).foregroundStyle(.white.opacity(0.4))
       }
 
@@ -197,6 +203,14 @@ struct ContentView: View {
             Button("Pause practice") { panel = nil; s.stop() }
           }
           if s.phase == .lobby { Button("Start practice") { panel = nil; send("start") } }
+          if s.isCollectingAnswer {
+            Button("Finish answer") { panel = nil; send("that's all") }
+            Button("Replace answer") { panel = nil; send("start over") }
+          }
+          if s.phase == .review {
+            Button("Begin practice") { panel = nil; send("begin practice") }
+            Button("Start over") { panel = nil; send("start over") }
+          }
           if [.headset, .history, .reflectionPrompt, .feedbackPrompt, .repeatPrompt].contains(s.phase) {
             Button("Yes") { panel = nil; send("yes") }
             Button("No") { panel = nil; send("no") }
@@ -222,7 +236,8 @@ struct ContentView: View {
           Button("Send answer") {
             let answer = typed.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !answer.isEmpty else { return }
-            typed = ""; panel = nil; send(answer)
+            typed = ""; panel = nil
+            send(s.isCollectingAnswer ? answer + ". That's all." : answer)
           }
         }
       }.navigationTitle("Type your answer")
