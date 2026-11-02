@@ -35,7 +35,7 @@ struct ContentView: View {
         if s.phase == .setup {
           LinearGradient(colors: [ink.opacity(0.98), ink.opacity(0.8), ink.opacity(0.5)],
             startPoint: .leading, endPoint: .trailing).ignoresSafeArea()
-          welcome
+          ScrollView(.vertical) { welcome }.scrollIndicators(.hidden)
         } else {
           if [.intro, .planning, .error].contains(s.phase) || s.loading {
             Color.black.opacity(s.phase == .intro ? 1 : 0.82).ignoresSafeArea()
@@ -133,64 +133,13 @@ struct ContentView: View {
     }.padding(.horizontal, 44).padding(.top, 50).padding(.bottom, 16).frame(maxWidth: 1050)
   }
   var eyeHUD: some View {
-    VStack(spacing: 14) {
-      HStack(spacing: 6) {
-        Circle().fill(s.voiceListening ? Color.mint : Color.white.opacity(0.3)).frame(width: 5, height: 5)
-        Text(s.voiceListening ? "Listening" : s.connecting ? "Getting ready" : "Voice unavailable")
-          .font(.system(size: 10)).foregroundStyle(.white.opacity(0.65))
-        Spacer()
-        if s.phase == .active {
-          Text(Duration.seconds(s.remaining).formatted(.time(pattern: .minuteSecond)))
-            .font(.system(size: 18, weight: .medium, design: .monospaced)).foregroundStyle(accent)
-        }
-      }
-      Spacer(minLength: 5)
-      if s.loading || s.phase == .planning {
-        ProgressView().tint(accent)
-        Text(s.phase == .planning ? "PREPARING YOUR PRACTICE" : "ONE MOMENT")
-          .font(.system(size: 9, weight: .medium)).tracking(2).foregroundStyle(accent)
-      }
-      Text(s.message).font(.system(size: 17, weight: .medium, design: .rounded))
-        .multilineTextAlignment(.center).lineLimit(6).shadow(radius: 5)
-      if s.phase == .active {
-        Text(s.scenarioActions.joined(separator: " · "))
-          .font(.system(size: 10)).foregroundStyle(accent).lineLimit(2)
-      }
-      if !s.transcript.isEmpty {
-        Text("“" + s.transcript + "”").font(.system(size: 12)).foregroundStyle(.white.opacity(0.6)).lineLimit(2)
-      }
-      Spacer(minLength: 5)
-      if s.isCollectingAnswer {
-        Text("Say THAT’S ALL when finished · START OVER to replace your answer")
-          .font(.system(size: 10)).foregroundStyle(accent).multilineTextAlignment(.center)
-      } else if s.phase == .review {
-        Text("Say BEGIN PRACTICE · START OVER to change it")
-          .font(.system(size: 10)).foregroundStyle(accent).multilineTextAlignment(.center)
-      } else if s.canStop {
-        Text("Say STOP to pause").font(.system(size: 10)).foregroundStyle(.white.opacity(0.4))
-      }
-
-    }.padding(.horizontal, 28).padding(.top, 54).padding(.bottom, 20)
+    HeadsetHUD(copy: s.headsetCopy,
+      status: s.voiceListening ? "Listening" : s.connecting ? "Getting ready" : "Voice unavailable",
+      remaining: s.phase == .active && !s.loading ? s.remaining : nil,
+      preparing: s.loading || (s.phase == .planning && !s.builder))
   }
   var pauseHUD: some View {
-    VStack(spacing: 16) {
-      Text(s.pauses.contains("user_stop") ? "End this practice?" : "Take a moment.")
-        .font(.system(size: 25, design: .serif))
-      if s.pauses.contains("user_stop") {
-        Text("Say YES to end · NO to continue").font(.system(size: 11)).foregroundStyle(.white.opacity(0.65))
-      }
-      if s.pauses.contains("portrait") {
-        Text("Turn your phone sideways to continue.").font(.system(size: 12))
-      }
-      if s.pauses.contains("command_channel_unavailable") {
-        Text("Voice was interrupted. Your place is saved.").font(.system(size: 12)).multilineTextAlignment(.center)
-        Text("Remove the viewer, then hold the screen for phone controls.")
-          .font(.system(size: 10)).foregroundStyle(.white.opacity(0.55)).multilineTextAlignment(.center)
-      }
-      if s.pauses.contains("audio_interruption") {
-        Text("Remove the viewer, then hold the screen to restore audio.").font(.system(size: 10))
-      }
-    }.padding(24)
+    HeadsetHUD(copy: s.pausedHeadsetCopy, status: "Paused")
   }
   func send(_ text: String) {
     // Sheet dismissal's onChange runs later; release only this pause before a manual command.
@@ -235,6 +184,12 @@ struct ContentView: View {
           }
           Button("Type an answer") { panel = .typing }
           Button("Settings") { panel = .settings }
+        }
+        Section("Full prompt") {
+          Text(s.message).textSelection(.enabled)
+        }
+        if !s.transcript.isEmpty {
+          Section("Your words") { Text(s.transcript).textSelection(.enabled) }
         }
       }.navigationTitle("Phone controls").tint(accent)
         .toolbar { Button("Done") { panel = nil } }

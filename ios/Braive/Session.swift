@@ -138,6 +138,19 @@ import SwiftUI
     NotificationCenter.default.addObserver(
       forName: AVAudioSession.interruptionNotification, object: nil, queue: .main
     ) { [weak self] n in Task { @MainActor in self?.pause("audio_interruption", enabled: true) } }
+    #if DEBUG
+    if ProcessInfo.processInfo.arguments.contains("--hud-layout-review") {
+      let savedPhase = phase, savedMessage = message
+      var copies: [(String, HeadsetCopy)] = []
+      for next: Phase in [.intake, .review, .intro, .active, .feedback, .error] {
+        phase = next
+        message = String(repeating: "Follow the marked path to the gathering point, then choose the next action when you are ready. ", count: 12)
+        copies.append((next.rawValue, headsetCopy))
+      }
+      phase = savedPhase; message = savedMessage
+      try? HeadsetHUD.renderReview(copies, to: store.root.appendingPathComponent("HUDReview"))
+    }
+    #endif
   }
   func preview() {
     phase = .lobby
