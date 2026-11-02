@@ -2,6 +2,8 @@
 
 This is a capture plan, not a claim of completed testing. Live checks may use the remaining single US$5 cumulative continuation allowance through `scripts/start-phone-test.mjs`. Check the persistent ledger and other processes first; never reset the allowance. Keep recordings honest about generated content and development status.
 
+On November 2, the physical phone walkthrough verified intake through pauses, centered reveal/countdown, STOP/NO, relevant character replies, meaningful reflection save, grounded feedback, and a centered adapted repeat. The saved parent has two delivered replies without recorded reply failures; its child has the correct chain link. Fresh and adapted generation took 48.835 and 62.149 seconds respectively. Capture this verified behavior honestly; actual optics/performance and a finished video are still outstanding. Details are in [the verification record](verification-2026-11-02.md).
+
 Suggested freeform request: “I need to present a community garden proposal to eight neighbors in a sunny library. I can speak for a minute but get flustered when someone asks a follow-up. Keep the questions friendly.”
 
 Before capture, install the native app, confirm phone/viewer fit, calibrate stereo optics, check audio routing and mic echo cancellation, and run the Mac backend. Enter remote-processing consent outside the viewer. Keep the Mac awake. Turn on Do Not Disturb and charge the phone. Use seated or stationary practice.
