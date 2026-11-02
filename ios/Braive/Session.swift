@@ -4,7 +4,7 @@ import SwiftUI
 
 @MainActor final class Session: ObservableObject {
   enum Phase: String {
-    case setup, lobby, headset, intake, ability, history, planning, intro, reveal, active,
+    case setup, lobby, headset, intake, ability, review, history, planning, intro, reveal, active,
       selfReport, readiness, reflectionPrompt, reflection, feedbackPrompt, feedback, saving,
       repeatPrompt, error
   }
@@ -21,6 +21,9 @@ import SwiftUI
   @Published var token = UserDefaults.standard.string(forKey: "token") ?? ""
   @Published var remoteConsent = false
   @Published var liveEnabled = false
+  @Published var connecting = false
+  @Published var voiceListening = false
+  @Published var setupNotice = ""
   let world = World(), audio = Audio(), store = SessionStore()
   var api: API { API(base: server.trimmingCharacters(in: .whitespacesAndNewlines), token: token) }
   var plan = JSON(), scene = JSON(), audioPlan = JSON(), record = JSON(), reflection = JSON()
@@ -31,6 +34,11 @@ import SwiftUI
   var jobID = ""
   var seen = Set<String>()
   var fear = "", ability = "", additions: [String] = [], history: [JSON] = []
+  var answer = VoiceAnswer()
+  var reflectionDraft = SpokenReflection()
+  var intakeApproved = false
+  var repeatAfterHeadset = false
+  var adapting = false
   var useHistory = false
   var parent: String?
   var builder = false
@@ -39,6 +47,8 @@ import SwiftUI
   var turns: [Any] = []
   var turnTask: Task<Void, Never>?
   var turnNonce = UUID()
+  var speechFloor = SpeechFloor()
+  var narration = NarrationQueue()
   var outcome = "completed"
   var generationDeadline = 0.0
   var timer: AnyCancellable?
@@ -49,10 +59,28 @@ import SwiftUI
   var pendingText = ""
   var adaptation = JSON()
   init() {
+    let pairingURL = store.root.appendingPathComponent("LocalPairing.json")
+    if let data = try? Data(contentsOf: pairingURL),
+      let config = try? JSONDecoder().decode(JSON.self, from: data)
+    {
+      if !config["server"].text.isEmpty {
+        server = config["server"].text
+        UserDefaults.standard.set(server, forKey: "server")
+      }
+      if !config["token"].text.isEmpty {
+        token = config["token"].text
+        UserDefaults.standard.set(token, forKey: "token")
+      }
+      try? FileManager.default.removeItem(at: pairingURL)
+    }
     world.onPortrait = { [weak self] portrait in self?.pause("portrait", enabled: portrait) }
+    audio.onStatus = { [weak self] status in self?.setupNotice = status }
     audio.onText = { [weak self] text, final, id in self?.heard(text, final: final, id: id) }
-    audio.onDisconnect = { [weak self] in
-      self?.connection = "Voice connection lost"
+    audio.onActivity = { [weak self] speaking in
+      self?.speechFloor.detect(speaking, now: ProcessInfo.processInfo.systemUptime)
+    }
+    audio.onDisconnect = { [weak self] reason in
+      self?.connection = "Voice disconnected: " + reason
       self?.pause("command_channel_unavailable", enabled: true)
     }
     timer = Timer.publish(every: 0.05, on: .main, in: .common).autoconnect().sink { [weak self] _ in
@@ -60,8 +88,11 @@ import SwiftUI
     }
     if ProcessInfo.processInfo.arguments.contains("--asset-audit") {
       preview()
-      world.auditAssets()
-      message = "Offline renderer asset audit — reusable objects, no model calls"
+      do {
+        let count = try world.auditAssets()
+        message =
+          "Offline GLB audit passed: \(count) manifest assets; neutral skin and isolated bones verified"
+      } catch { message = "Offline GLB audit failed: " + error.localizedDescription }
     }
     if ProcessInfo.processInfo.arguments.contains("--preflight-audit") {
       preview()
@@ -102,48 +133,69 @@ import SwiftUI
     audio.lobby()
   }
   func connect() {
+    guard !connecting, !audio.ready else { return }
     guard remoteConsent, liveEnabled else {
-      message =
-        "Enable remote processing and live Meta use to connect. Live use requires permission from Henry."
+      setupNotice = "Allow speech processing to begin voice practice."
       return
     }
     UserDefaults.standard.set(server, forKey: "server")
     UserDefaults.standard.set(token, forKey: "token")
+    setupNotice = ""
+    connecting = true
     Task {
+      defer { connecting = false }
       do {
+        connection = "Preparing on-device voice…"
         try await audio.start(api: api)
-        connection = "Connecting voice…"
+        setupNotice = ""
+        connection = "On-device voice ready"
         go(.lobby, "When you’re ready to start, say START!")
         world.lobby()
+        world.scene.isPaused = !pauses.isEmpty
         audio.lobby()
-      } catch { fail(error) }
+      } catch {
+        audio.stopCapture()
+        phase = .setup
+        loading = false
+        pendingPhase = nil
+        connection = "Not connected"
+        setupNotice = "Voice couldn’t start: " + error.localizedDescription
+        connection = error.localizedDescription
+      }
     }
   }
   func reconnect() {
+    guard !connecting else { return }
+    connecting = true
     audio.stopCapture()
     Task {
+      defer { connecting = false }
       do {
         try await audio.start(api: api)
         pause("command_channel_unavailable", enabled: false)
+        pause("audio_interruption", enabled: false)
       } catch { message = error.localizedDescription }
     }
   }
   func pause(_ reason: String, enabled: Bool) {
+    if phase == .setup { pauses.remove(reason); return }
     let was = pauses.isEmpty
     if enabled { pauses.insert(reason) } else { pauses.remove(reason) }
     if was && !pauses.isEmpty {
+      speechFloor = SpeechFloor()
       world.scene.isPaused = true
       audio.pause()
-      turnNonce = UUID()
-      turnTask?.cancel()
     } else if !was && pauses.isEmpty {
       world.scene.isPaused = false
       audio.resume()
       lastTick = ProcessInfo.processInfo.systemUptime
     }
   }
+  var canStop: Bool {
+    [.planning, .intro, .reveal, .active].contains(phase) || (loading && pendingPhase == .planning)
+  }
   func stop() {
-    guard phase != .setup else { return }
+    guard canStop else { return }
     guard !pauses.contains("user_stop") else { return }
     stopCount += 1
     pause("user_stop", enabled: true)
@@ -160,16 +212,24 @@ import SwiftUI
 
   }
   func heard(_ text: String, final: Bool, id: String) {
+    if pauses.contains("phone_controls") {
+      // Consume partial IDs too, so a delayed final from voice preview cannot replay on dismissal.
+      seen.insert(id)
+      return
+    }
     transcript = text
     let words = text.lowercased().split(whereSeparator: { !$0.isLetter }).map(String.init)
     // Conservative STOP works on partials. Device voice processing handles playback echo; verify in goggles.
-    if words.contains("stop") {
+    if canStop && words.contains("stop") {
       stop()
       return
     }
+    if phase == .active && pauses.isEmpty && !seen.contains(id) {
+      speechFloor.receive(final: final, now: ProcessInfo.processInfo.systemUptime)
+      if !final { audio.interruptSpeech() }
+    }
     guard final else { return }
-    let key = "\(id):\(text)"
-    guard seen.insert(key).inserted else { return }
+    guard seen.insert(id).inserted else { return }
     if pauses.contains("user_stop") {
       if words.contains("yes") {
         pauses.remove("user_stop")
@@ -184,43 +244,52 @@ import SwiftUI
     let no = words.contains("no")
     if phase == .planning {
       if builder {
-        additions.append(text)
-        builder = false
-        generate()
+        collectAnswer(text)
       } else if text.lowercased().contains("hey builder") {
+        // A scene must not reveal while the user is still adding details.
+        generation?.cancel()
+        revision += 1
+        let old = jobID, api = api
+        jobID = ""
+        if !old.isEmpty { Task { _ = try? await api.call("/v1/jobs/" + old, method: "DELETE") } }
         builder = true
-        audio.say("What would you like to add?")
+        answer = VoiceAnswer()
+        message = builderPrompt
+        audio.say(builderPrompt)
       }
       return
     }
     switch phase {
     case .lobby:
-      if words.contains("start") { go(.headset, "Is your headset ready? Say yes to begin.") }
-    case .headset:
-      if yes {
-        newSession()
-        go(.intake, "What situation would you like to practice?")
+      if words.contains("start") {
+        repeatAfterHeadset = false
+        go(.headset, headsetPrompt)
       }
-    case .intake:
-      fear = text
-      go(
-        .ability,
-        "How comfortable are you with this situation, and what boundaries should I respect?")
-    case .ability:
-      ability = text
-      history = store.relevant(fear)
-      if history.isEmpty {
-        generate()
-      } else {
-        go(
-          .history,
-          "I see we’ve explored this situation before! Would you like to consider past sessions for this simulation?"
-        )
+    case .headset:
+      if VoiceAnswer.confirmsHeadset(text) {
+        world.recenter()
+        if repeatAfterHeadset { adapt() }
+        else {
+          newSession()
+          go(.intake, intakePrompt)
+        }
+      }
+    case .intake, .ability: collectAnswer(text)
+    case .review:
+      if VoiceAnswer.confirmsPractice(text) {
+        guard !fear.isEmpty, !ability.isEmpty else { restartIntake(); return }
+        intakeApproved = true
+        history = store.relevant(fear)
+        if history.isEmpty { generate() }
+        else { go(.history, "Would you like to use your past sessions for this practice? Say yes or no.") }
+      } else if VoiceAnswer.normalized(text) == "start over" || VoiceAnswer.normalized(text) == "no" {
+        restartIntake()
+      } else if VoiceAnswer.needsTime(text) {
+        message = "Take your time. Say BEGIN PRACTICE when you’re ready, or START OVER to change it."
       }
     case .history:
       if yes || no {
         useHistory = yes
-        if no { history = [] }
         generate()
       }
     case .active: dialogue(text)
@@ -234,15 +303,17 @@ import SwiftUI
       go(.reflectionPrompt, "Would you like to save a spoken reflection?")
     case .reflectionPrompt:
       if yes {
-        go(.reflection, "Share your reflection. Say save reflection when you’re finished.")
+        reflectionDraft = SpokenReflection()
+        go(.reflection, "Share your reflection. Say save reflection when you’re finished, or skip to leave it.")
       } else if no {
         go(.feedbackPrompt, "Would you like to hear feedback on your experience?")
       }
     case .reflection:
-      if text.lowercased().contains("save reflection") {
+      switch reflectionDraft.receive(text) {
+      case .save(let content):
         do {
           reflection = try store.reflection(
-            reflection["transcript"].text, topic: plan["topic_short"].text)
+            content, topic: plan["topic_short"].text)
           reflection["session_id"] = JSON(sessionID)
           reflection["topic"] = plan["topic"]
           record["reflection"] = reflection
@@ -250,16 +321,22 @@ import SwiftUI
           record["reflection_file"] = reflection["relative_file_path"]
           go(.feedbackPrompt, "Would you like to hear feedback on your experience?")
         } catch { fail(error) }
-      } else {
-        reflection["transcript"] = JSON(reflection["transcript"].text + " " + text)
+      case .empty:
+        message = "Share a reflection first, then say save reflection. Or say skip to leave it."
+        audio.say(message)
+      case .skip:
+        go(.feedbackPrompt, "Would you like to hear feedback on your experience?")
+      case .listening: break
       }
     case .feedbackPrompt: if yes { feedback() } else if no { save() }
     case .feedback: if yes || text.lowercased().contains("continue") { save() }
     case .repeatPrompt:
       if yes {
-        adapt()
+        repeatAfterHeadset = true
+        go(.headset, headsetPrompt)
       } else if no {
         world.lobby()
+        world.scene.isPaused = !pauses.isEmpty
         audio.lobby()
         go(.lobby, "When you’re ready to start, say START!")
       }
@@ -267,12 +344,55 @@ import SwiftUI
       if text.lowercased().contains("retry") {
         generate()
       } else if text.lowercased().contains("revise") {
-        go(.intake, "Describe the situation you’d like instead.")
+        restartIntake()
       } else if text.lowercased().contains("cancel") {
         world.lobby()
         go(.lobby, "When you’re ready to start, say START!")
       }
     default: break
+    }
+  }
+  var headsetPrompt: String {
+    "Look straight ahead in a comfortable position. Is your headset ready? Say yes to center your practice here."
+  }
+  var intakePrompt: String {
+    "What would you like to practice? Describe the situation, where you are, and who’s there. Take your time. Say ‘that’s all’ when you’ve finished."
+  }
+  var abilityPrompt: String {
+    "What feels manageable, and what should we avoid? Take your time. Say ‘that’s all’ when you’ve finished."
+  }
+  var builderPrompt: String { "What would you like to add? Take your time. Say ‘that’s all’ when you’ve finished." }
+  var isCollectingAnswer: Bool { ([.intake, .ability].contains(phase) || (phase == .planning && builder)) && !loading }
+  func restartIntake() {
+    answer = VoiceAnswer(); fear = ""; ability = ""; intakeApproved = false
+    additions = []; history = []; useHistory = false; adaptation = JSON(); builder = false
+    go(.intake, intakePrompt)
+  }
+  func collectAnswer(_ text: String) {
+    switch answer.receive(text) {
+    case .waiting:
+      message = "Take your time. I’ll wait. Say ‘that’s all’ when you’ve finished your answer."
+    case .listening:
+      message = "Keep going whenever you’re ready. Say ‘that’s all’ when you’ve finished."
+    case .cleared:
+      message = phase == .intake ? intakePrompt : phase == .ability ? abilityPrompt : builderPrompt
+      audio.say(message)
+    case .empty:
+      message = phase == .intake ? intakePrompt : phase == .ability ? abilityPrompt : builderPrompt
+      audio.say(message)
+    case .complete(let value):
+      answer = VoiceAnswer()
+      if phase == .intake {
+        fear = value
+        go(.ability, abilityPrompt)
+      } else if phase == .ability {
+        ability = value
+        go(.review, "Here’s what I heard. Your situation: \(fear). Your comfort and boundaries: \(ability). Say BEGIN PRACTICE to create it, or START OVER to change it.")
+      } else if phase == .planning && builder {
+        additions.append(value)
+        builder = false
+        generate()
+      }
     }
   }
   func rating(_ text: String) -> JSON {
@@ -298,8 +418,12 @@ import SwiftUI
     audioPlan = JSON()
     record = JSON()
     reflection = JSON()
+    reflectionDraft = SpokenReflection()
     observations = []
     turns = []
+    turnTask?.cancel(); turnTask = nil; turnNonce = UUID()
+    speechFloor = SpeechFloor()
+    narration = NarrationQueue()
     active = 0
     stopCount = 0
     fired = []
@@ -307,6 +431,9 @@ import SwiftUI
     seen = []
     outcome = "completed"
     adaptation = JSON()
+    answer = VoiceAnswer()
+    fear = ""; ability = ""; intakeApproved = false; builder = false
+    repeatAfterHeadset = false
   }
   func request() -> JSON {
     var preferences: [String] = []
@@ -328,6 +455,10 @@ import SwiftUI
     return JSON(r)
   }
   func generate() {
+    guard intakeApproved else {
+      go(.review, "Say BEGIN PRACTICE to create this situation, or START OVER to change it.")
+      return
+    }
     guard liveEnabled else {
       message = "This is an offline forest preview. Live practice needs approved Meta access."
       audio.say(message)
@@ -348,9 +479,18 @@ import SwiftUI
     generation = Task {
       do {
         let job = try await api.call("/v1/session-plans", request())
-        guard !Task.isCancelled, rev == revision else { return }
+        guard !Task.isCancelled, rev == revision else {
+          _ = try? await api.call("/v1/jobs/" + job["job_id"].text, method: "DELETE")
+          return
+        }
         jobID = job["job_id"].text
         while !Task.isCancelled {
+          guard ProcessInfo.processInfo.systemUptime < generationDeadline else {
+            _ = try? await api.call("/v1/jobs/" + jobID, method: "DELETE")
+            throw NSError(domain: "Generation", code: 1, userInfo: [
+              NSLocalizedDescriptionKey: "Two-minute generation deadline reached."
+            ])
+          }
           try await Task.sleep(for: .milliseconds(600))
           let j = try await api.call("/v1/jobs/" + jobID)
           guard rev == revision, !Task.isCancelled else { return }
@@ -369,6 +509,11 @@ import SwiftUI
             guard rev == revision else { return }
             let fittedIntro = await audio.fitIntro(result["plan"]["narrator_intro_8s"].text)
             try Task.checkCancellation()
+            while !pauses.isEmpty {
+              try await Task.sleep(for: .milliseconds(100))
+              try Task.checkCancellation()
+            }
+            guard rev == revision else { return }
             guard ProcessInfo.processInfo.systemUptime < generationDeadline else {
               throw NSError(
                 domain: "Generation", code: 1,
@@ -406,15 +551,16 @@ import SwiftUI
             loading = false
             pendingPhase = nil
             audio.silence()
+            world.scene.isPaused = false
             phase = .intro
             message = plan["narrator_intro_8s"].text
-            audio.say(message)
+            audio.say(message, intro: true)
             if plan["safety"]["decision"].text == "soften" {
               phase = .planning
               audio.say(plan["safety"]["reason"].text) {
                 self.phase = .intro
                 self.introTime = 0
-                self.audio.say(fittedIntro)
+                self.audio.say(fittedIntro, intro: true)
               }
             }
             return
@@ -440,7 +586,9 @@ import SwiftUI
       }
       return
     }
-    if audio.ready { connection = "Voice connected" }
+    voiceListening = audio.ready && audio.engine.isRunning
+      && (audio.captureStats.snapshot(engineRunning: true)["callbacks"] as? Int ?? 0) > 0
+    if voiceListening { connection = "Listening" }
     if phase == .intro {
       introTime += dt
       if introTime >= 8 {
@@ -475,15 +623,22 @@ import SwiftUI
       for (i, b) in plan["narrator_beats"].list.enumerated()
       where b["at_active_second"].value <= active && !beatFired.contains(i) {
         beatFired.insert(i)
-        audio.say(b["text"].text)
+        narration.enqueue(b["text"].text, at: active)
       }
       if remaining <= 0 { finish(early: false) }
+      else if turnTask == nil, !audio.narrated,
+        speechFloor.available(now: now), let text = narration.take(at: active) {
+        audio.say(text)
+      }
     }
   }
   func operation(_ op: JSON) {
-    world.operation(op, speak: { audio.say($0) }, sound: { audio.cue($0) })
+    world.operation(op, speak: { narration.enqueue($0, at: active) }, sound: { audio.cue($0) })
   }
   func dialogue(_ text: String) {
+    narration.clearPending()
+    turnTask?.cancel(); turnTask = nil; turnNonce = UUID()
+    audio.interruptSpeech()
     observe("speech_excerpt", "transcript", text)
     for i in scene["interactions"].list {
       for c in i["choices"].list {
@@ -496,17 +651,15 @@ import SwiftUI
       }
     }
     guard let character = plan["characters"].list.first else {
-      audio.say("You can inspect the scene or choose one of the available actions.")
+      narration.enqueue("You can inspect the scene or choose one of the available actions.", at: active)
       return
     }
-    audio.speech.stopSpeaking(at: .immediate)
-    turnTask?.cancel()
-    turnNonce = UUID()
     let nonce = turnNonce
     let rev = revision
     let turn = UUID().uuidString
     world.animate(character["id"].text, "listen")
     turnTask = Task {
+      defer { if nonce == turnNonce { turnTask = nil } }
       do {
         let req = JSON([
           "schema_version": "1", "session_id": sessionID, "revision": rev, "turn_id": turn,
@@ -516,6 +669,13 @@ import SwiftUI
           "available_choices": scene["interactions"].list.flatMap { $0["choices"].list.map(\.raw) },
         ])
         let result = try await api.call("/v1/dialogue", req)
+        // A completed model reply must still yield to the user's current speech and any pause.
+        // A newer completed user turn cancels this stale reply through the nonce.
+        while !pauses.isEmpty || !speechFloor.available(now: ProcessInfo.processInfo.systemUptime)
+          || audio.narrated {
+          try await Task.sleep(for: .milliseconds(100))
+          try Task.checkCancellation()
+        }
         guard !Task.isCancelled, nonce == turnNonce, rev == revision, phase == .active,
           pauses.isEmpty
         else { return }
@@ -523,10 +683,14 @@ import SwiftUI
         turns.append(["speaker_id": character["id"].text, "text": result["reply"].text])
         observe("dialogue_turn", "app_event", result["reply"].text)
         for op in result["operations"].list { operation(op) }
+        narration.markSpoken(result["reply"].text, at: active)
         world.animate(character["id"].text, "speak")
         audio.say(result["reply"].text) { self.world.animate(character["id"].text, "listen") }
       } catch {
-        if !Task.isCancelled { message = "Character connection interrupted. Try speaking again." }
+        if !Task.isCancelled {
+          message = "Character connection interrupted. Try speaking again."
+          observe("task_action", "app_event", "Character reply unavailable: " + error.localizedDescription)
+        }
       }
     }
   }
@@ -539,7 +703,9 @@ import SwiftUI
   func finish(early: Bool) {
     generation?.cancel()
     turnTask?.cancel()
+    turnTask = nil
     turnNonce = UUID()
+    narration.clearPending()
     transitionID = UUID()
     loading = false
     audio.silence()
@@ -584,6 +750,7 @@ import SwiftUI
   func save() {
     if plan["session_id"].text.isEmpty {
       world.lobby()
+      world.scene.isPaused = !pauses.isEmpty
       audio.lobby()
       go(
         .lobby, "Setup ended before a practice scene began. When you’re ready to start, say START!")
@@ -612,7 +779,11 @@ import SwiftUI
     }
   }
   func adapt() {
+    guard !adapting else { return }
+    adapting = true
+    message = "Getting your next practice ready…"
     Task {
+      defer { adapting = false }
       do {
         let result = try await api.call(
           "/v1/adaptations",
@@ -624,20 +795,20 @@ import SwiftUI
         let summary = result["spoken_summary"].text
         let f = fear
         let a = ability
-        let oldHistory = history
-        let wasUsing = useHistory
+        let oldHistory = useHistory ? history : []
         newSession()
         parent = previous["session_id"].text
         fear = f
         ability = a
+        intakeApproved = true // The explicit repeat-session answer authorizes the adapted rerun.
         history = oldHistory + [previous]
         useHistory = true
         additions = [summary]
         adaptation = result
-        _ = wasUsing
         audio.say(summary)
         generate()
       } catch {
+        phase = .repeatPrompt
         message = "Adaptation unavailable. Say yes to retry, or no to return."
         audio.say(message)
       }

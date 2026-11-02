@@ -4,14 +4,20 @@ import AVFoundation
   let speech = AVSpeechSynthesizer()
   let promptSpeech = AVSpeechSynthesizer()
   let measureSpeech = AVSpeechSynthesizer()
+  private let previewSpeech = AVSpeechSynthesizer()
+  private var introVoice: AVSpeechSynthesisVoice?
   let engine = AVAudioEngine()
   var players: [String: AVAudioPlayer] = [:]
-  var socket: URLSessionWebSocketTask?
   var ready = false
+  var receivedAudioSeconds = 0.0
+  var lastProgressAt = 0.0
   var onText: ((String, Bool, String) -> Void)?
-  var onDisconnect: (() -> Void)?
-  private var converter: AVAudioConverter?
+  var onActivity: ((Bool) -> Void)?
+  var onDisconnect: ((String) -> Void)?
+  private var stopRecognition: (() -> Void)?
+  var onStatus: ((String) -> Void)?
   private var tapped = false
+  let captureStats = CaptureStats()
   var schedule = JSON()
   var activeLayers = Set<String>()
   var cueAssets: [String: String] = [:]
@@ -23,129 +29,70 @@ import AVFoundation
     speech.delegate = self
   }
   func start(api: API) async throws {
+    stopCapture()
     guard await AVAudioApplication.requestRecordPermission() else {
-      throw NSError(
-        domain: "Microphone", code: 1,
-        userInfo: [
-          NSLocalizedDescriptionKey:
-            "Allow microphone access in Settings before placing the phone in the viewer."
-        ])
+      throw NSError(domain: "Microphone", code: 1,
+        userInfo: [NSLocalizedDescriptionKey: "Allow microphone access in Settings before starting practice."])
+    }
+    guard #available(iOS 26.0, *) else {
+      throw NSError(domain: "LocalSpeech", code: 1,
+        userInfo: [NSLocalizedDescriptionKey: "On-device voice practice requires iOS 26 or later."])
     }
     let session = AVAudioSession.sharedInstance()
-    try session.setCategory(
-      .playAndRecord, mode: .voiceChat, options: [.defaultToSpeaker, .allowBluetoothHFP])
+    try session.setCategory(.playAndRecord, mode: .voiceChat,
+      options: [.defaultToSpeaker, .allowBluetoothHFP])
     try session.setActive(true)
-    var url = URLComponents(string: api.base)!
-    url.scheme = url.scheme == "https" ? "wss" : "ws"
-    url.path = "/v1/transcribe"
-    var request = URLRequest(url: url.url!)
-    request.setValue("Bearer \(api.token)", forHTTPHeaderField: "Authorization")
-    let task = URLSession.shared.webSocketTask(with: request)
-    socket = task
-    task.resume()
-    Task { await receive(task) }
     let input = engine.inputNode
     try input.setVoiceProcessingEnabled(true)
     let format = input.outputFormat(forBus: 0)
-    let target = AVAudioFormat(
-      commonFormat: .pcmFormatInt16, sampleRate: 24000, channels: 1, interleaved: true)!
-    converter = AVAudioConverter(from: format, to: target)
-    if tapped { input.removeTap(onBus: 0) }
-    input.installTap(onBus: 0, bufferSize: 1920, format: format) { [weak self] buffer, _ in
-      // Audio buffers remain on the realtime callback; conversion runs synchronously before release.
-      guard let converter = self?.converter,
-        let pcm = AVAudioPCMBuffer(
-          pcmFormat: target,
-          frameCapacity: AVAudioFrameCount(
-            Double(buffer.frameLength) * 24000 / format.sampleRate + 32))
-      else { return }
-      var supplied = false
-      var error: NSError?
-      converter.convert(to: pcm, error: &error) { _, status in
-        if supplied {
-          status.pointee = .noDataNow
-          return nil
-        }
-        supplied = true
-        status.pointee = .haveData
-        return buffer
-      }
-      guard error == nil, let bytes = pcm.int16ChannelData else { return }
-      let data = Data(bytes: bytes[0], count: Int(pcm.frameLength) * 2)
-      Task { @MainActor [weak self] in
-        guard let self, self.ready else { return }
-        do { try await task.send(.data(data)) } catch {
-          self.ready = false
-          self.onDisconnect?()
-        }
-      }
+    let recognition = LocalSpeech(onText: { [weak self] text, final, id in
+      self?.onText?(text, final, id)
+    }, onError: { [weak self] reason in
+      self?.ready = false
+      self?.onDisconnect?(reason)
+    }, onActivity: { [weak self] speaking in self?.onActivity?(speaking) })
+    stopRecognition = { recognition.stop() }
+    let sink = try await recognition.prepare(inputFormat: format) { [weak self] message in
+      self?.onStatus?(message)
+    }
+    let stats = captureStats
+    stats.reset(sampleRate: format.sampleRate)
+    input.installTap(onBus: 0, bufferSize: 1920, format: format) { buffer, _ in
+      stats.input(buffer)
+      sink.append(buffer)
     }
     tapped = true
     engine.prepare()
     try engine.start()
-  }
-  func receive(_ task: URLSessionWebSocketTask) async {
-    do {
-      while task === socket {
-        let message = try await task.receive()
-        let data: Data
-        switch message {
-        case .data(let d): data = d
-        case .string(let s): data = Data(s.utf8)
-        @unknown default: continue
-        }
-        guard let j = try? JSONDecoder().decode(JSON.self, from: data) else { continue }
-        if j["sessionId"].string != nil && j["type"].string == nil { ready = true }
-        if ["transcript", "speechComplete"].contains(j["type"].text) {
-          onText?(
-            j["transcript"].text, j["type"].text == "speechComplete", String(j["turnId"].value))
-        }
-        if j["type"].text == "error" {
-          ready = false
-          onDisconnect?()
-        }
-      }
-    } catch {
-      if task === socket {
-        ready = false
-        onDisconnect?()
-      }
-    }
+    ready = true
   }
   func stopCapture() {
     ready = false
-    socket?.cancel(with: .normalClosure, reason: nil)
-    socket = nil
     engine.stop()
-    if tapped {
-      engine.inputNode.removeTap(onBus: 0)
-      tapped = false
-    }
+    if tapped { engine.inputNode.removeTap(onBus: 0); tapped = false }
+    stopRecognition?(); stopRecognition = nil
   }
   func fitIntro(_ text: String) async -> String {
-    let duration = await measure(text)
+    introVoice = SpeechVoice.selected
+    let duration = await measure(text, voice: introVoice)
     if duration <= 8 && duration > 0 { return text }
     let concise = "Practice your opening. To stop at any time, just say STOP!"
-    _ = await measure(concise)
+    _ = await measure(concise, voice: introVoice)
     return concise
   }
-  private func measure(_ text: String) async -> Double {
+  private func measure(_ text: String, voice: AVSpeechSynthesisVoice?) async -> Double {
     await withCheckedContinuation { continuation in
-      let u = AVSpeechUtterance(string: text)
-      u.voice = AVSpeechSynthesisVoice(language: "en-US")
-      u.rate = 0.48
+      let u = SpeechVoice.utterance(text, voice: voice)
       let accumulator = SpeechDuration(continuation)
       measureSpeech.write(u) { buffer in accumulator.add(buffer) }
     }
   }
-  func say(_ text: String, completion: (() -> Void)? = nil) {
+  func say(_ text: String, intro: Bool = false, completion: (() -> Void)? = nil) {
     speech.stopSpeaking(at: .immediate)
     finished = completion
     narrated = true
     for p in players.values { p.volume *= 0.25 }
-    let u = AVSpeechUtterance(string: text)
-    u.voice = AVSpeechSynthesisVoice(language: "en-US")
-    u.rate = 0.48
+    let u = SpeechVoice.utterance(text, voice: intro ? introVoice : SpeechVoice.selected)
     utteranceID = ObjectIdentifier(u)
     speech.speak(u)
   }
@@ -165,10 +112,21 @@ import AVFoundation
     for p in players.values { p.volume = min(0.2, p.volume * 4) }
     f?()
   }
+  func interruptSpeech() {
+    guard narrated || speech.isSpeaking else { return }
+    utteranceID = nil
+    speech.stopSpeaking(at: .immediate)
+    speechFinished()
+  }
   func confirmQuit() {
-    let utterance = AVSpeechUtterance(string: "Quit simulation?")
+    let utterance = SpeechVoice.utterance("Would you like to end this practice? Say yes to finish, or no to continue.")
     promptSpeech.speak(utterance)
   }
+  func previewVoice() {
+    previewSpeech.stopSpeaking(at: .immediate)
+    previewSpeech.speak(SpeechVoice.utterance("Take your time. We’ll practice this together, one step at a time."))
+  }
+  func stopVoicePreview() { previewSpeech.stopSpeaking(at: .immediate) }
   func pause() {
     speech.pauseSpeaking(at: .immediate)
     for p in players.values { p.pause() }
@@ -179,6 +137,9 @@ import AVFoundation
     for p in players.values { p.play() }
   }
   func silence() {
+    stopVoicePreview()
+    utteranceID = nil
+    narrated = false
     promptSpeech.stopSpeaking(at: .immediate)
     speech.stopSpeaking(at: .immediate)
     finished = nil
@@ -255,5 +216,47 @@ private final class SpeechDuration: @unchecked Sendable {
     } else {
       seconds += Double(pcm.frameLength) / pcm.format.sampleRate
     }
+  }
+}
+
+/// Numeric capture diagnostics only. No raw audio or recognized text is retained.
+final class CaptureStats: @unchecked Sendable {
+  private let lock = NSLock()
+  private var started = 0.0, sampleRate = 0.0, inputFrames = 0.0, outputFrames = 0.0
+  private var callbacks = 0, errors = 0, queuedBytes = 0, completedBytes = 0
+  private var peak = 0.0
+  private var lastError = ""
+  func reset(sampleRate: Double) {
+    lock.lock(); defer { lock.unlock() }
+    started = ProcessInfo.processInfo.systemUptime
+    self.sampleRate = sampleRate
+    inputFrames = 0; outputFrames = 0; callbacks = 0; errors = 0; queuedBytes = 0; completedBytes = 0; peak = 0; lastError = ""
+  }
+  func input(_ buffer: AVAudioPCMBuffer) {
+    var amplitude = 0.0
+    if let channel = buffer.floatChannelData?[0] {
+      for i in 0..<Int(buffer.frameLength) { amplitude = max(amplitude, Double(abs(channel[i]))) }
+    }
+    lock.lock(); defer { lock.unlock() }
+    callbacks += 1; inputFrames += Double(buffer.frameLength); peak = amplitude
+  }
+  func queued(bytes: Int) { lock.lock(); queuedBytes += bytes; lock.unlock() }
+  func completed(bytes: Int) { lock.lock(); completedBytes += bytes; lock.unlock() }
+  func output(frames: AVAudioFrameCount) {
+    lock.lock(); defer { lock.unlock() }
+    outputFrames += Double(frames)
+  }
+  func conversionFailed(_ reason: String) {
+    lock.lock(); defer { lock.unlock() }
+    errors += 1; lastError = reason
+  }
+  func snapshot(engineRunning: Bool) -> [String: Any] {
+    lock.lock(); defer { lock.unlock() }
+    return ["wall_seconds": ProcessInfo.processInfo.systemUptime - started,
+      "input_sample_rate": sampleRate, "input_seconds": inputFrames / max(1, sampleRate),
+      "output_seconds": outputFrames / 24000, "callbacks": callbacks,
+      "conversion_errors": errors, "last_error": lastError, "peak": peak,
+      "engine_running": engineRunning, "queued_audio_seconds": Double(queuedBytes) / 48000,
+      "completed_audio_seconds": Double(completedBytes) / 48000]
   }
 }

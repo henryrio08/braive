@@ -583,6 +583,11 @@
           "scene_node_id": {
             "type": "string",
             "maxLength": 80
+          },
+          "color_hex": {
+            "type": "string",
+            "pattern": "^#[0-9A-Fa-f]{6}$",
+            "description": "Coordinator-chosen solid diffuse color; Wonder copies into the character node Material.color."
           }
         },
         "required": [

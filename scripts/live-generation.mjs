@@ -1,11 +1,14 @@
-// Run only with Henry's explicit approval for ONE bounded synthetic test.
+// Synthetic check within the SAME persistent continuation allowance; never resets the ledger.
 import {spawn} from 'node:child_process';
 import {mkdir,writeFile} from 'node:fs/promises';
 import {fileURLToPath} from 'node:url';
 import path from 'node:path';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const base='http://127.0.0.1:8788';
-const child=spawn(process.execPath,['--import','tsx','--env-file=.env','src/server.ts'],{cwd:path.join(root,'backend'),env:{...process.env,BRAIVE_ALLOW_META:'true',META_REQUEST_LIMIT:'5',META_MAX_COST_USD:'1.00',BRAIVE_ALLOW_AUDIO:'false',HOST:'127.0.0.1',PORT:'8788'},stdio:['ignore','pipe','pipe']});
+let occupied=false;
+try { await fetch(base+'/health',{signal:AbortSignal.timeout(1000)}); occupied=true; } catch {}
+if(occupied) throw Error('Port 8788 is already in use. Stop the existing test deliberately before starting a synthetic check.');
+const child=spawn(process.execPath,[path.join(root,'scripts/start-phone-test.mjs')],{cwd:root,env:{...process.env,META_REQUEST_LIMIT:'5',META_MAX_COST_USD:'1.00',BRAIVE_ALLOW_AUDIO:'false'},stdio:['ignore','pipe','pipe']});
 child.stdout.on('data',()=>{});child.stderr.on('data',()=>{});
 const globalDeadline=setTimeout(()=>{child.kill('SIGTERM');console.error('Bounded test reached its overall shutdown deadline.');process.exitCode=1;},125000);
 const headers={Authorization:`Bearer ${process.env.BRAIVE_TOKEN}`,'Content-Type':'application/json'};

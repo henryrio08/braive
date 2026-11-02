@@ -1,120 +1,287 @@
+import Foundation
+import GLTFKit2
 import SceneKit
 import UIKit
 
-/// Original, reusable individual objects. Models still author each scene's layout and interactions.
+struct AssetEntry: Decodable {
+  struct Normalization: Decodable {
+    let axis_rotation_x_radians: Float
+    let forward_rotation_y_radians: Float
+  }
+  let id: String
+  let relative_path: String
+  let category: String
+  let subcategory: String
+  let suggested_scale_m: Float
+  let y_up: Bool
+  let character_rigged: Bool
+  let license: String
+  let normalization: Normalization
+}
+
+/// Only byte-preserved, CC0 manifest assets can enter the renderer. No procedural object fallback.
 @MainActor enum AssetLibrary {
-  static let ids: Set<String> = [
-    "person_standing", "person_seated", "chair", "table", "lectern", "bookshelf", "window_frame",
-  ]
-  static func make(_ id: String) throws -> SCNNode {
-    guard ids.contains(id) else { throw ScenePreflight.error("Unregistered asset: " + id) }
-    let root = SCNNode()
-    func part(
-      _ name: String, _ geometry: SCNGeometry, _ x: Float, _ y: Float, _ z: Float, _ color: String
-    ) -> SCNNode {
-      if let g = geometry as? SCNSphere { g.segmentCount = name == "head" ? 20 : 10 }
-      if let g = geometry as? SCNCapsule {
-        g.radialSegmentCount = 12
-        g.capSegmentCount = 6
+  private static let instanceIDs = NSMapTable<SCNNode, NSString>(
+    keyOptions: .weakMemory, valueOptions: .strongMemory)
+  static func isCharacter(_ node: SCNNode) -> Bool {
+    instanceIDs.object(forKey: node)?.hasPrefix("character.base.") ?? false
+  }
+  private static var cachedEntries: [AssetEntry]?
+  private final class RigPose: NSObject {
+    let bones: [(SCNNode, simd_quatf)]
+    init(_ root: SCNNode) {
+      var values: [(SCNNode, simd_quatf)] = []
+      root.enumerateChildNodes { n, _ in
+        if n.name?.hasPrefix("Bone") == true { values.append((n, n.simdOrientation)) }
       }
-      if let g = geometry as? SCNCylinder { g.radialSegmentCount = 12 }
-      if let g = geometry as? SCNBox { g.chamferSegmentCount = 2 }
-      let n = SCNNode(geometry: geometry)
-      n.name = name
-      n.position = SCNVector3(x, y, z)
-      let m = SCNMaterial()
-      m.diffuse.contents = UIColor(hex: color)
-      m.roughness.contents = 0.8
-      m.lightingModel = .physicallyBased
-      geometry.materials = [m]
-      root.addChildNode(n)
-      return n
+      bones = values
     }
-    func box(
-      _ name: String, _ w: CGFloat, _ h: CGFloat, _ d: CGFloat, _ x: Float, _ y: Float, _ z: Float,
-      _ color: String
-    ) {
-      _ = part(name, SCNBox(width: w, height: h, length: d, chamferRadius: 0.025), x, y, z, color)
+  }
+  private static let poses = NSMapTable<SCNNode, RigPose>(
+    keyOptions: .weakMemory, valueOptions: .strongMemory)
+  private static var templates: [String: SCNNode] = [:]
+  static var entries: [AssetEntry] {
+    get throws {
+      if let cachedEntries { return cachedEntries }
+      guard let url = Bundle.main.url(forResource: "asset_manifest", withExtension: "json") else {
+        throw ScenePreflight.error("Bundled asset_manifest.json is missing")
+      }
+      let entries = try JSONDecoder().decode([AssetEntry].self, from: Data(contentsOf: url))
+      guard Set(entries.map(\.id)).count == entries.count,
+        entries.allSatisfy({ $0.license == "CC0-1.0" && !$0.relative_path.contains("..") })
+      else { throw ScenePreflight.error("Invalid bundled CC0 allowlist") }
+      cachedEntries = entries
+      return entries
     }
-    switch id {
-    case "person_standing", "person_seated":
-      let seated = id == "person_seated"
-      let hip: Float = seated ? 0.65 : 0.95
-      let head = hip + 0.65
-      _ = part("head", SCNSphere(radius: 0.135), 0, head, 0, "#bc8f73")
-      let hair = part("hair", SCNSphere(radius: 0.14), 0, head + 0.065, 0.015, "#302a27")
-      hair.scale = SCNVector3(1, 0.65, 1)
-      for x: Float in [-0.045, 0.045] {
-        _ = part("eye", SCNSphere(radius: 0.012), x, head + 0.015, -0.122, "#28252b")
+  }
+  static func first(category: String, subcategory: String) throws -> String {
+    guard
+      let e = try entries.first(where: { $0.category == category && $0.subcategory == subcategory })
+    else {
+      throw ScenePreflight.error("Asset subcategory is empty: \(category).\(subcategory)")
+    }
+    return e.id
+  }
+  static func make(_ id: String, colorHex: String? = nil) throws -> SCNNode {
+    guard let entry = try entries.first(where: { $0.id == id }) else {
+      throw ScenePreflight.error("Unregistered asset: " + id)
+    }
+    if templates[id] == nil {
+      guard let url = Bundle.main.resourceURL?.appendingPathComponent(entry.relative_path),
+        FileManager.default.fileExists(atPath: url.path)
+      else { throw ScenePreflight.error("Missing bundled GLB: " + entry.relative_path) }
+      let asset = try GLTFAsset(url: url, options: [:])
+      let source = GLTFSCNSceneSource(asset: asset)
+      guard let scene = source.defaultScene else {
+        throw ScenePreflight.error("GLB has no default scene: " + id)
       }
-      let nose = part("nose", SCNSphere(radius: 0.025), 0, head - 0.02, -0.14, "#b57c62")
-      nose.scale = SCNVector3(0.6, 1, 1)
-      box("mouth", 0.045, 0.012, 0.008, 0, head - 0.065, -0.122, "#7c5146")
-      let torso = part(
-        "torso", SCNCapsule(capRadius: 0.16, height: 0.48), 0, hip + 0.3, 0, "#546f83")
-      torso.scale = SCNVector3(1, 1, 0.7)
-      box("collar", 0.18, 0.04, 0.13, 0, hip + 0.52, 0, "#e4dfcd")
-      for side: Float in [-1, 1] {
-        let arm = part(
-          side < 0 ? "left_arm" : "right_arm", SCNCapsule(capRadius: 0.045, height: 0.46),
-          side * 0.21, hip + 0.28, 0, "#546f83")
-        arm.eulerAngles.z = side * 0.12
-        _ = part("hand", SCNSphere(radius: 0.048), side * 0.24, hip + 0.045, -0.01, "#bc8f73")
-        let leg = part(
-          "leg", SCNCapsule(capRadius: 0.065, height: seated ? 0.42 : 0.78), side * 0.09,
-          seated ? 0.58 : 0.48, seated ? -0.19 : 0, "#353c4b")
-        if seated {
-          leg.eulerAngles.x = .pi / 2
-          _ = part(
-            "shin", SCNCapsule(capRadius: 0.06, height: 0.45), side * 0.09, 0.26, -0.37, "#353c4b")
-        }
-        box("shoe", 0.14, 0.09, 0.26, side * 0.09, 0.055, seated ? -0.42 : -0.06, "#262e33")
-      }
-      if seated {
-        let chair = try make("chair")
-        chair.position = SCNVector3(0, 0, 0.07)
-        root.addChildNode(chair)
-      }
-    case "chair":
-      box("seat", 0.5, 0.07, 0.5, 0, 0.48, 0, "#856747")
-      box("back", 0.48, 0.5, 0.06, 0, 0.76, 0.23, "#856747")
-      for x: Float in [-0.2, 0.2] {
-        for z: Float in [-0.2, 0.2] { box("leg", 0.045, 0.46, 0.045, x, 0.23, z, "#343d3c") }
-      }
-    case "table":
-      box("top", 1.7, 0.08, 0.85, 0, 0.76, 0, "#ae8d65")
-      for x: Float in [-0.7, 0.7] {
-        for z: Float in [-0.32, 0.32] { box("leg", 0.07, 0.73, 0.07, x, 0.365, z, "#4b514b") }
-      }
-    case "lectern":
-      box("base", 0.65, 0.06, 0.5, 0, 0.03, 0, "#4f4c46")
-      box("column", 0.18, 1.0, 0.18, 0, 0.55, 0, "#806746")
-      let top = part(
-        "sloped_top", SCNBox(width: 0.7, height: 0.06, length: 0.5, chamferRadius: 0.03), 0, 1.08,
-        0, "#a88b61")
-      top.eulerAngles.x = -0.18
-      box("notes", 0.24, 0.01, 0.3, 0, 1.13, -0.02, "#f0ead6")
-    case "bookshelf":
-      for x: Float in [-0.6, 0.6] { box("side", 0.06, 2.1, 0.35, x, 1.05, 0, "#886d4d") }
-      box("back", 1.2, 2.1, 0.035, 0, 1.05, 0.16, "#6d5d48")
-      for row in 0..<4 {
-        let y = Float(row) * 0.5
-        box("shelf", 1.2, 0.04, 0.35, 0, y + 0.05, 0, "#886d4d")
-        for col in 0..<9 {
-          box(
-            "book", 0.075, CGFloat(0.27 + Double(col % 3) * 0.04), 0.22, Float(col) * 0.115 - 0.48,
-            y + 0.23, 0, ["#597b77", "#966759", "#b4a075"][col % 3])
+      let placement = SCNNode()
+      let normalized = SCNNode()
+      let frame = SCNNode()
+      placement.addChildNode(normalized)
+      normalized.addChildNode(frame)
+      frame.scale = SCNVector3(
+        entry.suggested_scale_m, entry.suggested_scale_m, entry.suggested_scale_m)
+      frame.eulerAngles = SCNVector3(
+        entry.normalization.axis_rotation_x_radians, entry.normalization.forward_rotation_y_radians,
+        0)
+      // Move the original hierarchy intact; bones and mesh nodes retain their original relative transforms.
+      for n in scene.rootNode.childNodes { frame.addChildNode(n) }
+      var low = SIMD3<Float>(repeating: .greatestFiniteMagnitude)
+      var high = SIMD3<Float>(repeating: -.greatestFiniteMagnitude)
+      var geometryCount = 0
+      frame.enumerateChildNodes { n, _ in
+        guard let geometry = n.geometry else { return }
+        geometryCount += 1
+        let bounds = geometry.boundingBox
+        for x in [bounds.min.x, bounds.max.x] {
+          for y in [bounds.min.y, bounds.max.y] {
+            for z in [bounds.min.z, bounds.max.z] {
+              let p = n.convertPosition(SCNVector3(x, y, z), to: placement)
+              low = simd_min(low, SIMD3(p.x, p.y, p.z))
+              high = simd_max(high, SIMD3(p.x, p.y, p.z))
+            }
+          }
         }
       }
-    case "window_frame":
-      for x: Float in [-0.65, 0, 0.65] {
-        box("vertical_frame", 0.05, 1.8, 0.08, x, 0.9, 0, "#d4d6c6")
+      guard geometryCount > 0, low.x.isFinite, high.y.isFinite else {
+        throw ScenePreflight.error("Empty GLB: " + id)
       }
-      for y: Float in [0, 0.9, 1.8] {
-        box("horizontal_frame", 1.35, 0.05, 0.08, 0, y, 0, "#d4d6c6")
-      }
-    default: break
+      normalized.position = SCNVector3(-(low.x + high.x) / 2, -low.y, -(low.z + high.z) / 2)
+      templates[id] = placement
     }
-    return root
+    let instance = try clone(templates[id]!)
+    instanceIDs.setObject(id as NSString, forKey: instance)
+    if entry.category == "character" && entry.subcategory == "base" {
+      recolor(instance, hex: colorHex)
+    }
+    return instance
+  }
+  /// SCNNode.clone shares skinners' bone references; explicitly rebind them to this instance's skeleton.
+  private static func clone(_ source: SCNNode) throws -> SCNNode {
+    let copy = source.clone()
+    var mapping: [ObjectIdentifier: SCNNode] = [:]
+    func pair(_ a: SCNNode, _ b: SCNNode) {
+      mapping[ObjectIdentifier(a)] = b
+      for (x, y) in zip(a.childNodes, b.childNodes) { pair(x, y) }
+    }
+    pair(source, copy)
+    for node in mapping.values { node.geometry = node.geometry?.copy() as? SCNGeometry }
+    func rebind(_ original: SCNNode) throws {
+      guard let target = mapping[ObjectIdentifier(original)] else { return }
+      if let skin = original.skinner {
+        let bones = try skin.bones.map { bone -> SCNNode in
+          guard let n = mapping[ObjectIdentifier(bone)] else {
+            throw ScenePreflight.error("Skin joint escaped cached asset hierarchy")
+          }
+          return n
+        }
+        let rebound = SCNSkinner(
+          baseGeometry: target.geometry ?? skin.baseGeometry, bones: bones,
+          boneInverseBindTransforms: skin.boneInverseBindTransforms, boneWeights: skin.boneWeights,
+          boneIndices: skin.boneIndices)
+        rebound.baseGeometryBindTransform = skin.baseGeometryBindTransform
+        if let skeleton = skin.skeleton { rebound.skeleton = mapping[ObjectIdentifier(skeleton)] }
+        target.skinner = rebound
+      }
+      for child in original.childNodes { try rebind(child) }
+    }
+    try rebind(source)
+    return copy
+  }
+  static func recolor(_ node: SCNNode, hex: String?) {
+    let color: UIColor
+    if let hex, hex.range(of: "^#[0-9A-Fa-f]{6}$", options: .regularExpression) != nil {
+      color = UIColor(hex: hex)
+    } else {
+      color = UIColor(hue: CGFloat.random(in: 0...1), saturation: 0.48, brightness: 0.82, alpha: 1)
+    }
+    node.enumerateChildNodes { n, _ in
+      guard let geometry = n.geometry?.copy() as? SCNGeometry else { return }
+      let material = SCNMaterial()
+      material.diffuse.contents = color
+      material.roughness.contents = 0.8
+      material.lightingModel = .physicallyBased
+      geometry.materials = Array(repeating: material, count: max(1, geometry.materials.count))
+      n.geometry = geometry
+      if let old = n.skinner {
+        let skin = SCNSkinner(
+          baseGeometry: geometry, bones: old.bones,
+          boneInverseBindTransforms: old.boneInverseBindTransforms, boneWeights: old.boneWeights,
+          boneIndices: old.boneIndices)
+        skin.skeleton = old.skeleton
+        skin.baseGeometryBindTransform = old.baseGeometryBindTransform
+        n.skinner = skin
+      }
+    }
+  }
+  /// Preserve authored clips. The neutral rig gets small app-controlled joint motions, never new mesh data.
+  static func animate(_ node: SCNNode, behavior: String) {
+    guard ["idle", "listen", "speak", "gesture"].contains(behavior) else { return }
+    var usedClip = false
+    node.enumerateChildNodes { n, _ in
+      for key in n.animationKeys {
+        guard let player = n.animationPlayer(forKey: key) else { continue }
+        if key.lowercased().contains(behavior) {
+          player.play()
+          usedClip = true
+        } else {
+          player.stop()
+        }
+      }
+    }
+    guard !usedClip, isCharacter(node) else { return }
+    let pose: RigPose
+    if let saved = poses.object(forKey: node) {
+      pose = saved
+    } else {
+      pose = RigPose(node)
+      poses.setObject(pose, forKey: node)
+    }
+    for (bone, orientation) in pose.bones {
+      bone.removeAction(forKey: "braive_behavior")
+      bone.simdOrientation = orientation
+    }
+    let target: String
+    let axis: SIMD3<Float>
+    let amplitude: Float
+    let period: Double
+    switch behavior {
+    case "listen":
+      target = "Bone.002"
+      axis = SIMD3(1, 0, 0)
+      amplitude = 0.035
+      period = 2
+    case "speak":
+      target = "Bone.002"
+      axis = SIMD3(0, 1, 0)
+      amplitude = 0.035
+      period = 1.2
+    case "gesture":
+      target = "Bone.006"
+      axis = SIMD3(1, 0, 0)
+      amplitude = 0.35
+      period = 1.3
+    default:
+      target = "Bone"
+      axis = SIMD3(1, 0, 0)
+      amplitude = 0.006
+      period = 3
+    }
+    guard let (bone, rest) = pose.bones.first(where: { $0.0.name == target }) else { return }  // Safe no-op for an unrecognized/absent rig.
+    let movement = SCNAction.customAction(duration: period) { n, t in
+      n.simdOrientation =
+        rest * simd_quatf(angle: sin(Float(t / period) * 2 * .pi) * amplitude, axis: axis)
+    }
+    bone.runAction(.repeatForever(movement), forKey: "braive_behavior")
+  }
+  static func auditAll() throws -> Int {
+    let all = try entries
+    for entry in all {
+      let node = try make(entry.id, colorHex: "#3A8FBC")
+      var lowest = Float.greatestFiniteMagnitude
+      node.enumerateChildNodes { n, _ in
+        guard let g = n.geometry else { return }
+        let b = g.boundingBox
+        for x in [b.min.x, b.max.x] {
+          for y in [b.min.y, b.max.y] {
+            for z in [b.min.z, b.max.z] {
+              lowest = min(lowest, n.convertPosition(SCNVector3(x, y, z), to: node).y)
+            }
+          }
+        }
+      }
+      guard abs(lowest) < 0.001 else {
+        throw ScenePreflight.error("Asset is not grounded: " + entry.id)
+      }
+      if entry.id.hasPrefix("character.base.") {
+        var skins = 0
+        node.enumerateChildNodes { n, _ in if n.skinner != nil { skins += 1 } }
+        guard skins > 0 else { throw ScenePreflight.error("Neutral base lost its skin") }
+        let other = try make(entry.id, colorHex: "#BC653A")
+        var a: SCNSkinner?
+        var b: SCNSkinner?
+        node.enumerateChildNodes { n, _ in if let s = n.skinner { a = s } }
+        other.enumerateChildNodes { n, _ in if let s = n.skinner { b = s } }
+        guard let a, let b, a.bones.first !== b.bones.first else {
+          throw ScenePreflight.error("Character instances share bones")
+        }
+        var colorsValid = true
+        node.enumerateChildNodes { n, _ in
+          if let g = n.geometry {
+            for m in g.materials {
+              if !(m.diffuse.contents as? UIColor ?? .clear).isEqual(UIColor(hex: "#3A8FBC")) {
+                colorsValid = false
+              }
+            }
+          }
+        }
+        guard colorsValid else {
+          throw ScenePreflight.error("Neutral diffuse recoloring leaked between instances")
+        }
+        for behavior in ["idle", "listen", "speak", "gesture"] { animate(node, behavior: behavior) }
+      }
+    }
+    return all.count
   }
 }
