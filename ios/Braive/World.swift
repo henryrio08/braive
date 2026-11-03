@@ -196,8 +196,7 @@ extension UIColor {
         n = SCNNode(geometry: try geometry(j))
       }
       n.name = id
-      n.userData = NSMutableDictionary()
-      n.userData?["collision_role"] = j["collision_role"].string ?? "solid"
+      RouteAudit.setCollisionRole(j["collision_role"].string ?? "solid", for: n)
       if j["geometry"]["kind"].text != "asset" { n.geometry?.materials = [material(j["material"])] }
       else { applyMaterial(j["material"],to:n,tint:false) }
       n.position = vector(j["position"])

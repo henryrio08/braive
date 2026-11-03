@@ -99,7 +99,8 @@ struct HeadsetHUD: View {
 
 @MainActor extension Session {
   var headsetCopy: HeadsetCopy {
-    if loading { return HeadsetCopy(title: "One moment…", detail: "Listen for what’s next.") }
+    if loading { return HeadsetCopy(title: "One moment…", detail: loadingTip) }
+    if adapting { return HeadsetCopy(title: "Shaping your next try…", detail: loadingTip) }
     if phase == .planning && builder { return HeadsetCopy(title: "What would you add?", detail: "Take your time. I’m listening.", command: "Say THAT’S ALL when finished", hint: "START OVER to replace your answer") }
     switch phase {
     case .setup: return HeadsetCopy(title: "Welcome to Braive")
@@ -109,7 +110,7 @@ struct HeadsetHUD: View {
     case .ability: return HeadsetCopy(title: "What feels manageable?", detail: "Share your comfort level and boundaries.", command: "Say THAT’S ALL when finished", hint: "START OVER to replace your answer")
     case .review: return HeadsetCopy(title: "Here’s what I heard.", detail: "Listen to your situation and boundaries.", command: "Say BEGIN PRACTICE when ready", hint: "START OVER to change your answers")
     case .history: return HeadsetCopy(title: "Build on past practice?", detail: "Include your previous sessions this time?", command: "Say YES or NO")
-    case .planning: return HeadsetCopy(title: "Shaping your practice…", detail: "You’ll hear when it’s ready.", command: "Say HEY BUILDER to add details", hint: "STOP to pause")
+    case .planning: return HeadsetCopy(title: "Shaping your practice…", detail: loadingTip, hint: "STOP to pause")
     case .intro: return HeadsetCopy(title: "Listen. Picture yourself here.", hint: "STOP to pause")
     case .reveal: return HeadsetCopy(title: "Take a look around.", hint: "STOP to pause")
     case .active: return HeadsetCopy(title: "", hint: "STOP to pause")
@@ -119,9 +120,9 @@ struct HeadsetHUD: View {
     case .reflection: return HeadsetCopy(title: "Make a note for next time.", detail: "Share what stood out. Take your time.", command: "Say SAVE REFLECTION when finished", hint: "Or say SKIP")
     case .feedbackPrompt: return HeadsetCopy(title: "Hear some feedback?", command: "Say YES or NO")
     case .feedback:
-      return HeadsetCopy(title: "Your practice, reflected.", detail: message == "Reviewing your session…" ? "Putting your feedback together…" : record["feedback"].object != nil ? "Listen to your feedback." : "Listen to your session update.", command: "Say CONTINUE to save")
-    case .saving: return HeadsetCopy(title: "Saving your practice…")
-    case .repeatPrompt: return HeadsetCopy(title: "Ready for another try?", detail: adapting ? "Getting your next practice ready…" : "Build on what you just practiced.", command: adapting ? "" : "Say YES or NO")
+      return HeadsetCopy(title: "Your practice, reflected.", detail: message == "Reviewing your session…" ? loadingTip : record["feedback"].object != nil ? "Listen to your feedback." : "Listen to your session update.", command: "Say CONTINUE to save")
+    case .saving: return HeadsetCopy(title: "Saving your practice…", detail: loadingTip)
+    case .repeatPrompt: return HeadsetCopy(title: "Ready for another try?", detail: adapting ? loadingTip : "Build on what you just practiced.", command: adapting ? "" : "Say YES or NO")
     case .error: return HeadsetCopy(title: "Let’s take a moment.", detail: "Listen to what happened.", command: "Say RETRY, REVISE or CANCEL", hint: "Full details in phone controls")
     }
   }

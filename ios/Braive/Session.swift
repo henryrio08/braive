@@ -13,6 +13,10 @@ import SwiftUI
   @Published var transcript = ""
   @Published var pauses = Set<String>()
   @Published var loading = false
+  @Published var launching = true
+  @Published var loadingTip = TipBank.all[0].text
+  private var tips = LoadingTips(.launch)
+  private var launchRemaining = 1.2
   @Published var remaining = 0.0
   @Published var reveal = 0.0
   var revealFadeProgress: Double { revealProgress("fade_seconds") }
@@ -226,6 +230,11 @@ import SwiftUI
         message = String(repeating: "Follow the marked path to the gathering point, then choose the next action when you are ready. ", count: 12)
         copies.append((next.rawValue, headsetCopy))
       }
+      for context in TipContext.allCases {
+        for tip in TipBank.matching(context) {
+          copies.append(("tip-" + tip.id, HeadsetCopy(title: "Shaping your practice…", detail: tip.text, hint: "STOP to pause")))
+        }
+      }
       phase = savedPhase; message = savedMessage
       try? HeadsetHUD.renderReview(copies, to: store.root.appendingPathComponent("HUDReview"))
     }
@@ -321,6 +330,7 @@ import SwiftUI
     else { pause("user_stop",enabled:false) }
   }
   func go(_ next: Phase, _ text: String) {
+    beginTips(for: next)
     transitionID = UUID()
     loading = true
     transitionRemaining = 0.45
@@ -329,6 +339,27 @@ import SwiftUI
     audio.play("whoosh", loop: false, gain: 0.15)
     message = next == .planning ? "To stop at any time, just say STOP!" : text
 
+  }
+  func beginTips(for destination: Phase) {
+    let context: TipContext
+    switch destination {
+    case .setup: context = .launch
+    case .lobby: context = .lobby
+    case .headset: context = .headset
+    case .intake: context = .intake
+    case .ability: context = .ability
+    case .review: context = .review
+    case .history: context = .history
+    case .planning, .intro, .reveal, .active: context = .planning
+    case .selfReport, .readiness: context = .selfReport
+    case .reflectionPrompt, .reflection: context = .reflection
+    case .feedbackPrompt, .feedback: context = .feedback
+    case .saving: context = .saving
+    case .repeatPrompt: context = .repeatPractice
+    case .error: context = .lobby
+    }
+    tips = LoadingTips(context)
+    loadingTip = tips.current.text
   }
   func heard(_ text: String, final: Bool, id: String) {
     if pauses.contains("phone_controls") {
@@ -709,6 +740,15 @@ import SwiftUI
     let dt = min(0.2, now - lastTick)
     lastTick = now
     guard pauses.isEmpty else { return }
+    if launching {
+      launchRemaining -= dt
+      if launchRemaining <= 0 { launching = false }
+      return
+    }
+    if loading || (phase == .planning && !builder) || phase == .saving
+      || (phase == .feedback && message == "Reviewing your session…") || adapting {
+      if let tip = tips.advance(by: dt) { loadingTip = tip.text }
+    }
     world.renderTime += dt
     if loading {
       transitionRemaining -= dt
@@ -901,6 +941,7 @@ import SwiftUI
     go(.selfReport, "How difficult did that feel, from zero to ten? You can skip.")
   }
   func feedback() {
+    beginTips(for: .feedback)
     if plan["session_id"].text.isEmpty {
       message =
         "No practice scene began, so there is no performance feedback. Say continue to save."
@@ -934,6 +975,7 @@ import SwiftUI
     }
   }
   func save() {
+    beginTips(for: .saving)
     cancelFeedback()
     if plan["session_id"].text.isEmpty {
       world.lobby()
@@ -968,6 +1010,7 @@ import SwiftUI
   }
   func adapt() {
     guard !adapting else { return }
+    beginTips(for: .repeatPrompt)
     adapting = true
     message = "Getting your next practice ready…"
     Task {

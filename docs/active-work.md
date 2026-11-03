@@ -1,5 +1,7 @@
 # Current coordination — November 2, 2026
 
+Henry subsequently assigned contextual loading tips to this chat. That focused work is based on BraveWork `5cb7522`; see [loading-tips.md](loading-tips.md). Native builds and tip layout review pass; device verification remains pending. Scene generation, visual construction and model prompts stay with BraveWork. Fetch the pushed tips commit before overlapping Session/HUD changes.
+
 Runtime handoff: the automatic-flow, pause-confirmation and approved soft-character changes are finished and pushed. Henry has assigned further scene generation and visual work to the Codex working on BraveWork. See [guided-runtime-handoff.md](guided-runtime-handoff.md) for exact evidence, limitations and installation status. Do not continue overlapping scene/visual work from this chat.
 
 `codex/braive-work` has integrated `89fc366` and is completing the remaining audit follow-up: stage/motion-owner validation, native route/stage checks, fade/material semantics, telemetry, typed dispatch, and checkpoint recovery. Fetch its next pushed commit before overlapping edits. See `docs/runtime-followup-2026-11-02.md` for scope and verification limits. Visual construction remains design-only. This Windows checkout has its own user-approved $50 cap; do not infer that it shares the Mac ledger file.
