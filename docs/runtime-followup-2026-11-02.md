@@ -37,6 +37,6 @@ Apple SDK/framework type checking, GPU diagnostics, real scene review, physical 
 
 ## Required device pass
 
-Build the integrated branch, run `--preflight-audit` for mesh/visibility controls, and review a fresh guided scene. Check natural conversation and STOP/NO without playback echo. Exercise pause during a viewpoint fade, background/reopen, a forced process kill followed by RESUME PRACTICE, and a relative path after turning the head. Compare the saved countdown/positions/events to the recovered state. Inspect `render_metrics` in the saved record and capture a GPU frame for actual draw submissions. Keep the shared 120-second generation limit and use the approved local test launcher for any paid requests.
+Build the integrated branch, run `--preflight-audit` for mesh/visibility controls, and review a fresh guided scene. Check natural conversation and STOP/NO without playback echo. Exercise pause during a viewpoint fade, background/reopen, a forced process kill followed by RESUME PRACTICE, and a relative path after turning the head. Compare the saved countdown/positions/events to the recovered state. Inspect `render_metrics` in the saved record and capture a GPU frame for actual draw submissions. The shared generation/readiness ceiling is now ten minutes; use the approved local test launcher for any paid requests.
 
 The separate visual-construction proposal remains the next implementation topic after this verification gate.

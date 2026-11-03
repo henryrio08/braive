@@ -686,7 +686,7 @@ import SwiftUI
     let api = api
     if !old.isEmpty { Task { _ = try? await api.call("/v1/jobs/" + old, method: "DELETE") } }
     revision += 1
-    generationDeadline = ProcessInfo.processInfo.systemUptime + 120
+    generationDeadline = ProcessInfo.processInfo.systemUptime + 600
     let rev = revision
     let owner = sessionID
     jobID = ""
@@ -706,7 +706,7 @@ import SwiftUI
           guard ProcessInfo.processInfo.systemUptime < generationDeadline else {
             _ = try? await api.call("/v1/jobs/" + jobID, method: "DELETE")
             throw NSError(domain: "Generation", code: 1, userInfo: [
-              NSLocalizedDescriptionKey: "Two-minute generation deadline reached."
+              NSLocalizedDescriptionKey: "Ten-minute generation deadline reached."
             ])
           }
           try await Task.sleep(for: .milliseconds(600))
@@ -737,7 +737,7 @@ import SwiftUI
               throw NSError(
                 domain: "Generation", code: 1,
                 userInfo: [
-                  NSLocalizedDescriptionKey: "Two-minute scene readiness deadline reached."
+                  NSLocalizedDescriptionKey: "Ten-minute scene readiness deadline reached."
                 ])
             }
             result["plan"]["narrator_intro_8s"] = JSON(fittedIntro)
@@ -753,7 +753,7 @@ import SwiftUI
                 "/v1/jobs/" + jobID + "/validation", JSON(["message": error.localizedDescription]))
               continue
             }
-            guard ProcessInfo.processInfo.systemUptime < generationDeadline else { throw world.failure("Scene loading exceeded the two-minute readiness deadline") }
+            guard ProcessInfo.processInfo.systemUptime < generationDeadline else { throw world.failure("Scene loading exceeded the ten-minute readiness deadline") }
             plan = result["plan"]
             scene = result["scene"]
             scenario = nextScenario; scenarioCompletedAt = nil; scenarioActions = []

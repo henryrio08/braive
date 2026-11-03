@@ -22,6 +22,6 @@ Walk through:
 9. Check SESSIONS.csv and reflection file. Retry save without duplicated rows. Reopen app and verify history survives.
 10. Repeat with a lower-intensity preference. Keep scenario identity and verify changed dimensions. End at the original forest.
 
-Try contrasting freeform prompts after the main walkthrough: an interview, a dusk trail with stationary voice route choices, and a small elevator. Check scene validity/visibility and honest failure paths. Invalid provider output and a two-minute timeout must offer retry/revise/cancel without a preset substitute.
+Try contrasting freeform prompts after the main walkthrough: an interview, a dusk trail with stationary voice route choices, and a small elevator. Check scene validity/visibility and honest failure paths. Invalid provider output and a ten-minute timeout must offer retry/revise/cancel without a preset substitute.
 
 Suggested three-minute video structure: 20 seconds on the concrete student/public-speaking problem; 30 seconds of native viewer setup and freeform intake; 60 seconds of generated world and responsive conversation; 35 seconds showing STOP and reflection/feedback; 25 seconds showing adapted repeat and saved history; 10 seconds of architecture and actual Meta roles. Clearly identify work created during the hackathon. Public repository and accessible video links are required by the supplied participant guide.

@@ -20,7 +20,7 @@ Construction must preserve task identity: a skydive has an exit and descent; an 
 | Native preflight | iPhone | Both-eye snapshots and actual resource results | Opening and relevant later states remain usable |
 | Execute | iPhone | Local stage/events/movement plus optional conversation | Pauses freeze the same active clock |
 
-Retain the two primary planning/authoring calls and existing audio selection. Intermediate construction information is structured output from those calls, not an extra chain of model calls. The original 120-second generation deadline and one shared repair remain. Account for compiler and native loading time in the deadline; check again after loading, before reveal.
+Retain the two primary planning/authoring calls and existing audio selection. Intermediate construction information is structured output from those calls, not an extra chain of model calls. The ten-minute generation/readiness ceiling and one shared repair remain. Aim for a few minutes on an ordinary description without trading away task fidelity, validation or visual quality. Account for compiler and native loading time in the deadline; check again after loading, before reveal.
 
 Application code owns camera calibration, identifier allocation, capability manifests, execution, validation and budgets. Models own intent, composition, object selection, supported relations and allowed parameters. Models never supply executable shader code, URLs or device controls.
 
