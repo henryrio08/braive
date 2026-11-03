@@ -1,5 +1,7 @@
 # Current coordination — November 2, 2026
 
+November 3: Henry requested removal of readback/BEGIN PRACTICE and an orientation-independent black view until headset readiness. That change is on `codex/streamlined-intake`, to be pushed to main before phone installation. Timing work belongs to the other agent; its latest published change must be included in the combined phone build, without revising that logic here.
+
 The partner's contextual loading tips, post-session save/feedback/repeat fixes, and generation cancellation fixes are integrated into BraveWork; see [loading-tips.md](loading-tips.md) and [post-session-audit.md](post-session-audit.md). The later branch-wide [consistency review](consistency-review-2026-11-02.md) is integrated too: audio mixing, deletion/recovery, consent, native preflight and import validation fixes. Its route support improvement is combined with BraveWork's explicit object contact-point check. Scene generation, visual construction and model prompts remain on BraveWork.
 
 On November 2, xtool 1.24.0 detected the plugged-in iPhone 14 through WSL and validated pairing after the phone was unlocked. Device details reported iOS 27.0.1. Braive did not appear in the phone's user-installed app list during this check. The merged visual/post-session build remains untested on device: this Windows xtool container has no Darwin Swift SDK or Apple Developer login, this checkout has no Xcode XIP/SDK archive, and the app is presently an Xcode project rather than an xtool SwiftPM project. USB was detached after the read-only check.

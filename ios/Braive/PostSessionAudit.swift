@@ -20,7 +20,18 @@ import Foundation
       record = JSON(["session_id":sessionID,"plan":plan.raw,"started_at":ISO8601DateFormatter().string(from:Date()),"topic_short":"Garden proposal","intensity_1_10":3,"use_history":false,"chained_rerun":false])
     }
     do {
-      launching = false; seed(); finish(early:true); flush()
+      launching = false
+      try check(!headsetReady && world.scene.rootNode.childNodes.count == 1, "Forest must not load before initial readiness")
+      phase = .lobby; go(.headset, headsetPrompt); flush()
+      try check(!headsetReady, "Headset question must keep the spatial view hidden")
+      say("yes")
+      try check(headsetReady && phase == .intake && world.scene.rootNode.childNodes.count > 1, "Readiness must center and reveal the forest before intake")
+      try store.save(JSON(["session_id":UUID().uuidString,"outcome":"completed","plan":["topic":"Garden proposal"]]))
+      say("I want to practice a garden proposal. That's all.")
+      say("Keep it friendly. That's all.")
+      try check(intakeApproved && phase == .history, "Completed ability goes directly to history consent without readback")
+      try store.deleteAll()
+      seed(); finish(early:true); flush()
       try check(store.records.count == 1 && store.records[0]["stop_count"].value == 1, "Run must be saved before optional answers")
       say("not sure")
       try check(phase == .selfReport && record["reported_difficulty"].number == nil, "Ambiguous rating must not advance")

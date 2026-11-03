@@ -74,7 +74,7 @@ extension UIColor {
       eye.position.x = x
       head.addChildNode(eye)
     }
-    lobby()
+    scene.background.contents = UIColor.black
     motion.deviceMotionUpdateInterval = 1 / 60
     motion.startDeviceMotionUpdates(using: .xArbitraryZVertical, to: .main) { [weak self] data, _ in
       guard let data else { return }

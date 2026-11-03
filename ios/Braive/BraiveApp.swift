@@ -32,6 +32,7 @@ struct ContentView: View {
       ZStack {
         StereoWorld(world: s.world).ignoresSafeArea().blur(
           radius: s.phase == .setup ? 9 : s.phase == .reveal ? max(0, (1 - s.revealBlurProgress) * 7) : 0)
+        if !s.headsetReady { Color.black.ignoresSafeArea() }
         if s.phase == .setup {
           LinearGradient(colors: [ink.opacity(0.98), ink.opacity(0.8), ink.opacity(0.5)],
             startPoint: .leading, endPoint: .trailing).ignoresSafeArea()
@@ -182,10 +183,6 @@ struct ContentView: View {
           if s.isCollectingAnswer {
             Button("Finish answer") { panel = nil; send("that's all") }
             Button("Replace answer") { panel = nil; send("start over") }
-          }
-          if s.phase == .review {
-            Button("Begin practice") { panel = nil; send("begin practice") }
-            Button("Start over") { panel = nil; send("start over") }
           }
           if [.headset, .history, .reflectionPrompt, .feedbackPrompt, .repeatPrompt].contains(s.phase) {
             Button("Yes") { panel = nil; send("yes") }

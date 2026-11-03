@@ -108,7 +108,6 @@ struct HeadsetHUD: View {
     case .headset: return HeadsetCopy(title: "Find your forward.", detail: "Look straight ahead comfortably.", command: "Say YES when your headset is ready")
     case .intake: return HeadsetCopy(title: "What would you like to practice?", detail: "Describe the moment, place and people.", command: "Say THAT’S ALL when finished", hint: "START OVER to replace your answer")
     case .ability: return HeadsetCopy(title: "What feels manageable?", detail: "Share your comfort level and boundaries.", command: "Say THAT’S ALL when finished", hint: "START OVER to replace your answer")
-    case .review: return HeadsetCopy(title: "Here’s what I heard.", detail: "Listen to your situation and boundaries.", command: "Say BEGIN PRACTICE when ready", hint: "START OVER to change your answers")
     case .history: return HeadsetCopy(title: "Build on past practice?", detail: "Include your previous sessions this time?", command: "Say YES or NO")
     case .planning: return HeadsetCopy(title: "Shaping your practice…", detail: loadingTip, hint: "STOP to pause")
     case .intro: return HeadsetCopy(title: "Listen. Picture yourself here.", hint: "STOP to pause")

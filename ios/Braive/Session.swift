@@ -4,7 +4,7 @@ import SwiftUI
 
 @MainActor final class Session: ObservableObject {
   enum Phase: String {
-    case setup, lobby, headset, intake, ability, review, history, planning, intro, reveal, active,
+    case setup, lobby, headset, intake, ability, history, planning, intro, reveal, active,
       selfReport, readiness, reflectionPrompt, reflection, feedbackPrompt, feedback, saving,
       repeatPrompt, error
   }
@@ -12,6 +12,7 @@ import SwiftUI
   @Published var message = "Welcome to Braive"
   @Published var transcript = ""
   @Published var pauses = Set<String>()
+  @Published var headsetReady = false
   @Published var loading = false
   @Published var launching = true
   @Published var loadingTip = TipBank.all[0].text
@@ -248,7 +249,7 @@ import SwiftUI
     if ProcessInfo.processInfo.arguments.contains("--hud-layout-review") {
       let savedPhase = phase, savedMessage = message
       var copies: [(String, HeadsetCopy)] = []
-      for next: Phase in [.intake, .review, .intro, .active, .feedback, .error] {
+      for next: Phase in [.intake, .intro, .active, .feedback, .error] {
         phase = next
         message = String(repeating: "Follow the marked path to the gathering point, then choose the next action when you are ready. ", count: 12)
         copies.append((next.rawValue, headsetCopy))
@@ -267,6 +268,7 @@ import SwiftUI
     #endif
   }
   func preview() {
+    headsetReady = true
     phase = .lobby
     connection = "Offline forest preview — no Meta calls"
     message =
@@ -292,7 +294,7 @@ import SwiftUI
         setupNotice = ""
         connection = "On-device voice ready"
         go(.lobby, "When you’re ready to start, say START!")
-        world.lobby()
+        headsetReady = false
         world.scene.isPaused = !pauses.isEmpty
         audio.lobby()
       } catch {
@@ -356,6 +358,7 @@ import SwiftUI
     else { pause("user_stop",enabled:false) }
   }
   func go(_ next: Phase, _ text: String) {
+    if next == .headset { headsetReady = false }
     beginTips(for: next)
     transitionID = UUID()
     loading = true
@@ -374,7 +377,6 @@ import SwiftUI
     case .headset: context = .headset
     case .intake: context = .intake
     case .ability: context = .ability
-    case .review: context = .review
     case .history: context = .history
     case .planning, .intro, .reveal, .active: context = .planning
     case .selfReport, .readiness: context = .selfReport
@@ -440,11 +442,14 @@ import SwiftUI
     case .headset:
       if VoiceAnswer.confirmsHeadset(text) {
         world.recenter()
+        headsetReady = true
         if let saved = pendingRecovery {
           pendingRecovery=nil
           do { try restorePractice(saved) } catch { fail(error) }
           return
         }
+        world.lobby()
+        world.scene.isPaused = !pauses.isEmpty
         if repeatAfterHeadset { adapt() }
         else {
           newSession()
@@ -452,18 +457,6 @@ import SwiftUI
         }
       }
     case .intake, .ability: collectAnswer(text)
-    case .review:
-      if VoiceAnswer.confirmsPractice(text) {
-        guard !fear.isEmpty, !ability.isEmpty else { restartIntake(); return }
-        intakeApproved = true
-        history = store.relevant(fear)
-        if history.isEmpty { generate() }
-        else { go(.history, "Would you like to use your past sessions for this practice? Say yes or no.") }
-      } else if VoiceAnswer.normalized(text) == "start over" || VoiceAnswer.normalized(text) == "no" {
-        restartIntake()
-      } else if VoiceAnswer.needsTime(text) {
-        message = "Take your time. Say BEGIN PRACTICE when you’re ready, or START OVER to change it."
-      }
     case .history:
       if yes || no {
         useHistory = yes
@@ -569,7 +562,11 @@ import SwiftUI
         go(.ability, abilityPrompt)
       } else if phase == .ability {
         ability = value
-        go(.review, "Here’s what I heard. Your situation: \(fear). Your comfort and boundaries: \(ability). Say BEGIN PRACTICE to create it, or START OVER to change it.")
+        guard !fear.isEmpty else { restartIntake(); return }
+        intakeApproved = true
+        history = store.relevant(fear)
+        if history.isEmpty { generate() }
+        else { go(.history, "Would you like to use your past sessions for this practice? Say yes or no.") }
       } else if phase == .planning && builder {
         additions.append(value)
         builder = false
@@ -673,7 +670,7 @@ import SwiftUI
   }
   func generate() {
     guard intakeApproved else {
-      go(.review, "Say BEGIN PRACTICE to create this situation, or START OVER to change it.")
+      restartIntake()
       return
     }
     guard remoteConsent && liveEnabled else {

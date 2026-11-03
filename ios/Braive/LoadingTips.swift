@@ -1,7 +1,7 @@
 import Foundation
 
 enum TipContext: String, CaseIterable {
-  case launch, lobby, headset, intake, ability, review, history, planning, selfReport, reflection, feedback, saving, repeatPractice
+  case launch, lobby, headset, intake, ability, history, planning, selfReport, reflection, feedback, saving, repeatPractice
 }
 struct LoadingTip {
   let id: String
@@ -22,8 +22,6 @@ enum TipBank {
     .init(id: "intake.finish", text: "Finish your answer with “that’s all.”", tags: [.intake, .ability]),
     .init(id: "ability.boundaries", text: "Share what feels manageable—and what doesn’t.", tags: [.ability]),
     .init(id: "ability.pace", text: "Your comfort and boundaries shape the practice.", tags: [.ability]),
-    .init(id: "review.listen", text: "Listen back before you begin.", tags: [.review]),
-    .init(id: "review.change", text: "Say START OVER to change your answers.", tags: [.review]),
     .init(id: "history.choice", text: "Using past sessions is your choice.", tags: [.history]),
     .init(id: "history.current", text: "What you need today comes first.", tags: [.history, .ability]),
     stop,
