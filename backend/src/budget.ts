@@ -3,7 +3,7 @@ import {dirname} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {randomUUID} from 'node:crypto';
 interface Entry {id:string;kind:string;reserved_micro:number;charged_micro:number;status:'reserved'|'settled';created_at:string;details:unknown;usage?:unknown}
-interface Ledger {version:1;limit_micro:number;suspended?:boolean;entries:Entry[]}
+interface Ledger {version:1;limit_micro:number;suspended?:boolean;entries:Entry[];approval_changes?:Array<{previous_limit_micro:number;limit_micro:number;approved_at:string;reason:string}>}
 export class TestBudget {
  constructor(public path:string){}
  static initialize(path:string,limitUSD:number){
@@ -12,6 +12,17 @@ export class TestBudget {
   const budget=new TestBudget(path);if(budget.snapshot().limit_micro!==Math.floor(limitUSD*1e6))throw Error('Existing cumulative approval differs; refusing to reset ledger');return budget;
  }
  snapshot():Ledger {return JSON.parse(readFileSync(this.path,'utf8'))}
+ // Invoke only for an explicit new user approval, never from startup or a request handler.
+ increaseApproval(limitUSD:number,reason:string):Ledger {
+  const micro=Math.floor(limitUSD*1e6);
+  if(!Number.isSafeInteger(micro)||micro<=0||!reason.trim())throw Error('Invalid explicit budget approval');
+  return this.update(ledger=>{
+   if(micro<ledger.limit_micro)throw Error('Approval increase cannot lower or reset the existing cap');
+   if(micro===ledger.limit_micro)return ledger;
+   (ledger.approval_changes??=[]).push({previous_limit_micro:ledger.limit_micro,limit_micro:micro,approved_at:new Date().toISOString(),reason});
+   ledger.limit_micro=micro;return ledger;
+  });
+ }
  private update<T>(fn:(ledger:Ledger)=>T):T {
   const lock=this.path+'.lock';let fd:number;
   try{fd=openSync(lock,'wx',0o600)}catch{throw Error('Budget ledger is locked; billable work stopped')}
