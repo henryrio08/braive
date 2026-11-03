@@ -20,3 +20,13 @@ test('completed jobs remain succeeded; stale cleanup cannot remove a repair cont
  releaseGeneration('a',old,running);assert.equal(running.get('a'),repair);
  releaseGeneration('a',repair,running);jobs.get('a')!.status='succeeded';cancelGeneration('a',jobs,running);assert.equal(jobs.get('a')!.status,'succeeded');
 });
+
+test('identical generation retries reuse the job while changed details conflict',async()=>{
+ const {repeatedGeneration}=await import('../src/job-lifecycle.js');
+ const {jobs}=fixture();
+ const input={session_id:'a',revision:1,fear_description:'Original situation'} as import('../../docs/handoff/contracts.js').PlanRequest;
+ const requests=new Map([['a',input]]);
+ assert.equal(repeatedGeneration({...input},jobs,requests),jobs.get('a'));
+ assert.throws(()=>repeatedGeneration({...input,fear_description:'Changed situation'},jobs,requests),/different practice details/);
+ assert.equal(repeatedGeneration({...input,revision:2},jobs,requests),undefined);
+});

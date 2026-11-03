@@ -7,7 +7,8 @@ struct HeadPose {
   mutating func update(_ orientation: simd_quatf) -> simd_quatf {
     latest = orientation
     if reference == nil { reference = orientation }
-    return simd_normalize(reference!.inverse * orientation)
+    // The measured attitude delta must be inverted for the camera's world rotation.
+    return simd_normalize((reference!.inverse * orientation).inverse)
   }
   mutating func recenter() -> simd_quatf {
     reference = latest

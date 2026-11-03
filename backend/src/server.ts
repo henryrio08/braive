@@ -1,5 +1,5 @@
 import {activeBudget} from './budget.js';
-import {cancelGeneration,releaseGeneration,supersedeGeneration} from './job-lifecycle.js';
+import {cancelGeneration,releaseGeneration,supersedeGeneration,repeatedGeneration} from './job-lifecycle.js';
 import {PhoneTestWindow} from './phone-test-window.js';
 import {canonicalSceneReferences} from './scene-references.js';
 import {assertCurrentDialogue,dialogueContext} from './dialogue.js';
@@ -42,6 +42,7 @@ app.use((req,_res,next)=>{
 });
 const approved=new Map<string,{plan:SessionPlan,scene:SceneSpec,audio:AudioPlan}>();
 const attempts=new Map<string,{deadline:number,repairs:number}>();
+const requests=new Map<string,PlanRequest>();
 const generationLimitMs=10*60*1000;
 const jobs=new Map<string,Job>(); const running=new Map<string,AbortController>(); const revisions=new Map<string,number>();
 
@@ -96,12 +97,16 @@ app.post(['/v1/session-plans','/v1/scene-revisions'],(req,res,next)=>{
   validate('PlanRequest',req.body); const input:PlanRequest=req.body;
   if(!input.use_history && input.relevant_history.length) throw new AppError('INVALID_INPUT','Declined history must be empty');
   if(input.chained_rerun && !input.parent_session_id) throw new AppError('INVALID_INPUT','Chained session needs parent');
-  if((revisions.get(input.session_id)??0)>=input.revision) throw new AppError('CONFLICT','Revision must increase',[],409);
+  if((revisions.get(input.session_id)??0)>input.revision) throw new AppError('CONFLICT','Revision must increase',[],409);
+  const repeated=repeatedGeneration(input,jobs,requests);
+  if(repeated){res.status(202).json(repeated);return;}
+  if(revisions.get(input.session_id)===input.revision)throw new AppError('CONFLICT','Revision must increase',[],409);
   supersedeGeneration(input.session_id,jobs,running);
   revisions.set(input.session_id,input.revision);
   const job:Job={job_id:randomUUID(),session_id:input.session_id,revision:input.revision,status:'running',stage:'Starting generation'};
   attempts.set(job.job_id,{deadline:Date.now()+generationLimitMs,repairs:0});
   jobs.set(job.job_id,job); const controller=new AbortController(); running.set(job.job_id,controller);
+  requests.set(job.job_id,structuredClone(input));
   const timer=setTimeout(()=>controller.abort(new Error('Ten-minute generation ceiling reached')),generationLimitMs);
   void generate(input,job,controller.signal).catch(e=>{
    if(job.status==='cancelled') return;
@@ -199,7 +204,7 @@ wss.on('connection',(client:WebSocket)=>{
  client.on('close',close);client.on('error',close);upstream.on('close',(code,reason)=>{clearTimeout(audioTimer);clearTimeout(timeout);console.log('[voice] closed',JSON.stringify({code,reason:reason.toString().slice(0,200),audio_bytes:audioBytes,wall_seconds:(Date.now()-voiceStarted)/1000,audio_seconds:audioBytes/48000}));client.close(1011,('Transcription '+code+': '+reason.toString()).slice(0,110));});upstream.on('error',(error)=>{clearTimeout(audioTimer);clearTimeout(timeout);console.warn('[voice] transport error:',error.message);client.close(1011,'Transcription transport unavailable');});
 });
 // Bound completed jobs; never store raw audio.
-setInterval(()=>{if(jobs.size>100)for(const [id,j] of jobs){if(!running.has(id)){jobs.delete(id);attempts.delete(id);approved.delete(j.session_id);revisions.delete(j.session_id);provenance.delete(j.session_id);}if(jobs.size<=100)break;}},60000).unref();
+setInterval(()=>{if(jobs.size>100)for(const [id,j] of jobs){if(!running.has(id)){jobs.delete(id);requests.delete(id);attempts.delete(id);approved.delete(j.session_id);revisions.delete(j.session_id);provenance.delete(j.session_id);}if(jobs.size<=100)break;}},60000).unref();
 server.listen(Number(process.env.PORT??8787),process.env.HOST??'127.0.0.1',()=>{
  const address=server.address();
  console.log(`Braive backend listening on ${typeof address==='object'&&address?address.port:process.env.PORT??8787}; Meta key ${process.env.MODEL_API_KEY?'configured':'missing'}`);

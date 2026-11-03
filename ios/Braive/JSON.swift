@@ -79,6 +79,33 @@ struct API {
   var base: String
   var token: String
   var session: URLSession = .shared
+  static func isTransientConnection(_ error: Error) -> Bool {
+    let error = error as NSError
+    return error.domain == NSURLErrorDomain && [
+      URLError.timedOut.rawValue, URLError.networkConnectionLost.rawValue,
+      URLError.notConnectedToInternet.rawValue, URLError.cannotConnectToHost.rawValue,
+      URLError.cannotFindHost.rawValue, URLError.dnsLookupFailed.rawValue,
+    ].contains(error.code)
+  }
+  /// Only read requests and idempotent generation submissions may be replayed.
+  /// The caller supplies the original deadline; reconnecting never extends it.
+  func callResuming(_ path: String, _ body: JSON? = nil, deadline: Double,
+    retryDelay: Duration = .seconds(1), onReconnect: (@MainActor () -> Void)? = nil) async throws -> JSON {
+    guard body == nil || ["/v1/session-plans", "/v1/scene-revisions"].contains(path) else {
+      throw URLError(.unsupportedURL)
+    }
+    while true {
+      try Task.checkCancellation()
+      let remaining = deadline - ProcessInfo.processInfo.systemUptime
+      guard remaining > 0 else { throw URLError(.timedOut) }
+      do { return try await call(path, body, timeout: min(8, remaining)) }
+      catch {
+        guard Self.isTransientConnection(error), ProcessInfo.processInfo.systemUptime < deadline else { throw error }
+        await onReconnect?()
+        try await Task.sleep(for: retryDelay)
+      }
+    }
+  }
   func call(_ path: String, _ body: JSON? = nil, method: String? = nil, timeout: TimeInterval = 35) async throws -> JSON {
     try Task.checkCancellation()
     guard let url = URL(string: base + path), ["http", "https"].contains(url.scheme ?? "") else {

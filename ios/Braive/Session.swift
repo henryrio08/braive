@@ -289,6 +289,11 @@ import SwiftUI
     Task {
       defer { connecting = false }
       do {
+        connection = "Connecting to your Mac…"
+        do { _ = try await api.call("/health", timeout: 5) }
+        catch {
+          throw world.failure("Couldn’t reach the Mac. Check Braive’s Local Network permission and the connection address in Settings.")
+        }
         connection = "Preparing on-device voice…"
         try await audio.start(api: api)
         setupNotice = ""
@@ -693,12 +698,24 @@ import SwiftUI
     )
     generation = Task {
       do {
-        let job = try await api.call("/v1/session-plans", request())
+        let job: JSON
+        do {
+          job = try await api.callResuming("/v1/session-plans", request(),
+            deadline: min(generationDeadline, ProcessInfo.processInfo.systemUptime + 20)) {
+              self.message = "Reconnecting to your Mac…"
+            }
+        } catch {
+          if API.isTransientConnection(error) {
+            throw world.failure("Couldn’t reach the Mac. Check Braive’s Local Network permission and the connection address in Settings.")
+          }
+          throw error
+        }
         guard !Task.isCancelled, owner == sessionID, rev == revision else {
           _ = try? await api.call("/v1/jobs/" + job["job_id"].text, method: "DELETE")
           return
         }
         jobID = job["job_id"].text
+        message = "Preparing your scene…"
         while !Task.isCancelled {
           guard ProcessInfo.processInfo.systemUptime < generationDeadline else {
             _ = try? await api.call("/v1/jobs/" + jobID, method: "DELETE")
@@ -707,7 +724,9 @@ import SwiftUI
             ])
           }
           try await Task.sleep(for: .milliseconds(600))
-          let j = try await api.call("/v1/jobs/" + jobID, timeout: max(0.1, min(35, generationDeadline - ProcessInfo.processInfo.systemUptime)))
+          let j = try await api.callResuming("/v1/jobs/" + jobID, deadline: generationDeadline) {
+            self.message = "Reconnecting to your Mac. Scene preparation will continue."
+          }
           guard owner == sessionID, rev == revision, !Task.isCancelled else { return }
           message = j["stage"].text + " · Say hey builder to add details"
           if j["status"].text == "failed" {
@@ -746,8 +765,15 @@ import SwiftUI
               }
               try world.load(result["scene"], plan: result["plan"])
             } catch {
-              _ = try await api.call(
-                "/v1/jobs/" + jobID + "/validation", JSON(["message": error.localizedDescription]))
+              do {
+                _ = try await api.call(
+                  "/v1/jobs/" + jobID + "/validation", JSON(["message": error.localizedDescription]),
+                  timeout: max(0.1, min(8, generationDeadline - ProcessInfo.processInfo.systemUptime)))
+              } catch {
+                // The repair may already be running if its acknowledgement was lost.
+                // Poll its existing job; never blindly repeat a paid repair request.
+                if !API.isTransientConnection(error) { throw error }
+              }
               continue
             }
             guard ProcessInfo.processInfo.systemUptime < generationDeadline else { throw world.failure("Scene loading exceeded the ten-minute readiness deadline") }

@@ -1,5 +1,14 @@
-import type {Job} from '../../docs/handoff/contracts.js';
+import type {Job,PlanRequest} from '../../docs/handoff/contracts.js';
+import {isDeepStrictEqual} from 'node:util';
 import {AppError} from './contracts.js';
+
+/** A lost acknowledgement must not turn a network retry into another paid generation. */
+export function repeatedGeneration(input:PlanRequest,jobs:Map<string,Job>,requests:Map<string,PlanRequest>):Job|undefined {
+ const job=[...jobs.values()].find(j=>j.session_id===input.session_id&&j.revision===input.revision);
+ if(!job)return;
+ if(!isDeepStrictEqual(requests.get(job.job_id),input))throw new AppError('CONFLICT','This revision already has different practice details',[],409);
+ return job;
+}
 
 /** Reject before changing any existing session. A replacement reuses its own slots. */
 export function supersedeGeneration(sessionID:string,jobs:Map<string,Job>,running:Map<string,AbortController>,limit=3) {
