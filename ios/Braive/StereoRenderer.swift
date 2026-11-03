@@ -26,7 +26,16 @@ struct StereoWorld: UIViewRepresentable {
     var size = CGSize.zero
     init(_ world: World) { self.world = world }
     func configure(_ view: MTKView) {
-      guard let device = view.device, let library = device.makeDefaultLibrary() else { return }
+      guard let device = view.device else { return }
+      #if SWIFT_PACKAGE
+      // Linux xtool cannot invoke Apple's offline Metal compiler. Compile the
+      // same bundled shader on the iPhone; Xcode keeps its precompiled library.
+      guard let sourceURL = Bundle.module.url(forResource: "Stereo", withExtension: "metal"),
+        let source = try? String(contentsOf: sourceURL, encoding: .utf8),
+        let library = try? device.makeLibrary(source: source, options: nil) else { return }
+      #else
+      guard let library = device.makeDefaultLibrary() else { return }
+      #endif
       queue = device.makeCommandQueue()
       let p = MTLRenderPipelineDescriptor()
       p.vertexFunction = library.makeFunction(name: "stereoVertex")

@@ -1,0 +1,16 @@
+version: 1
+bundleID: edu.uiuc.braive
+product: Braive
+infoPath: xtool-Info.plist
+iconPath: ios/Braive/Assets.xcassets/AppIcon.appiconset/AppIcon.png
+resources:
+  - ios/Braive/Assets.xcassets/BrandMark.imageset/BrandMark.png
+  - ios/Braive/Audio/crowd.wav
+  - ios/Braive/Audio/forest.wav
+  - ios/Braive/Audio/piano.wav
+  - ios/Braive/Audio/room.wav
+  - ios/Braive/Audio/whoosh.wav
+  - ios/Braive/Audio/wind.wav
+  - ios/Braive/Resources/asset_manifest.json
+  - ios/Braive/Resources/GLTFKit2-LICENSE.txt
+  - ios/Braive/Resources/LowPoly
