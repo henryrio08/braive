@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { sceneIssues, planIssues, validate, AppError, outputSchema } from '../src/contracts.js';
+import { sceneIssues, planIssues, validate, validateProviderOutput, AppError, outputSchema } from '../src/contracts.js';
 import {assetManifest} from '../src/assets.js';
 import { model } from '../src/meta.js';
 import type { SessionPlan, SceneSpec, AudioPlan } from '../../docs/handoff/contracts.js';
@@ -32,6 +32,12 @@ test('provider prompts include only reachable schema definitions',()=>{
  assert.ok(JSON.stringify(audio).length<6000);
  assert.ok(!JSON.stringify(audio).includes('#/components/'));
  assert.ok(outputSchema('SessionPlan').$defs.Character.required.includes('asset_id'));
+});
+test('new output enforces review and collision metadata while saved schemas stay additive',()=>{
+ const generated=outputSchema('SceneSpec');
+ assert.ok(generated.$defs.ScenarioStep.required.includes('review_viewpoint_id'));
+ assert.ok(generated.$defs.SceneNode.required.includes('collision_role'));
+ assert.throws(()=>validateProviderOutput('SceneSpec',{}),AppError);
 });
 
 

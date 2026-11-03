@@ -30,6 +30,17 @@ import Foundation
     guard reopened.records.count == 1, reopened.records[0]["reported_difficulty"].number == nil,
       reopened.records[0]["reported_readiness"].number == 0
     else { fatalError("Nullable ratings or durable recovery failed") }
+    var interrupted = row
+    interrupted["outcome"] = JSON("running")
+    interrupted["scene"] = JSON(["description":"Retained generated scene"])
+    interrupted["checkpoint"] = JSON(["version":1,"world":["elapsed":17.5],"scenario":["index":1]])
+    try store.save(interrupted,rebuild:false)
+    let recovered=SessionStore(root:dir)
+    guard recovered.recoverable?["checkpoint"]["world"]["elapsed"].number == 17.5,
+      recovered.recoverable?["outcome"].text == "interrupted" else { fatalError("Running checkpoint recovery failed") }
+    interrupted["outcome"] = JSON("completed")
+    try recovered.save(interrupted)
+    guard SessionStore(root:dir).recoverable == nil else { fatalError("Completed runs must not offer practice recovery") }
     print(
       "Storage checks passed: idempotent save, CSV escaping, reflection file, durable recovery, null versus zero ratings."
     )

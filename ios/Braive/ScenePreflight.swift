@@ -52,7 +52,8 @@ import UIKit
         guard let g = n.geometry else { return }
         g.materials = g.materials.map { source in
           let m = maskMaterial(source)
-          m.diffuse.contents = isFocus(n, focus) ? UIColor.red : UIColor.black
+          let rgb = isFocus(n, focus) ? "float3(1,0,0)" : "float3(0,0,0)"
+          m.shaderModifiers = [.fragment: "_output.color.rgb = " + rgb + ";"]
           return m
         }
       }
@@ -73,8 +74,8 @@ import UIKit
         let m = maskMaterial(source)
         m.shaderModifiers = [.fragment: """
           float distanceFromEye = max(0.0, -_surface.position.z);
-          _output.color = float4(distanceFromEye <= \(near) ? float3(1.0, 0.0, 0.0)
-            : distanceFromEye >= \(far) ? float3(0.0, 0.0, 1.0) : float3(0.0, 1.0, 0.0), 1.0);
+          _output.color.rgb = distanceFromEye <= \(near) ? float3(1.0, 0.0, 0.0)
+            : distanceFromEye >= \(far) ? float3(0.0, 0.0, 1.0) : float3(0.0, 1.0, 0.0);
           """]
         return m
         }
@@ -90,7 +91,7 @@ import UIKit
     }
   }
   private static func maskMaterial(_ source: SCNMaterial) -> SCNMaterial {
-    let m = SCNMaterial()
+    let m = source.copy() as! SCNMaterial
     m.lightingModel = .constant
     m.transparency = source.transparency
     m.transparencyMode = source.transparencyMode
@@ -127,7 +128,7 @@ import UIKit
   #if DEBUG
   /// Negative controls for the actual GPU passes, run only by explicit scene review.
   static func verifyRejections() throws {
-    for mode in ["occluded", "tiny", "flat"] {
+    for mode in ["occluded", "tiny", "flat", "transparent", "cutout"] {
       let root = SCNNode()
       var focus: [SCNNode] = []
       if mode == "flat" {
@@ -146,6 +147,23 @@ import UIKit
           let wall = SCNNode(geometry: SCNBox(width: 3, height: 3, length: 0.2, chamferRadius: 0))
           wall.position = SCNVector3(0, 1.6, -3); root.addChildNode(wall)
         }
+        if mode == "transparent" || mode == "cutout" {
+          let pane=SCNNode(geometry:SCNPlane(width:3,height:3))
+          let source=SCNMaterial();source.isDoubleSided=true
+          if mode == "transparent" { source.transparency=0 }
+          else {
+            let texture=UIGraphicsImageRenderer(size:CGSize(width:32,height:32)).image { context in
+              UIColor.white.setFill();context.fill(CGRect(x:0,y:0,width:32,height:32))
+              context.cgContext.clear(CGRect(x:4,y:4,width:24,height:24))
+            }
+            source.diffuse.contents=texture
+          }
+          pane.geometry?.materials=[source];pane.position=SCNVector3(0,1.6,-3);root.addChildNode(pane)
+        }
+      }
+      if mode == "transparent" || mode == "cutout" {
+        try check(root:root,focus:focus,position:SCNVector3(0,1.6,0),ipd:0.064,fov:70,aspect:1)
+        continue
       }
       var rejected = false
       do { try check(root: root, focus: focus, position: SCNVector3(0, 1.6, 0), ipd: 0.064, fov: 70, aspect: 1) }

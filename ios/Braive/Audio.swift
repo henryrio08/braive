@@ -185,12 +185,16 @@ import AVFoundation
     players = [:]
     pausedPlayers = []
   }
-  func play(_ name: String, loop: Bool = true, gain: Float = 0.14, key: String? = nil) {
+  func play(_ name: String, loop: Bool = true, gain: Float = 0.14, key: String? = nil, offset: Double = 0) {
     guard let url = Bundle.main.url(forResource: name, withExtension: "wav"),
       let p = try? AVAudioPlayer(contentsOf: url)
     else { return }
     p.numberOfLoops = loop ? -1 : 0
     p.volume = gain
+    if offset > 0, p.duration > 0 {
+      if !loop && offset >= p.duration { return }
+      p.currentTime = loop ? offset.truncatingRemainder(dividingBy:p.duration) : offset
+    }
     p.play()
     players[key ?? name]?.stop()
     players[key ?? name] = p
@@ -200,7 +204,7 @@ import AVFoundation
     play("forest")
     play("piano", gain: 0.12)
   }
-  func apply(_ plan: JSON) {
+  func apply(_ plan: JSON, active: Double = 0) {
     for p in players.values { p.stop() }
     players = [:]
     activeLayers = []
@@ -211,7 +215,7 @@ import AVFoundation
       guard cueAssets[layer["id"].text] == nil else { continue }
       cueAssets[layer["id"].text] = layer["asset_id"].text
     }
-    update(active: 0)
+    update(active: active)
   }
   func cue(_ id: String) { if let asset = cueAssets[id] { play(asset, loop: false, key: "cue:" + id) } }
   func update(active: Double) {
@@ -226,7 +230,7 @@ import AVFoundation
         continue
       }
       if activeLayers.insert(id).inserted {
-        play(asset, loop: l["loop"].bool ?? true, gain: Float(l["gain"].value) * 0.3, key: "layer:" + id)
+        play(asset, loop: l["loop"].bool ?? true, gain: Float(l["gain"].value) * 0.3, key: "layer:" + id, offset: max(0, active - start))
       }
       var gain = l["gain"].value
       for ramp in l["ramps"].list.sorted(by: {

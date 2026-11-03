@@ -35,6 +35,59 @@ import SwiftUI
   @Published var characterReplyPending = false
   var scenario: ScenarioRuntime?
   var scenarioCompletedAt: Double?
+  var appliedOperations: [JSON] = []
+  var lastCheckpoint = -Double.infinity
+  var pendingRecovery: JSON?
+  func requestRecovery() {
+    guard let saved = store.recoverable else { audio.say("There is no interrupted practice to resume."); return }
+    pendingRecovery = saved
+    go(.headset, "An interrupted practice is saved. Look forward and say yes to resume from its saved position.")
+  }
+  func checkpoint(force: Bool = false) {
+    guard phase == .active, record.object != nil, force || active - lastCheckpoint >= 5 else { return }
+    lastCheckpoint = active
+    do {
+      let scenarioState = try scenario.map { try JSONDecoder().decode(JSON.self,from:JSONEncoder().encode($0.snapshot)) } ?? JSON()
+      record["checkpoint"] = JSON(["version":1,"world":world.checkpoint().raw,"scenario":scenarioState.raw,
+        "fired":Array(fired),"beats":Array(beatFired),"terminal_at":scenarioCompletedAt as Any? ?? NSNull(),
+        "fear":fear,"ability":ability,"use_history":useHistory])
+      record["render_metrics"] = world.metrics.report
+      record["active_seconds"] = JSON(active); record["stop_count"] = JSON(stopCount)
+      record["observations"] = JSON(observations); record["turns"] = JSON(turns)
+      record["applied_operations"] = JSON(appliedOperations.map(\.raw))
+      try store.save(record,rebuild:false)
+    } catch { setupNotice = "Practice checkpoint could not be saved: " + error.localizedDescription }
+  }
+  func restorePractice(_ saved: JSON) throws {
+    guard saved["checkpoint"]["version"].value == 1 else { throw world.failure("Saved practice version is unsupported") }
+    newSession()
+    record=saved;plan=saved["plan"];scene=saved["scene"];audioPlan=saved["audio"]
+    sessionID=saved["session_id"].text; revision=Int(saved["scene_revision"].value)
+    try world.load(scene,plan:plan)
+    let definition=try JSONDecoder().decode(ScenarioDefinition.self,from:JSONEncoder().encode(scene["scenario"]))
+    scenario=try ScenarioRuntime(definition)
+    try scenario?.restore(JSONDecoder().decode(ScenarioRuntime.Snapshot.self,from:JSONEncoder().encode(saved["checkpoint"]["scenario"])))
+    appliedOperations=saved["applied_operations"].list
+    // Motion is restored from its exact clock/origin snapshot, not restarted by
+    // replaying old travel commands against the initial viewer position.
+    for op in appliedOperations where ["set_visible","set_material","character_action","set_environment"].contains(op["type"].text) {
+      world.operation(op,speak:{ _ in },sound:{ _ in })
+    }
+    try world.restore(saved["checkpoint"]["world"])
+    active=world.activeElapsed;remaining=max(0,plan["duration_sec"].value-active)
+    fired=Set(saved["checkpoint"]["fired"].list.map { Int($0.value) });beatFired=Set(saved["checkpoint"]["beats"].list.map { Int($0.value) })
+    scenarioCompletedAt=saved["checkpoint"]["terminal_at"].number
+    fear=saved["checkpoint"]["fear"].text;ability=saved["checkpoint"]["ability"].text
+    useHistory=saved["checkpoint"]["use_history"].bool ?? false;parent=saved["parent_session_id"].string
+    observations=saved["observations"].list.map(\.raw);turns=saved["turns"].list.map(\.raw);stopCount=Int(saved["stop_count"].value)
+    phase = .active;loading=false;pendingPhase=nil;intakeApproved=true;record["outcome"]=JSON("running")
+    message=scenario?.step.prompt ?? plan["task_instruction"].text
+    audio.setCommandPhrases(definition.steps.flatMap { $0.actions.flatMap(\.phrases) })
+    audio.apply(audioPlan,active:active)
+    world.scene.isPaused = !pauses.isEmpty
+    if pauses.isEmpty { world.resumePracticeClock() } else { audio.pause() }
+    checkpoint(force:true)
+  }
   var feedbackTask: Task<Void, Never>?
   var feedbackNonce = UUID()
   func cancelFeedback() { feedbackTask?.cancel(); feedbackTask = nil; feedbackNonce = UUID() }
@@ -87,6 +140,11 @@ import SwiftUI
         UserDefaults.standard.set(token, forKey: "token")
       }
       try? FileManager.default.removeItem(at: pairingURL)
+    }
+    world.onRuntimeIssue = { [weak self] reason in
+      guard let self else { return }
+      self.world.pausePracticeClock();self.world.scene.isPaused=true
+      self.fail(self.world.failure(reason))
     }
     world.onPortrait = { [weak self] portrait in self?.pause("portrait", enabled: portrait) }
     audio.onStatus = { [weak self] status in self?.setupNotice = status }
@@ -234,6 +292,8 @@ import SwiftUI
     if was && !pauses.isEmpty {
       speechFloor = SpeechFloor()
       world.pausePracticeClock()
+      active = world.activeElapsed
+      checkpoint(force:true)
       world.scene.isPaused = true
       audio.pause()
     } else if !was && pauses.isEmpty {
@@ -315,6 +375,7 @@ import SwiftUI
     }
     switch phase {
     case .lobby:
+      if VoiceAnswer.normalized(text) == "resume practice" { requestRecovery(); return }
       if words.contains("start") {
         repeatAfterHeadset = false
         go(.headset, headsetPrompt)
@@ -322,6 +383,11 @@ import SwiftUI
     case .headset:
       if VoiceAnswer.confirmsHeadset(text) {
         world.recenter()
+        if let saved = pendingRecovery {
+          pendingRecovery=nil
+          do { try restorePractice(saved) } catch { fail(error) }
+          return
+        }
         if repeatAfterHeadset { adapt() }
         else {
           newSession()
@@ -482,6 +548,7 @@ import SwiftUI
     speechFloor = SpeechFloor()
     narration = NarrationQueue()
     active = 0
+    appliedOperations=[];pendingRecovery=nil;lastCheckpoint = -.infinity
     stopCount = 0
     fired = []
     beatFired = []
@@ -591,6 +658,7 @@ import SwiftUI
                 "/v1/jobs/" + jobID + "/validation", JSON(["message": error.localizedDescription]))
               continue
             }
+            guard ProcessInfo.processInfo.systemUptime < generationDeadline else { throw world.failure("Scene loading exceeded the two-minute readiness deadline") }
             plan = result["plan"]
             scene = result["scene"]
             scenario = nextScenario; scenarioCompletedAt = nil; scenarioActions = []
@@ -684,9 +752,12 @@ import SwiftUI
     } else if phase == .active {
       active = world.activeElapsed
       let completedMotion = world.updateMotion()
+      scenario?.receiveCompletedMotions(completedMotion)
       let canAdvance = scenario?.step.conversation_target == nil || (turnTask == nil && !audio.narrated && speechFloor.available(now:now))
       if canAdvance, let update = scenario?.tick(at: active, completedMotions: completedMotion) { applyScenario(update) }
+      guard phase == .active else { return }
       audio.update(active: active)
+      checkpoint()
       remaining = max(0, plan["duration_sec"].value - active)
       for (i, e) in scene["events"].list.enumerated()
       where e["at_active_second"].value <= active && !fired.contains(i) {
@@ -706,6 +777,7 @@ import SwiftUI
     }
   }
   func operation(_ op: JSON) {
+    appliedOperations.append(op)
     world.operation(op, speak: { narration.enqueue($0, at: active) }, sound: { audio.cue($0) })
   }
   func applyScenario(_ update: ScenarioUpdate) {
@@ -714,10 +786,11 @@ import SwiftUI
     message = update.prompt
     scenarioActions = scenario?.step.actions.map(\.label) ?? []
     for op in update.operations { operation(op) }
-    narration.enqueue(update.prompt, at: active)
+    if update.announce { narration.enqueue(update.prompt, at: active) }
     if let action = update.actionID { observe("task_action", "app_event", "Scenario action: " + action) }
     observe("task_action", "app_event", "Scenario stage: " + update.stepID)
     if update.terminal { scenarioCompletedAt = active }
+    checkpoint(force:true)
   }
   func perform(_ text: String) {
     observe("speech_excerpt", "transcript", text)
@@ -819,6 +892,10 @@ import SwiftUI
       Task { _ = try? await api.call("/v1/jobs/" + id, method: "DELETE") }
     }
     outcome = early ? "user_ended" : "completed"
+    record["checkpoint"]=JSON()
+    record["outcome"]=JSON(outcome);record["active_seconds"]=JSON(active)
+    record["early_end"]=JSON(early);record["observations"]=JSON(observations)
+    if !plan["session_id"].text.isEmpty { do { try store.save(record) } catch { setupNotice=error.localizedDescription } }
     observe("active_duration", "app_event", active)
     observe("stop_count", "app_event", stopCount)
     go(.selfReport, "How difficult did that feel, from zero to ten? You can skip.")
@@ -867,6 +944,7 @@ import SwiftUI
       return
     }
     phase = .saving
+    record["render_metrics"] = world.metrics.report
     record["ended_at"] = JSON(ISO8601DateFormatter().string(from: Date()))
     record["active_seconds"] = JSON(active)
     record["stop_count"] = JSON(stopCount)

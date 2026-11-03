@@ -12,7 +12,10 @@ extension UIColor {
   }
 }
 @MainActor final class World: ObservableObject {
+  private(set) var metrics = RenderMetrics()
   var renderTime = 0.0
+  var onRuntimeIssue: ((String) -> Void)?
+  private var executionBlocked = false
   var eyeAspect = 1.0
   let scene = SCNScene(), head = SCNNode(), motion = CMMotionManager()
   let left = SCNNode(), right = SCNNode()
@@ -22,6 +25,12 @@ extension UIColor {
   private var pose = HeadPose()
   private var motionPaths: [String: ViewerPath] = [:]
   private var viewerMotion: ViewerMotion?
+  private var viewpointFade: (destination: SIMD3<Float>, startedAt: Double)?
+  var transitionShade: Float {
+    guard let fade = viewpointFade else { return 0 }
+    let t = min(1, max(0, (activeElapsed - fade.startedAt) / 0.6))
+    return Float(1 - abs(2 * t - 1))
+  }
   private var nodeMotions: [String: (motion: ViewerMotion, face: Bool)] = [:]
   private var practiceClock = PracticeClock()
   private var animationOrigin = 0.0
@@ -29,7 +38,7 @@ extension UIColor {
   private var attachmentRig: SCNNode?
   private var attachmentOrigin = SIMD3<Float>(repeating: 0)
   var activeElapsed: Double { practiceClock.elapsed }
-  var hasPendingMotion: Bool { viewerMotion != nil || !nodeMotions.isEmpty }
+  var hasPendingMotion: Bool { viewerMotion != nil || viewpointFade != nil || !nodeMotions.isEmpty }
   func beginPracticeClock() { animationOrigin = renderTime; practiceClock.begin() }
   func pausePracticeClock() { practiceClock.pause(); renderMotion() }
   func resumePracticeClock() { practiceClock.resume() }
@@ -82,7 +91,8 @@ extension UIColor {
     head.simdOrientation = pose.recenter()
   }
   func clear() {
-    motionPaths = [:]; viewerMotion = nil
+    executionBlocked=false
+    motionPaths = [:]; viewerMotion = nil; viewpointFade = nil
     nodeMotions = [:]
     attachmentRig = nil
     practiceClock = PracticeClock()
@@ -99,6 +109,21 @@ extension UIColor {
     m.isDoubleSided = value["double_sided"].bool ?? false
     m.lightingModel = .physicallyBased
     return m
+  }
+  func applyMaterial(_ value: JSON, to node: SCNNode, tint: Bool = true) {
+    if AssetLibrary.isCharacter(node) { if tint { AssetLibrary.recolor(node,hex:value["color"].string) };return }
+    func apply(_ n:SCNNode) {
+      guard let geometry=n.geometry else { return }
+      geometry.materials=geometry.materials.map { source in
+        let m=source.copy() as! SCNMaterial
+        if tint, let color=value["color"].string { m.diffuse.contents=UIColor(hex:color) }
+        if let roughness=value["roughness"].number { m.roughness.contents=roughness }
+        if let opacity=value["opacity"].number { m.transparency=CGFloat(opacity) }
+        if let sided=value["double_sided"].bool { m.isDoubleSided=sided }
+        return m
+      }
+    }
+    apply(node);node.enumerateChildNodes { n,_ in apply(n) }
   }
   func vector(_ j: JSON) -> SCNVector3 {
     let a = j.list.map { Float($0.value) }
@@ -171,7 +196,10 @@ extension UIColor {
         n = SCNNode(geometry: try geometry(j))
       }
       n.name = id
+      n.userData = NSMutableDictionary()
+      n.userData?["collision_role"] = j["collision_role"].string ?? "solid"
       if j["geometry"]["kind"].text != "asset" { n.geometry?.materials = [material(j["material"])] }
+      else { applyMaterial(j["material"],to:n,tint:false) }
       n.position = vector(j["position"])
       n.eulerAngles = vector(j["rotation_radians"])
       n.scale = vector(j["scale"])
@@ -233,11 +261,7 @@ extension UIColor {
       case "set_visible": built[op["node_id"].text]?.isHidden = !(op["visible"].bool ?? true)
       case "set_material":
         if let node = built[op["node_id"].text] {
-          if AssetLibrary.isCharacter(node) { AssetLibrary.recolor(node, hex: op["material"]["color"].string) }
-          else {
-            node.enumerateChildNodes { n, _ in n.geometry?.materials = [material(op["material"])] }
-            node.geometry?.materials = [material(op["material"])]
-          }
+          applyMaterial(op["material"],to:node)
         }
       case "viewpoint_transition": if let point = views[op["destination_id"].text] { initial = point }
       default: break
@@ -297,6 +321,17 @@ extension UIColor {
         "Resolved scene exceeds phone geometry budget: \(actualNodes) nodes, \(triangles) primitives, \(bytes) geometry bytes"
       )
     }
+    for j in list {
+      if let supportID=j["support_node_id"].string {
+        guard let node=built[j["id"].text],let support=built[supportID] else { throw failure("Declared support is missing") }
+        try RouteAudit.support(root:root,node:node,support:support)
+      }
+    }
+    try StageAudit.check(spec:spec,root:root,nodes:built,initial:initial,ipd:ipd,fov:fov,aspect:eyeAspect,applyMaterial:{ value,node in self.applyMaterial(value,to:node) })
+    var estimatedSubmissions=0
+    root.enumerateChildNodes { n,_ in estimatedSubmissions += n.geometry?.elements.count ?? 0 }
+    metrics=RenderMetrics()
+    metrics.estimatedSubmissionsPerEye=estimatedSubmissions
     clear()
     motionPaths = Dictionary(uniqueKeysWithValues: paths.map { ($0.id, $0) })
     scene.rootNode.addChildNode(root)
@@ -354,32 +389,44 @@ extension UIColor {
   }
 
   func operation(_ op: JSON, speak: (String) -> Void, sound: (String) -> Void) {
+    guard !executionBlocked else { return }
     switch op["type"].text {
     case "set_visible": nodes[op["node_id"].text]?.isHidden = !(op["visible"].bool ?? true)
     case "set_material":
       if let node = nodes[op["node_id"].text] {
-        if AssetLibrary.isCharacter(node) {
-          AssetLibrary.recolor(node, hex: op["material"]["color"].string)
-        } else {
-          node.enumerateChildNodes { n, _ in n.geometry?.materials = [material(op["material"])] }
-          node.geometry?.materials = [material(op["material"])]
-        }
+        applyMaterial(op["material"],to:node)
       }
     case "character_action": animate(op["character_id"].text, op["behavior"].text)
     case "viewpoint_transition":
-      if let p = viewpoints[op["destination_id"].text] { viewerMotion = nil; setViewerPosition(SIMD3(p.x,p.y,p.z)) }
+      if let p = viewpoints[op["destination_id"].text] { viewerMotion = nil; viewpointFade = (SIMD3(p.x,p.y,p.z), activeElapsed) }
     case "move_viewer":
       if let path = motionPaths[op["path_id"].text] {
         renderMotion()
+        viewpointFade=nil
         let forward = head.simdWorldOrientation.act(SIMD3<Float>(0,0,-1))
         let flat = SIMD3<Float>(forward.x,0,forward.z)
         let heading = simd_length(flat) > 0.001 ? simd_quatf(from: SIMD3<Float>(0,0,-1), to: simd_normalize(flat)) : simd_quatf(angle: 0, axis: SIMD3(0,1,0))
-        viewerMotion = ViewerMotion.start(path: path, origin: head.simdPosition, at: activeElapsed, frame: heading, replacing: viewerMotion)
+        let candidate = ViewerMotion.start(path: path, origin: head.simdPosition, at: activeElapsed, frame: heading, replacing: viewerMotion)
+        do {
+          let points=[head.position]+path.points.filter { candidate.startedAt+$0.at_seconds > activeElapsed }.map { p -> SCNVector3 in
+            let world=candidate.sample(at:candidate.startedAt+p.at_seconds).position
+            return SCNVector3(world.x,world.y,world.z)
+          }
+          try RouteAudit.check(root:scene.rootNode,points:points,walking:["walk","run"].contains(path.purpose),ignored:attachmentRig.map { [$0] } ?? [])
+          viewerMotion=candidate
+        } catch { executionBlocked=true;onRuntimeIssue?(error.localizedDescription) }
       }
     case "move_node":
       if let path = motionPaths[op["path_id"].text], let node = nodes[op["node_id"].text] {
         renderMotion()
-        nodeMotions[op["node_id"].text] = (ViewerMotion.start(path: path, origin: node.simdWorldPosition, at: activeElapsed, frame: node.simdWorldOrientation, replacing: nodeMotions[op["node_id"].text]?.motion), op["face_motion"].bool ?? false)
+        let candidate=ViewerMotion.start(path:path,origin:node.simdWorldPosition,at:activeElapsed,frame:node.simdWorldOrientation,replacing:nodeMotions[op["node_id"].text]?.motion)
+        let points=[node.worldPosition]+path.points.filter { candidate.startedAt+$0.at_seconds > activeElapsed }.map { p -> SCNVector3 in
+          let world=candidate.sample(at:candidate.startedAt+p.at_seconds).position
+          return SCNVector3(world.x,world.y,world.z)
+        }
+        do { try RouteAudit.check(root:scene.rootNode,points:points.map { SCNVector3($0.x,$0.y+1.6,$0.z) },walking:["walk","run"].contains(path.purpose),ignored:[node]) }
+        catch { executionBlocked=true;onRuntimeIssue?(error.localizedDescription);return }
+        nodeMotions[op["node_id"].text] = (candidate, op["face_motion"].bool ?? false)
       }
     case "set_environment":
       scene.background.contents = UIColor(hex: op["background_color"].text)
@@ -391,6 +438,44 @@ extension UIColor {
     default: break
     }
   }
+  func checkpoint() -> JSON {
+    func motionJSON(_ motion: ViewerMotion) -> [String: Any] {
+      ["path_id": motion.path.id, "origin": [motion.origin.x,motion.origin.y,motion.origin.z],
+       "started_at": motion.startedAt, "frame": [motion.frame.imag.x,motion.frame.imag.y,motion.frame.imag.z,motion.frame.real]]
+    }
+    return JSON(["elapsed":activeElapsed,"animation_origin":animationOrigin,"position":[head.position.x,head.position.y,head.position.z],
+      "nodes":nodes.mapValues { n in ["position":[n.position.x,n.position.y,n.position.z], "rotation":[n.eulerAngles.x,n.eulerAngles.y,n.eulerAngles.z]] },
+      "viewer_motion": viewerMotion.map(motionJSON) as Any? ?? NSNull(),
+      "node_motions":nodeMotions.mapValues { ["motion":motionJSON($0.motion),"face":$0.face] as [String:Any] },
+      "fade":viewpointFade.map { ["destination":[$0.destination.x,$0.destination.y,$0.destination.z],"started_at":$0.startedAt] as [String:Any] } as Any? ?? NSNull()])
+  }
+  func restore(_ saved: JSON) throws {
+    let elapsed = saved["elapsed"].value
+    guard elapsed.isFinite, elapsed >= 0 else { throw failure("Invalid saved practice time") }
+    func point(_ value: JSON) throws -> SIMD3<Float> {
+      guard value.list.count == 3, value.list.allSatisfy({ $0.number?.isFinite == true }) else { throw failure("Invalid saved position") }
+      return SIMD3(Float(value.list[0].value),Float(value.list[1].value),Float(value.list[2].value))
+    }
+    func motion(_ value: JSON) throws -> ViewerMotion? {
+      guard value.object != nil else { return nil }
+      guard let path = motionPaths[value["path_id"].text], value["frame"].list.count == 4 else { throw failure("Saved motion path is unavailable") }
+      let q=value["frame"].list.map { Float($0.value) }
+      guard q.allSatisfy(\.isFinite), value["started_at"].value.isFinite else { throw failure("Invalid saved motion") }
+      return ViewerMotion(path:path,origin:try point(value["origin"]),startedAt:value["started_at"].value,frame:simd_quatf(ix:q[0],iy:q[1],iz:q[2],r:q[3]))
+    }
+    practiceClock.restore(elapsed:elapsed);animationOrigin=saved["animation_origin"].value
+    setViewerPosition(try point(saved["position"]))
+    for (id,value) in saved["nodes"].object ?? [:] {
+      guard let node=nodes[id] else { throw failure("Saved scene node is unavailable") }
+      node.simdPosition=try point(value["position"]); node.simdEulerAngles=try point(value["rotation"])
+    }
+    viewerMotion=try motion(saved["viewer_motion"]);nodeMotions=[:]
+    for (id,value) in saved["node_motions"].object ?? [:] {
+      if let m=try motion(value["motion"]) { nodeMotions[id]=(m,value["face"].bool ?? false) }
+    }
+    if saved["fade"].object != nil { viewpointFade=(try point(saved["fade"]["destination"]),saved["fade"]["started_at"].value) }
+    renderMotion()
+  }
   func updateMotion() -> Set<String> {
     renderMotion()
     var completed = Set<String>()
@@ -401,6 +486,10 @@ extension UIColor {
     return completed
   }
   func renderMotion() {
+    if let fade = viewpointFade {
+      if activeElapsed - fade.startedAt >= 0.3 { setViewerPosition(fade.destination) }
+      if activeElapsed - fade.startedAt >= 0.6 { viewpointFade = nil }
+    }
     if let motion = viewerMotion { setViewerPosition(motion.sample(at: activeElapsed).position) }
     for (id, value) in nodeMotions {
       guard let node = nodes[id] else { continue }

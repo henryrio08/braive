@@ -164,7 +164,10 @@ struct ContentView: View {
           } else if s.canStop {
             Button("Pause practice") { panel = nil; s.stop() }
           }
-          if s.phase == .lobby { Button("Start practice") { panel = nil; send("start") } }
+          if s.phase == .lobby {
+            Button("Start practice") { panel = nil; send("start") }
+            if s.store.recoverable != nil { Button("Resume interrupted practice") { panel=nil; s.requestRecovery() } }
+          }
           if s.isCollectingAnswer {
             Button("Finish answer") { panel = nil; send("that's all") }
             Button("Replace answer") { panel = nil; send("start over") }

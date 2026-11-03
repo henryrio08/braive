@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Generate the Xcode project, bundled GLBs, and pinned GLTFKit2 dependency."""
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import hashlib,re,sys
 root=Path(__file__).resolve().parents[1]; app=root/'ios/Braive'; project=root/'ios/Braive.xcodeproj';project.mkdir(exist_ok=True)
 def uid(s): return hashlib.sha1(s.encode()).hexdigest()[:24].upper()
@@ -14,7 +14,7 @@ def add(name,content): objects.append(f'{uid(name)} = {{ {content} }};');return 
 files=[];sources=[];resources=[]
 for path in sorted(app.rglob('*')):
  if not path.is_file():continue
- relative=path.relative_to(app)
+ relative=PurePosixPath(path.relative_to(app).as_posix())
  if any(part.endswith('.xcassets') for part in relative.parts):continue
  if relative.parts[:2]==('Resources','LowPoly'):continue
  if 'Review' in relative.parts and '--include-review' not in sys.argv:continue

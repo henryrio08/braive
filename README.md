@@ -94,6 +94,8 @@ Headset readiness sets the current facing direction as the scene's forward direc
 
 During new practice, stages run automatically. The participant looks around and experiences movement without WALK/SIT/ASK/NEXT commands. Conversation stages accept ordinary speech and yield replies/transitions to a completed turn and quiet gap. Other stages do not turn arbitrary speech into character dialogue. Repeated narration is queued once; stale cues are dropped. A newer user turn supersedes a pending reply. STOP freezes the clock and motion until a fresh deliberate answer; phone controls remain available with the viewer removed. Legacy command scenes remain readable for historical review.
 
+Interrupted practice checkpoints are saved every five active seconds and at pauses/stage changes. At the lobby, say RESUME PRACTICE or use phone controls, then confirm the headset direction. Recovery loads the saved generated scene, stage and movement clock without requesting a fresh generation. Up to five active seconds may be lost in a sudden crash; pending model replies and mid-utterance speech are not replayed automatically. See [runtime follow-up](docs/runtime-followup-2026-11-02.md) for validation limits and device checks.
+
 Dialogue routing identifiers come from the validated request. The model supplies reply content and permitted world operations; it is not responsible for reproducing UUIDs or revisions. The server checks the approved scene and active revision before and after the model call, validates the final response schema, and verifies operation references.
 
 Reflection saves preserve words spoken in the same turn as the trailing SAVE REFLECTION command. Empty reflections prompt for content; SKIP moves on without writing a reflection file.
@@ -107,7 +109,7 @@ xcrun swiftc -module-cache-path /tmp/braive-swift-module-cache ios/Braive/HeadPo
 /tmp/braive-check-head-pose
 xcrun swiftc -module-cache-path /tmp/braive-swift-module-cache ios/Braive/VoiceInput.swift ios/Braive/SpeechCoordination.swift scripts/check-speech-coordination.swift -o /tmp/braive-check-speech-coordination
 /tmp/braive-check-speech-coordination
-xcrun swiftc -module-cache-path /tmp/braive-swift-module-cache ios/Braive/JSON.swift ios/Braive/VoiceInput.swift ios/Braive/ScenarioRuntime.swift scripts/check-scenarios.swift -o /tmp/braive-check-scenarios
+xcrun swiftc -module-cache-path /tmp/braive-swift-module-cache ios/Braive/JSON.swift ios/Braive/VoiceInput.swift ios/Braive/ScenarioRuntime.swift ios/Braive/ScenarioState.swift scripts/check-scenarios.swift -o /tmp/braive-check-scenarios
 /tmp/braive-check-scenarios
 ```
 

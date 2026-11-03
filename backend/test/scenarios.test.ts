@@ -58,9 +58,9 @@ test('platform conversation is not an acceptable substitute for a moving activit
  const issues=sceneIssues(plan,scene,audio);
  assert.ok(issues.some(i=>i.rule==='motion'));assert.ok(issues.some(i=>i.rule==='task_action'));
 });
-test('unplanned characters and skipped stages are rejected',()=>{
+test('unplanned characters and backward stage transitions are rejected',()=>{
  const {plan,scene,audio}=setup();scene.nodes.push({...scene.nodes[0],id:'random_instructor',role:'character',geometry:{kind:'asset',asset_id:'character.base.neutral_humanoid_01'}});
- scene.scenario!.steps[0].actions[0].next_step_id='land';
+ scene.scenario!.steps[1].actions[0].next_step_id='exit';
  const issues=sceneIssues(plan,scene,audio);
  assert.ok(issues.some(i=>i.rule==='unplanned_character'));assert.ok(issues.some(i=>i.rule==='sequence'));
 });
@@ -90,7 +90,8 @@ test('swim and race motion and AI-authored approved props use general capabiliti
  scene.nodes.push({...scene.nodes[0],id:'buoy',role:'prop',prop_name:'Ocean buoy',geometry:{kind:'sphere',radius:0.4}});
  assert.deepEqual(sceneIssues(plan,scene,audio),[]);
  for(const purpose of ['run','swim','walk','climb','ride','other'])validate('MotionPath',{...fixture.motion_paths[0],purpose});
- scene.scenario!.steps[0].start_operations=[{type:'move_node',node_id:'buoy',path_id:'freefall',face_motion:true}];
+ scene.motion_paths!.push({...structuredClone(scene.motion_paths![0]),id:'buoy_route'});
+ scene.scenario!.steps[0].start_operations=[{type:'move_node',node_id:'buoy',path_id:'buoy_route',face_motion:true}];
  assert.deepEqual(sceneIssues(plan,scene,audio),[]);
  scene.nodes.at(-1)!.prop_name='Unplanned object';
  assert.ok(sceneIssues(plan,scene,audio).some(i=>i.rule==='prop_match'));

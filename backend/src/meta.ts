@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import {activeBudget} from './budget.js';
-import { AppError, outputSchema, validate } from './contracts.js';
+import { AppError, outputSchema, validate, validateProviderOutput } from './contracts.js';
 import {completeDialogueResult,dialogueContentSchema} from './dialogue.js';
 import type {DialogueRequest} from '../../docs/handoff/contracts.js';
 export const authoring = readFileSync(new URL('../../docs/handoff/scene-authoring-prompts.md',import.meta.url),'utf8');
@@ -41,6 +41,7 @@ export async function model(schema: string, input: unknown, instructions: string
  let value; try { value=JSON.parse(content); } catch { throw new AppError('INVALID_MODEL_OUTPUT','Meta returned malformed JSON'); }
  if(schema==='DialogueResult')value=completeDialogueResult(input as DialogueRequest,value);
  validate(schema,value);
+ validateProviderOutput(schema,value);
  if(value.session_id && result.id) provenance.set(value.session_id,[...(provenance.get(value.session_id)??[]),result.id]);
  return value;
 }

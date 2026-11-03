@@ -1398,6 +1398,22 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 160
+          },
+          "collision_role": {
+            "type": "string",
+            "enum": [
+              "solid",
+              "none"
+            ],
+            "description": "Mark non-solid water/decoration none; otherwise loaded geometry blocks routes."
+          },
+          "support_node_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 80,
+            "description": "For a grounded/mounted object, the node providing actual support."
           }
         },
         "required": [
@@ -2722,6 +2738,33 @@
           },
           "audio": {
             "$ref": "#/components/schemas/AudioPlan"
+          },
+          "checkpoint": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": true
+          },
+          "render_metrics": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": true
+          },
+          "applied_operations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorldOperation"
+            }
+          },
+          "turns": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
           }
         },
         "required": [
@@ -3268,6 +3311,23 @@
             "minLength": 1,
             "maxLength": 80,
             "description": "Approved Character.id receiving natural user speech during this step only; omit for quiet experience stages."
+          },
+          "announce_on_entry": {
+            "type": "boolean",
+            "default": true
+          },
+          "review_viewpoint_id": {
+            "type": "string",
+            "maxLength": 80
+          },
+          "focus_node_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 80
+            },
+            "maxItems": 16,
+            "uniqueItems": true
           }
         },
         "required": [

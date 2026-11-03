@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import Ajv from 'ajv';
 import {assetIDs,characterIDs,generationCharacterIDs,assetManifest} from './assets.js';
+import {scenarioGraphIssues} from './scenario-graph.js';
 import addFormats from 'ajv-formats';
 import type { ValidationIssue, SceneSpec, SessionPlan, AudioPlan, WorldOperation } from '../../docs/handoff/contracts.js';
 export const document = JSON.parse(readFileSync(new URL('../../docs/handoff/openapi.json', import.meta.url), 'utf8'));
@@ -13,6 +14,14 @@ export class AppError extends Error {
 export function validate(name: string, value: unknown) {
  const check = ajv.getSchema(`braive#/components/schemas/${name}`) ?? ajv.compile({ $ref: `braive#/components/schemas/${name}` });
  if (!check(value)) throw new AppError('INVALID_MODEL_OUTPUT', `Invalid ${name}`, check.errors.map((e: any) => ({ path: e.instancePath, rule: e.keyword, message: e.message }))); 
+}
+const providerChecks=new Map<string,any>();
+/** Saved records retain additive legacy schemas; new model output must implement
+ * the advertised capability contract, not merely be asked to do so in prose. */
+export function validateProviderOutput(name:string,value:unknown) {
+ let check=providerChecks.get(name);
+ if(!check){check=ajv.compile(outputSchema(name));providerChecks.set(name,check);}
+ if(!check(value))throw new AppError('INVALID_MODEL_OUTPUT',`New ${name} is missing required capabilities`,check.errors.map((e:any)=>({path:e.instancePath,rule:e.keyword,message:e.message})));
 }
 export function sceneIssues(plan: SessionPlan, scene: SceneSpec, audio: AudioPlan): ValidationIssue[] {
  const issues: ValidationIssue[] = [];
@@ -43,6 +52,7 @@ export function sceneIssues(plan: SessionPlan, scene: SceneSpec, audio: AudioPla
   while(p && nodes.has(p)) { if(seen.has(p)) { fail(`/nodes/${i}`,'cycle','Cyclic hierarchy'); break; } seen.add(p); p=nodes.get(p)!.parent_id; }
   if(![...n.position,...n.rotation_radians,...n.scale].every(Number.isFinite) || n.scale.some(v=>v<=0)) fail(`/nodes/${i}`,'transform','Positive finite transforms required');
   const g=n.geometry;
+  if(n.support_node_id && (!nodes.has(n.support_node_id)||n.support_node_id===n.id))fail(`/nodes/${i}/support_node_id`,'reference','Support must name another loaded node');
   if(n.material.texture_asset_id)fail(`/nodes/${i}/material/texture_asset_id`,'capability','No texture assets are registered by this renderer');
   const approvedProp=!!n.prop_name&&!!plan.props?.includes(n.prop_name);
   if(n.prop_name&&!approvedProp)fail(`/nodes/${i}/prop_name`,'prop_match','Scene prop name must match an approved plan prop');
@@ -99,8 +109,6 @@ export function sceneIssues(plan: SessionPlan, scene: SceneSpec, audio: AudioPla
   if(planned && (scenario.initial_step_id!==planned[0].id || JSON.stringify(scenario.steps.map(s=>s.id))!==JSON.stringify(planned.map(s=>s.id))))fail('/scenario/steps','plan_match','Scenario must realize the approved stages in order');
   for(const [i,step] of scenario.steps.entries()){
    const actionIDs=new Set<string>();
-   const next=scenario.steps[i+1]?.id;
-   if(step.terminal!==(i===scenario.steps.length-1))fail(`/scenario/steps/${i}`,'terminal','Only the final approved stage is terminal');
    if(guided){
     if(step.actions.length)fail(`/scenario/steps/${i}/actions`,'guided','Guided experiences do not require local voice actions');
     if(!step.terminal&&!step.completion)fail(`/scenario/steps/${i}`,'guided','Each experience stage must advance automatically');
@@ -109,9 +117,12 @@ export function sceneIssues(plan: SessionPlan, scene: SceneSpec, audio: AudioPla
    if(step.conversation_target&&!chars.has(step.conversation_target))fail(`/scenario/steps/${i}`,'reference','Conversation target must be an approved character');
    if(step.conversation_target&&scenario.dialogue_policy!=='natural')fail(`/scenario/steps/${i}`,'conversation','A natural speaking window requires natural dialogue policy');
    if(guided&&step.conversation_target&&step.completion?.trigger!=='after_seconds')fail(`/scenario/steps/${i}`,'conversation','A natural speaking window advances on time after the conversation yields');
+   if(step.review_viewpoint_id&&!views.has(step.review_viewpoint_id))fail(`/scenario/steps/${i}/review_viewpoint_id`,'reference','Review viewpoint is missing');
+   if(step.review_viewpoint_id&&!step.focus_node_ids?.length)fail(`/scenario/steps/${i}/focus_node_ids`,'reference','Reviewed stages need explicit focal objects');
+   if(step.focus_node_ids?.some(id=>!nodes.has(id)))fail(`/scenario/steps/${i}/focus_node_ids`,'reference','Stage focal object is missing');
+
    const transitions=[...step.actions.map(a=>a.next_step_id),step.completion?.next_step_id].filter((x):x is string=>!!x);
-   if(transitions.some(id=>!steps.has(id)||id!==next))fail(`/scenario/steps/${i}`,'sequence','Transitions must advance to the next approved stage');
-   if(!step.terminal&&!transitions.includes(next!))fail(`/scenario/steps/${i}`,'progress','Every nonterminal stage must offer a way forward');
+   if(transitions.some(id=>!steps.has(id)||scenario.steps.findIndex(s=>s.id===id)<=i))fail(`/scenario/steps/${i}`,'sequence','Transitions must advance through the approved graph');
    if(planned && JSON.stringify([...step.actions.map(a=>a.id)].sort())!==JSON.stringify([...planned[i]?.action_ids??[]].sort()))fail(`/scenario/steps/${i}/actions`,'plan_match','Action IDs must match the approved stage');
    for(const action of step.actions){
     if(scenario.dialogue_policy==='on_request'&&action.phrases.some(p=>/^(ask\s|talk\s+to\s)/i.test(p.trim())))fail(`/scenario/steps/${i}/actions`,'reserved_command','ASK name and TALK TO name are reserved for live character conversation; use another phrase for local stage actions');
@@ -131,17 +142,19 @@ export function sceneIssues(plan: SessionPlan, scene: SceneSpec, audio: AudioPla
    if(completion?.trigger==='motion_complete' && (!paths.has(completion.motion_path_id??'') || !reachableOps.some(o=>(o.type==='move_viewer'||o.type==='move_node')&&o.path_id===completion.motion_path_id)))fail('/scenario','motion','Motion completion must reference an executed path');
    if(guided&&completion?.trigger==='motion_complete'&&!step.start_operations.some(o=>(o.type==='move_viewer'||o.type==='move_node')&&o.path_id===completion.motion_path_id))fail('/scenario','guided','An automatic movement stage must start its own completion path');
   }
+  if(!issues.some(i=>['reference','sequence','plan_match'].includes(i.rule)))issues.push(...scenarioGraphIssues(scene));
   if(plan.experience?.requires_motion && !ops.some(o=>o.type==='move_viewer'))fail('/scenario','motion','The requested activity requires actual viewer motion');
   if(plan.experience?.requires_motion){
    const origin=scene.viewpoints.find(v=>v.id===scene.initial_viewpoint_id)?.position;
    const moving=origin&&ops.some(o=>o.type==='move_viewer'&&paths.get(o.path_id)?.points.some(p=>Math.hypot(...p.position.map((x,i)=>x-(paths.get(o.path_id)?.coordinate_space==='relative'?0:origin[i])))>0.25));
    if(!moving)fail('/motion_paths','motion','A stationary path cannot satisfy a movement experience');
   }
-  if(plan.experience?.kind==='action' && scenario.dialogue_policy!=='disabled')fail('/scenario/dialogue_policy','task_focus','Action experiences run locally; optional conversation is reserved for conversation experiences');
+  if(guided&&plan.experience?.kind==='action' && scenario.dialogue_policy!=='disabled')fail('/scenario/dialogue_policy','task_focus','Action experiences run locally; optional conversation is reserved for conversation experiences');
   if(guided){
    const duration=scenario.steps.reduce((sum,s)=>sum+(s.completion?.trigger==='after_seconds'?s.completion.after_seconds??0:paths.get(s.completion?.motion_path_id??'')?.points.at(-1)?.at_seconds??0),0);
    if(duration>plan.duration_sec-3)fail('/scenario','clock','The full automatic experience must reach its completed goal within the session duration');
   }
+  if(scenario.dialogue_policy==='on_request'&&!plan.characters.length)fail('/scenario/dialogue_policy','reference','Optional conversation requires an approved character');
  }
  return issues;
 }
@@ -196,5 +209,7 @@ export function outputSchema(name: string): any {
  if(name==='SessionPlan'&&defs.ExperiencePlan)defs.ExperiencePlan.required=[...new Set([...defs.ExperiencePlan.required,'progression'])];
  if(name==='SceneSpec')root.required=[...new Set([...root.required,'scenario'])];
  if(name==='SceneSpec'&&defs.ScenarioSpec)defs.ScenarioSpec.required=[...new Set([...defs.ScenarioSpec.required,'progression'])];
+ if(name==='SceneSpec'&&defs.ScenarioStep)defs.ScenarioStep.required=[...new Set([...defs.ScenarioStep.required,'review_viewpoint_id','focus_node_ids','announce_on_entry'])];
+ if(name==='SceneSpec'&&defs.SceneNode)defs.SceneNode.required=[...new Set([...defs.SceneNode.required,'collision_role','support_node_id'])];
  return {...root,$defs:defs};
 }

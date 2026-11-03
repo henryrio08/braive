@@ -22,7 +22,7 @@ export type Geometry = ({ "kind": "box"; "size": Array<number> }) | ({ "kind": "
 
 export type Material = { "color": string; "roughness": number; "texture_asset_id"?: string; "opacity"?: number; "double_sided"?: boolean };
 
-export type SceneNode = { "id": string; "parent_id": string | null; "role": "environment" | "prop" | "character" | "task_focus"; "geometry": Geometry; "position": Array<number>; "rotation_radians": Array<number>; "scale": Array<number>; "material": Material; "animation": "none" | "idle" | "listen" | "speak" | "gesture" | "walk" | "run" | "swim" | "sit"; "description": string; "prop_name"?: string };
+export type SceneNode = { collision_role?: "solid" | "none"; support_node_id?: string | null; "id": string; "parent_id": string | null; "role": "environment" | "prop" | "character" | "task_focus"; "geometry": Geometry; "position": Array<number>; "rotation_radians": Array<number>; "scale": Array<number>; "material": Material; "animation": "none" | "idle" | "listen" | "speak" | "gesture" | "walk" | "run" | "swim" | "sit"; "description": string; "prop_name"?: string };
 
 export type WorldOperation = ({ "type": "set_visible"; "node_id": string; "visible": boolean }) | ({ "type": "set_material"; "node_id": string; "material": Material }) | ({ "type": "character_action"; "character_id": string; "behavior": "idle" | "listen" | "speak" | "gesture" | "walk" | "run" | "swim" | "sit" }) | ({ "type": "viewpoint_transition"; "destination_id": string; "transition": "fade" }) | ({ "type": "narrate"; "text": string }) | ({ "type": "play_sound"; "cue_id": string }) | ({ "type": "move_viewer"; "path_id": string }) | ({ "type": "move_node"; "node_id": string; "path_id": string; "face_motion": boolean }) | ({ "type": "set_environment"; "background_color": string; "fog_density": number; "ambient_intensity"?: number });
 
@@ -58,7 +58,7 @@ export type BuilderRevision = { "schema_version": "1"; "session_id": string; "re
 
 export type Reflection = { "id": string; "session_id": string; "created_at": string; "display_title": string; "topic": string; "relative_file_path": string; "transcript": string; "local_date": string; "local_time": string; "timezone": string };
 
-export type SessionRecord = { scene?: SceneSpec; audio?: AudioPlan; observations?: Array<Observation>; adaptation?: AdaptationResult | null; reflection_file?: string; reflection?: Record<string, unknown>; "schema_version": "1"; "session_id": string; "parent_session_id"?: string; "started_at": string; "ended_at": string; "plan": SessionPlan; "scene_revision": number; "active_seconds": number; "stop_count": number; "outcome": "completed" | "user_ended" | "interrupted" | "failed"; "reported_difficulty": number | null; "reported_readiness": number | null; "reflection_id"?: string; "feedback"?: FeedbackResult; "generation_provenance": { "mode": "live" | "replay"; "model_ids": Array<string>; "request_ids": Array<string> }; "use_history": boolean; "chained_rerun": boolean; "intensity_1_10": number; "topic_short": string; "early_end": boolean };
+export type SessionRecord = { checkpoint?: Record<string,unknown> | null; render_metrics?: Record<string,unknown> | null; applied_operations?: WorldOperation[]; turns?: Array<Record<string,unknown>>; scene?: SceneSpec; audio?: AudioPlan; observations?: Array<Observation>; adaptation?: AdaptationResult | null; reflection_file?: string; reflection?: Record<string, unknown>; "schema_version": "1"; "session_id": string; "parent_session_id"?: string; "started_at": string; "ended_at": string; "plan": SessionPlan; "scene_revision": number; "active_seconds": number; "stop_count": number; "outcome": "completed" | "user_ended" | "interrupted" | "failed"; "reported_difficulty": number | null; "reported_readiness": number | null; "reflection_id"?: string; "feedback"?: FeedbackResult; "generation_provenance": { "mode": "live" | "replay"; "model_ids": Array<string>; "request_ids": Array<string> }; "use_history": boolean; "chained_rerun": boolean; "intensity_1_10": number; "topic_short": string; "early_end": boolean };
 
 export type ValidationIssue = { "path": string; "rule": string; "message": string };
 
@@ -90,6 +90,6 @@ export type ScenarioAction = { "id": string; "label": string; "phrases": Array<s
 
 export type ScenarioCompletion = { "trigger": "after_seconds" | "motion_complete"; "after_seconds"?: number; "motion_path_id"?: string; "next_step_id": string };
 
-export type ScenarioStep = { "conversation_target"?: string; "id": string; "prompt": string; "terminal": boolean; "start_operations": Array<WorldOperation>; "actions": Array<ScenarioAction>; "completion"?: ScenarioCompletion };
+export type ScenarioStep = { conversation_target?: string; announce_on_entry?: boolean; review_viewpoint_id?: string; focus_node_ids?: string[]; "id": string; "prompt": string; "terminal": boolean; "start_operations": Array<WorldOperation>; "actions": Array<ScenarioAction>; "completion"?: ScenarioCompletion };
 
 export type ScenarioSpec = { "progression"?: "guided"; "objective": string; "initial_step_id": string; "dialogue_policy": "disabled" | "on_request" | "natural"; "steps": Array<ScenarioStep> };

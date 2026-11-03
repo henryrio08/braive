@@ -39,6 +39,14 @@ Current playback is non-spatial: omit AudioLayer.position. No scene texture IDs 
 - set_environment changes background/fog/optional ambient intensity at a meaningful boundary. Viewing distance and fog must match scene scale. Camera coordinates are eye positions (normally around 1.6m above a solid floor); choose seated/underwater/altitude positions only when the experience calls for them.
 - character_action.character_id is Character.id; move_node.node_id is a scene node ID; play_sound.cue_id is AudioLayer.id. The server may resolve an exact unique character-root/audio-asset alias. Unknown or ambiguous IDs remain invalid.
 
+## Native construction checks and tool dispatch
+
+- Declare exactly one plan_audio and compose_scene call in the supplied generation_phase (setup for the first revision, builder_revision afterward), plus exactly one generate_feedback and adapt_session call in after_session. The backend executes these typed arguments only in that phase. It never runs post-session tools during setup. Native repair uses the approved audio and coordinator plan.
+- Mark every node collision_role solid or none. Water surfaces and non-solid decorative sheets use none; walls, furniture and floors normally remain solid. supply support_node_id for an object resting on another object; use null for terrain, free-floating objects or an assembly component whose support comes from its parent.
+- Each stage supplies review_viewpoint_id, focus_node_ids and announce_on_entry. The review viewpoint is the actual usable view for that stage; its focal objects must remain visible after the stage operations. Keep routine stages silent with announce_on_entry=false (HELP can still repeat their prompt).
+- Walking/running paths need floor support and roughly 0.25m body radius/1.6m eye height. Swimming/falling/gliding need clearance but not artificial floor support. Keep routes clear of actors and props. The native loader checks mesh segments and support, and execution rechecks relative routes at the actual captured heading. Failed clearance stops the experience with a recoverable error; do not remove requested task geometry to evade it.
+- The graph must have a reachable completed state from every reachable stage/motion-owner state. A path on a different branch or displaced by another path cannot satisfy completion. One path ID belongs to one actor/viewer. Put movement in stage operations, not global timed events.
+
 ## Validation and limits
 
 Use only supplied schemas/capabilities. No executable code, arbitrary URLs, invented mesh/voice IDs or ad hoc output fields. The runtime supplies trajectories/stages, not arbitrary physics or full-body tracking. A genuine capability limitation must not become an unrelated stationary conversation.

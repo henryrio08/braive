@@ -14,11 +14,11 @@ Changes on `codex/braive-work` address concrete defects from the independent rev
 
 ## Boundaries and remaining work
 
-These fixes do not implement the new visual construction system. Structural motion reachability is improved but is not a complete branch-sensitive temporal proof. Swept route clearance, support geometry, richer branching/automatic behavior and reliable later-stage visual checks are specified in `visual-construction-design.md`. Coordinate behavior changes with the partner's current work.
+The implementation follow-up is described in `runtime-followup-2026-11-02.md`. It integrates the partner's `8d11d55` guided-experience update and covers the code gaps previously listed here: motion-owner graph validation, bounded mesh route/support checks, later-stage review, pause-aware fades, supported material overrides, resource telemetry, typed tool dispatch, and periodic checkpoints with explicit recovery.
 
-Viewpoint transitions still relocate without the declared fade. Asset material overrides remain intentionally narrow, alpha-cutout texture semantics need GPU review, and sustained memory/draw-call accounting needs the actual device. These limitations are documented rather than represented as fixed or measured. Runtime tool calls still describe a fixed backend pipeline rather than a general dispatcher; the proposed construction design separates internal artifacts from the public wire API.
+The remaining gate is verification on Apple's frameworks/GPU and the physical phone. Native diagnostic controls have been added for transparent/cutout surfaces, thin route barriers, and unsupported walking, but have not run on this Windows host. Actual SceneKit draw-call counts require a GPU capture; the app labels its submission count as an estimate. Mesh segment probes are bounded checks, not a general collision/physics solver. These are explicit evidence limits, not claims of device success.
 
-Session scene/audio persistence is implemented; periodic active-progress checkpoints and crash-resuming an experience are not. Separate local ledgers are now explicitly accepted, not synchronized across devices.
+The visual construction system remains design-only. Separate local ledgers remain explicitly accepted, not synchronized across devices.
 
 ## Verification
 

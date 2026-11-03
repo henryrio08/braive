@@ -27,14 +27,17 @@ import Foundation
     records.sort { $0["started_at"].text < $1["started_at"].text }
     try? rebuildCSV()
   }
-  func save(_ record: JSON) throws {
+  var recoverable: JSON? {
+    records.reversed().first { $0["outcome"].text == "interrupted" && $0["checkpoint"]["version"].value == 1 && $0["scene"].object != nil }
+  }
+  func save(_ record: JSON, rebuild: Bool = true) throws {
     let id = record["session_id"].text
     guard UUID(uuidString: id) != nil else { throw CocoaError(.fileWriteInvalidFileName) }
     try JSONEncoder().encode(record).write(
       to: root.appendingPathComponent("Sessions/\(id).json"), options: .atomic)
     records.removeAll { $0["session_id"].text == id }
     records.append(record)
-    try rebuildCSV()
+    if rebuild { try rebuildCSV() }
   }
   func reflection(_ text: String, topic: String) throws -> JSON {
     let date = Date()

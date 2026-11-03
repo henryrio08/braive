@@ -43,6 +43,7 @@ struct StereoWorld: UIViewRepresentable {
     }
     func mtkView(_ view: MTKView, drawableSizeWillChange newSize: CGSize) { size = .zero }
     func draw(in view: MTKView) {
+      let encodedAt=ProcessInfo.processInfo.systemUptime
       world.renderMotion()
       let frameTime = world.animationTime
       guard let device = view.device, let drawable = view.currentDrawable, let queue, let pipeline,
@@ -94,8 +95,17 @@ struct StereoWorld: UIViewRepresentable {
       encoder.setFragmentTexture(textures[1], index: 1)
       var lens = SIMD4<Float>(world.lensK1, world.lensK2, 0.5, 0.5)
       encoder.setFragmentBytes(&lens, length: MemoryLayout<SIMD4<Float>>.size, index: 0)
+      var shade = world.transitionShade
+      encoder.setFragmentBytes(&shade, length: MemoryLayout<Float>.size, index: 1)
       encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
       encoder.endEncoding()
+      world.metrics.eyeTextureBytes=textures.reduce(0) { $0+$1.width*$1.height*4 }+depths.reduce(0) { $0+$1.width*$1.height*4 }
+      world.metrics.frame(cpuMS:(ProcessInfo.processInfo.systemUptime-encodedAt)*1000,metalBytes:device.currentAllocatedSize)
+      let metrics=world.metrics
+      buffer.addCompletedHandler { command in
+        let ms=max(0,command.gpuEndTime-command.gpuStartTime)*1000
+        Task { @MainActor in metrics.gpu(milliseconds:ms) }
+      }
       buffer.present(drawable)
       buffer.commit()
     }
