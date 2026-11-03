@@ -179,6 +179,9 @@ extension UIColor {
       guard environment.fog.start_meters < environment.fog.end_meters, environment.fog.end_meters <= viewDistance else { throw failure("Invalid explicit environment distances") }
     }
     let root = SCNNode()
+    let validationScene = SCNScene()
+    validationScene.rootNode.addChildNode(root)
+    defer { if root.parent === validationScene.rootNode { root.removeFromParentNode() } }
     var built: [String: SCNNode] = [:]
     let list = spec["nodes"].list
     let props = Set(plan["props"].list.map(\.text))
@@ -283,6 +286,7 @@ extension UIColor {
       }
     }
     let focusEntries = list.filter { $0["role"].text == "task_focus" }
+    SCNTransaction.flush()
     // A procedural object's nearby named parts form one visible target, like a GLB subtree.
     // Otherwise a buoy's own stripe/cap is incorrectly counted as an occluder of the buoy.
     let focus = list.filter { entry in

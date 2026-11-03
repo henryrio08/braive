@@ -9,6 +9,8 @@ enum RatingAnswer: Equatable {
     if ["skip", "skip please", "no thanks", "prefer not to say"].contains(key) { return .skip }
     let names = ["zero","one","two","three","four","five","six","seven","eight","nine","ten"]
     let words = key.split(separator: " ").map(String.init)
+    let outsideRange = Set(["eleven","twelve","thirteen","fourteen","fifteen","sixteen","seventeen","eighteen","nineteen","twenty","thirty","forty","fifty","hundred"])
+    guard words.allSatisfy({ !outsideRange.contains($0) }) else { return .invalid }
     // A single clear score, including “I'd say five”. Reject ranges and out-of-range numbers.
     let numbers = words.compactMap { Int($0) ?? names.firstIndex(of: $0) }
     guard numbers.count == 1, let value = numbers.first, (0...10).contains(value),

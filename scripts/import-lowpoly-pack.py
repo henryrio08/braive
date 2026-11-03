@@ -31,17 +31,19 @@ def inspect_glb(path):
             if not texture.is_file() or texture.is_symlink() or not texture.resolve().is_relative_to(path.parent.resolve()) or texture.stat().st_size>2_000_000 or not texture.read_bytes().startswith(b'\x89PNG\r\n\x1a\n'): raise ValueError(f'Invalid bundled texture: {path}')
     views = gltf.get('bufferViews', [])
     for v in views:
-        if v.get('buffer', 0) != 0 or v.get('byteOffset', 0) + v['byteLength'] > len(binary): raise ValueError(f'Invalid buffer view: {path}')
+        if v.get('buffer', 0) != 0 or v.get('byteOffset', 0)<0 or v['byteLength']<0 or v.get('byteOffset', 0) + v['byteLength'] > len(binary): raise ValueError(f'Invalid buffer view: {path}')
     sizes={5120:1,5121:1,5122:2,5123:2,5125:4,5126:4}; widths={'SCALAR':1,'VEC2':2,'VEC3':3,'VEC4':4,'MAT2':4,'MAT3':9,'MAT4':16}
     for a in gltf.get('accessors', []):
         element=sizes[a['componentType']]*widths[a['type']]
         if a.get('count',0)<1: raise ValueError(f'Invalid accessor count: {path}')
         if 'bufferView' in a:
+            if not 0<=a['bufferView']<len(views) or a.get('byteOffset',0)<0: raise ValueError(f'Invalid accessor reference: {path}')
             v=views[a['bufferView']]; end=a.get('byteOffset',0)+(a['count']-1)*v.get('byteStride',element)+element
+            if v.get('byteStride',element)<element: raise ValueError(f'Invalid accessor stride: {path}')
             if end>v['byteLength']: raise ValueError(f'Accessor exceeds buffer: {path}')
     for node in gltf.get('nodes', []):
-        if 'mesh' in node and node['mesh']>=len(gltf.get('meshes', [])): raise ValueError(f'Invalid mesh reference: {path}')
-        if 'skin' in node and node['skin']>=len(gltf.get('skins', [])): raise ValueError(f'Invalid skin reference: {path}')
+        if 'mesh' in node and not 0<=node['mesh']<len(gltf.get('meshes', [])): raise ValueError(f'Invalid mesh reference: {path}')
+        if 'skin' in node and not 0<=node['skin']<len(gltf.get('skins', [])): raise ValueError(f'Invalid skin reference: {path}')
     return gltf, hashlib.sha256(data).hexdigest()
 
 def inventory(source):

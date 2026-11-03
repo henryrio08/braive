@@ -60,11 +60,11 @@ struct StereoWorld: UIViewRepresentable {
             height: max(1, Int(size.height)), mipmapped: false)
           d.usage = [.renderTarget, .shaderRead]
           d.storageMode = .private
-          guard let t = device.makeTexture(descriptor: d) else { return }
+          guard let t = device.makeTexture(descriptor: d) else { size = .zero; textures = []; depths = []; return }
           textures.append(t)
           d.pixelFormat = .depth32Float
           d.usage = .renderTarget
-          guard let depth = device.makeTexture(descriptor: d) else { return }
+          guard let depth = device.makeTexture(descriptor: d) else { size = .zero; textures = []; depths = []; return }
           depths.append(depth)
         }
       }

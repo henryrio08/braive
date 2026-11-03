@@ -115,7 +115,7 @@ export function sceneIssues(plan: SessionPlan, scene: SceneSpec, audio: AudioPla
   if(guided&&scenario.progression!=='guided')fail('/scenario','progression','The approved experience progresses automatically');
   if(guided&&plan.experience?.kind==='conversation'&&(scenario.dialogue_policy!=='natural'||!scenario.steps.some(s=>s.conversation_target)))fail('/scenario','conversation','A conversation experience needs a natural speaking window; no ASK commands');
   if(guided&&scenario.dialogue_policy==='on_request')fail('/scenario','guided','Guided practice does not use ASK/TALK TO commands');
-  if(steps.size!==scenario.steps.length||!steps.has(scenario.initial_step_id))fail('/scenario','reference','Unique scenario steps and a valid initial step required');
+  if(steps.size!==scenario.steps.length||scenario.steps[0]?.id!==scenario.initial_step_id)fail('/scenario','reference','Unique scenario steps starting with the initial step required');
   const planned=plan.experience?.stages;
   if(planned && (scenario.initial_step_id!==planned[0].id || JSON.stringify(scenario.steps.map(s=>s.id))!==JSON.stringify(planned.map(s=>s.id))))fail('/scenario/steps','plan_match','Scenario must realize the approved stages in order');
   for(const [i,step] of scenario.steps.entries()){
@@ -182,6 +182,7 @@ export function planIssues(plan: SessionPlan): ValidationIssue[] {
   if(t.tool==='plan_audio' && t.arguments.duration_sec!==plan.duration_sec) fail(`/tool_calls/${i}/arguments/duration_sec`,'duration','Audio duration differs from plan');
  }
  if(plan.characters.some(c=>c.voice_id!=='default')) fail('/characters','voice','Only app-selected default voice is registered');
+ if(new Set(plan.characters.map(c=>c.scene_node_id)).size!==plan.characters.length)fail('/characters','unique','Each character needs its own scene root');
  if(plan.characters.some(c=>c.asset_id&&!characterIDs.has(c.asset_id)))fail('/characters','character_asset','Choose a registered rigged character.base asset');
  const castNodes=plan.characters.reduce((n,c)=>n+(assetManifest.find(a=>a.id===c.asset_id)?.resolved_node_count??0),0);
  if(castNodes>750)fail('/characters','budget','The selected cast leaves too little of the 1000 resolved-node budget for its setting. Preserve participants and requested appearance; choose suitable registered assets within the budget.');

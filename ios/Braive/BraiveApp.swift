@@ -285,7 +285,7 @@ struct ContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in refreshVoices() }
         .confirmationDialog("Delete your sessions and reflections?", isPresented: $confirmDelete) {
           Button("Delete all", role: .destructive) {
-            do { try s.store.deleteAll() } catch { s.fail(error) }
+            do { try s.deleteHistory() } catch { s.fail(error) }
           }
         }
     }

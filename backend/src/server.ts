@@ -114,6 +114,8 @@ app.post('/v1/jobs/:id/validation',async(req,res,next)=>{
  const job=jobs.get(req.params.id), attempt=attempts.get(req.params.id);
  try {
   if(!job?.result || !attempt || job.status!=='succeeded') throw new AppError('CONFLICT','No assembled generation to repair',[],409);
+  if(revisions.get(job.session_id)!==job.revision)throw new AppError('CONFLICT','A newer scene revision has replaced this job',[],409);
+  if(running.size>=3)throw new AppError('RATE_LIMITED','Too many active generation jobs',[],429);
   if(attempt.repairs>=1 || Date.now()>=attempt.deadline) throw new AppError('TIMEOUT','Repair allowance or generation deadline exhausted. Retry, revise, or cancel.',[],408);
   if(typeof req.body.message!=='string' || req.body.message.length>2000) throw new AppError('INVALID_INPUT','Provide a bounded validation explanation');
   attempt.repairs++;job.status='running';job.stage='Repairing device visibility checks';

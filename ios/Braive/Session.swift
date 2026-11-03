@@ -54,7 +54,8 @@ import SwiftUI
       let scenarioState = try scenario.map { try JSONDecoder().decode(JSON.self,from:JSONEncoder().encode($0.snapshot)) } ?? JSON()
       record["checkpoint"] = JSON(["version":1,"world":world.checkpoint().raw,"scenario":scenarioState.raw,
         "fired":Array(fired),"beats":Array(beatFired),"terminal_at":scenarioCompletedAt as Any? ?? NSNull(),
-        "fear":fear,"ability":ability,"use_history":useHistory])
+        "fear":fear,"ability":ability,"use_history":useHistory,
+        "history_ids":useHistory ? history.map { $0["session_id"].text } : []])
       record["render_metrics"] = world.metrics.report
       record["active_seconds"] = JSON(active); record["stop_count"] = JSON(stopCount)
       record["observations"] = JSON(observations); record["turns"] = JSON(turns)
@@ -83,6 +84,8 @@ import SwiftUI
     scenarioCompletedAt=saved["checkpoint"]["terminal_at"].number
     fear=saved["checkpoint"]["fear"].text;ability=saved["checkpoint"]["ability"].text
     useHistory=saved["checkpoint"]["use_history"].bool ?? false;parent=saved["parent_session_id"].string
+    let authorizedIDs = Set(saved["checkpoint"]["history_ids"].list.map(\.text))
+    history = useHistory ? store.records.filter { authorizedIDs.contains($0["session_id"].text) } : []
     observations=saved["observations"].list.map(\.raw);turns=saved["turns"].list.map(\.raw);stopCount=Int(saved["stop_count"].value)
     phase = .active;loading=false;pendingPhase=nil;intakeApproved=true;record["outcome"]=JSON("running")
     message=scenario?.step.prompt ?? plan["task_instruction"].text
@@ -192,7 +195,11 @@ import SwiftUI
       do {
         try PreflightAudit.run(world)
         message = "Offline preflight audit passed — no generated practice or Meta calls"
-      } catch { message = "Offline preflight audit failed: " + error.localizedDescription }
+        try? JSONEncoder().encode(JSON(["status":"passed"])).write(to:store.root.appendingPathComponent("PreflightAudit.json"),options:.atomic)
+      } catch {
+        message = "Offline preflight audit failed: " + error.localizedDescription
+        try? JSONEncoder().encode(JSON(["status":"failed","error":error.localizedDescription])).write(to:store.root.appendingPathComponent("PreflightAudit.json"),options:.atomic)
+      }
     }
     if ProcessInfo.processInfo.arguments.contains("--generated-audit") {
       preview()
@@ -596,6 +603,12 @@ import SwiftUI
     }
   }
   func newSession() {
+    generation?.cancel(); generation = nil
+    if !jobID.isEmpty {
+      let old = jobID, endpoint = api
+      Task { _ = try? await endpoint.call("/v1/jobs/" + old, method: "DELETE", timeout: 3) }
+    }
+    jobID = ""
     pendingPostSave = nil
     cancelFeedback()
     sessionID = UUID().uuidString
@@ -629,6 +642,16 @@ import SwiftUI
     fear = ""; ability = ""; intakeApproved = false; builder = false
     repeatAfterHeadset = false
   }
+  func deleteHistory() throws {
+    try store.deleteAll()
+    // Forget in-memory consent/history too, so a later repeat cannot send deleted rows.
+    newSession()
+    pause("user_stop", enabled: false)
+    world.lobby(); world.scene.isPaused = !pauses.isEmpty
+    audio.lobby()
+    if !pauses.isEmpty { audio.pause() }
+    go(.lobby, "Your history and reflections are deleted. Say START when you’re ready.")
+  }
   func request() -> JSON {
     var preferences: [String] = []
     if adaptation["intensity_1_10"].number != nil {
@@ -653,7 +676,7 @@ import SwiftUI
       go(.review, "Say BEGIN PRACTICE to create this situation, or START OVER to change it.")
       return
     }
-    guard liveEnabled else {
+    guard remoteConsent && liveEnabled else {
       message = "This is an offline forest preview. Live practice needs approved Meta access."
       audio.say(message)
       return
@@ -665,6 +688,7 @@ import SwiftUI
     revision += 1
     generationDeadline = ProcessInfo.processInfo.systemUptime + 120
     let rev = revision
+    let owner = sessionID
     jobID = ""
     go(
       .planning,
@@ -673,7 +697,7 @@ import SwiftUI
     generation = Task {
       do {
         let job = try await api.call("/v1/session-plans", request())
-        guard !Task.isCancelled, rev == revision else {
+        guard !Task.isCancelled, owner == sessionID, rev == revision else {
           _ = try? await api.call("/v1/jobs/" + job["job_id"].text, method: "DELETE")
           return
         }
@@ -686,28 +710,29 @@ import SwiftUI
             ])
           }
           try await Task.sleep(for: .milliseconds(600))
-          let j = try await api.call("/v1/jobs/" + jobID)
-          guard rev == revision, !Task.isCancelled else { return }
+          let j = try await api.call("/v1/jobs/" + jobID, timeout: max(0.1, min(35, generationDeadline - ProcessInfo.processInfo.systemUptime)))
+          guard owner == sessionID, rev == revision, !Task.isCancelled else { return }
           message = j["stage"].text + " · Say hey builder to add details"
           if j["status"].text == "failed" {
             throw NSError(
               domain: "Generation", code: 1,
               userInfo: [NSLocalizedDescriptionKey: j["error"]["message"].text])
           }
+          if j["status"].text == "cancelled" { throw world.failure("Scene preparation was cancelled. Retry, revise, or cancel.") }
           if j["status"].text == "succeeded" {
             var result = j["result"]
             while !pauses.isEmpty {
               try await Task.sleep(for: .milliseconds(100))
               try Task.checkCancellation()
             }
-            guard rev == revision else { return }
+            guard owner == sessionID, rev == revision else { return }
             let fittedIntro = try await audio.fitIntro(result["plan"]["narrator_intro_8s"].text)
             try Task.checkCancellation()
             while !pauses.isEmpty {
               try await Task.sleep(for: .milliseconds(100))
               try Task.checkCancellation()
             }
-            guard rev == revision else { return }
+            guard owner == sessionID, rev == revision else { return }
             guard ProcessInfo.processInfo.systemUptime < generationDeadline else {
               throw NSError(
                 domain: "Generation", code: 1,
@@ -902,6 +927,7 @@ import SwiftUI
     dialogue(text, character: character)
   }
   func dialogue(_ text: String, character: JSON) {
+    guard remoteConsent && liveEnabled else { return }
     narration.clearPending()
     turnTask?.cancel(); turnTask = nil; turnNonce = UUID()
     audio.interruptSpeech()
@@ -928,7 +954,7 @@ import SwiftUI
           try await Task.sleep(for: .milliseconds(100))
           try Task.checkCancellation()
         }
-        guard !Task.isCancelled, nonce == turnNonce, rev == revision, phase == .active,
+        guard !Task.isCancelled, remoteConsent && liveEnabled, nonce == turnNonce, rev == revision, phase == .active,
           pauses.isEmpty
         else { return }
         turns.append(["speaker_id": "user", "text": text])
@@ -987,6 +1013,11 @@ import SwiftUI
       return
     }
     phase = .feedback
+    guard remoteConsent && liveEnabled else {
+      message = "Online feedback is turned off. Your session will be saved."
+      audio.say(message) { [weak self] in self?.save() }
+      return
+    }
     message = "Reviewing your session…"
     cancelFeedback()
     let nonce = feedbackNonce, owner = sessionID, rev = revision
@@ -1063,6 +1094,11 @@ import SwiftUI
   }
   func adapt() {
     guard !adapting else { return }
+    guard remoteConsent && liveEnabled else {
+      phase = .repeatPrompt
+      audio.say("Online practice is turned off. Say NO to return to the lobby.")
+      return
+    }
     beginTips(for: .repeatPrompt)
     adapting = true
     let owner = sessionID, rev = revision
