@@ -1,5 +1,18 @@
 import simd
 
+/// The display's landscape basis, not a gravity guess or a forced device orientation.
+enum LandscapeBasis {
+  case left, right
+
+  var correction: simd_quatf {
+    simd_quatf(angle: self == .right ? -.pi / 2 : .pi / 2, axis: SIMD3<Float>(0, 0, 1))
+  }
+
+  func cameraOrientation(_ phone: simd_quatf) -> simd_quatf {
+    simd_normalize(phone * correction)
+  }
+}
+
 /// Keep the chosen forward direction until the user confirms another headset setup.
 struct HeadPose {
   private var reference: simd_quatf?

@@ -26,6 +26,12 @@ extension UIColor {
   var nodes: [String: SCNNode] = [:], viewpoints: [String: SCNVector3] = [:],
     characters: [String: String] = [:]
   var onPortrait: ((Bool) -> Void)?
+  var onTrackingAvailability: ((Bool) -> Void)? {
+    didSet { onTrackingAvailability?(trackingAvailable) }
+  }
+  private(set) var trackingAvailable = false
+  private var trackingReported = false
+  private var landscapeBasis: LandscapeBasis = .right
   private var pose = HeadPose()
   private var motionPaths: [String: ViewerPath] = [:]
   private var viewerMotion: ViewerMotion?
@@ -76,18 +82,44 @@ extension UIColor {
     }
     scene.background.contents = UIColor.black
     motion.deviceMotionUpdateInterval = 1 / 60
-    motion.startDeviceMotionUpdates(using: .xArbitraryZVertical, to: .main) { [weak self] data, _ in
-      guard let data else { return }
-      Task { @MainActor in self?.track(data) }
+    if motion.isDeviceMotionAvailable {
+      motion.startDeviceMotionUpdates(using: .xArbitraryZVertical, to: .main) { [weak self] data, error in
+        Task { @MainActor in
+          guard let self else { return }
+          guard error == nil, let data else { self.reportTracking(false); return }
+          self.track(data)
+        }
+      }
     }
   }
+  private func reportTracking(_ available: Bool) {
+    guard !trackingReported || trackingAvailable != available else { return }
+    trackingReported = true
+    trackingAvailable = available
+    onTrackingAvailability?(available)
+  }
+  #if DEBUG
+  /// Explicit synthetic controller audit; never a source of tracking in normal practice.
+  func reviewTrackingAvailability(_ available: Bool) {
+    precondition(ProcessInfo.processInfo.arguments.contains("--post-session-audit"))
+    reportTracking(available)
+  }
+  #endif
   func track(_ data: CMDeviceMotion) {
     let q = data.attitude.quaternion
-    // Landscape-right phone basis to camera basis. Optical comfort must be calibrated on device.
+    // Match the actual rendered interface, including landscape-left. Keep the last
+    // basis when the interface is not yet known; gravity still controls portrait pause.
+    if let windowScene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene })
+      .first(where: { $0.activationState == .foregroundActive }) {
+      switch windowScene.interfaceOrientation {
+      case .landscapeLeft: landscapeBasis = .left
+      case .landscapeRight: landscapeBasis = .right
+      default: break
+      }
+    }
     let phone = simd_quatf(ix: Float(q.x), iy: Float(q.y), iz: Float(q.z), r: Float(q.w))
-    let correction = simd_quatf(angle: -.pi / 2, axis: SIMD3<Float>(0, 0, 1))
-    let oriented = phone * correction
-    head.simdOrientation = pose.update(oriented)
+    head.simdOrientation = pose.update(landscapeBasis.cameraOrientation(phone))
+    reportTracking(true)
     let g = data.gravity
     if abs(g.y) > 0.78 { onPortrait?(true) } else if abs(g.x) > 0.65 { onPortrait?(false) }
   }

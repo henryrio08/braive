@@ -43,6 +43,8 @@ app.use((req,_res,next)=>{
  next();
 });
 const approved=new Map<string,ApprovedExperience>();
+// Read-only authenticated pairing check; it neither spends nor renews provider access.
+app.get('/v1/connection',(_req,res)=>res.json({status:'ok'}));
 const attempts=new Map<string,{deadline:number,repairs:number}>();
 const generationLimitMs=10*60*1000;
 const jobs=new Map<string,Job>(); const running=new Map<string,AbortController>(); const revisions=new Map<string,number>();

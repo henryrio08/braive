@@ -29,12 +29,15 @@ import SwiftUI
   }
   @Published var connection = "Not connected"
   @Published var server =
-    UserDefaults.standard.string(forKey: "server") ?? "http://braive.local:8787"
+    UserDefaults.standard.string(forKey: "server") ?? ""
   @Published var token = UserDefaults.standard.string(forKey: "token") ?? ""
   @Published var remoteConsent = false
   @Published var liveEnabled = false
   @Published var connecting = false
   @Published var voiceListening = false
+  @Published var speechFeedback = ""
+  @Published var voicePreviewStatus = ""
+  private var speechFeedbackExpiresAt = 0.0
   @Published var setupNotice = ""
   @Published var scenarioActions: [String] = []
   @Published var characterReplyPending = false
@@ -164,10 +167,15 @@ import SwiftUI
       self.fail(self.world.failure(reason))
     }
     world.onPortrait = { [weak self] portrait in self?.pause("portrait", enabled: portrait) }
+    world.onTrackingAvailability = { [weak self] available in
+      self?.pause("tracking_unavailable", enabled: !available)
+    }
     audio.onStatus = { [weak self] status in self?.setupNotice = status }
     audio.onText = { [weak self] text, final, id in self?.heard(text, final: final, id: id) }
     audio.onActivity = { [weak self] speaking in
       self?.speechFloor.detect(speaking, now: ProcessInfo.processInfo.systemUptime)
+      self?.speechFeedback = speaking ? "Hearing you…" : "Finishing your words…"
+      self?.speechFeedbackExpiresAt = ProcessInfo.processInfo.systemUptime + (speaking ? 5 : 2)
     }
     audio.onDisconnect = { [weak self] reason in
       self?.connection = "Voice disconnected: " + reason
@@ -289,10 +297,29 @@ import SwiftUI
     Task {
       defer { connecting = false }
       do {
-        connection = "Preparing on-device voice…"
+        connection = "Checking practice server…"
+        do {
+          try await api.checkConnection()
+        } catch {
+          let failure = error as NSError
+          let detail: String
+          if server.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            detail = "Open Settings → Connection setup and enter the practice computer’s reachable address and pairing code. Phone tests normally use port 8788."
+          } else if failure.domain == "Braive" && failure.code == 401 {
+            detail = "The server rejected this pairing code. Check Settings → Connection setup."
+          } else if failure.domain == "Braive" && failure.code == 404 {
+            detail = "Update the practice server to the same branch as this app, then reconnect."
+          } else {
+            detail = "Cannot verify the practice server. Check its address, port and network in Settings → Connection setup. " + error.localizedDescription
+          }
+          throw NSError(domain: "BraiveConnection", code: 1, userInfo: [
+            NSLocalizedDescriptionKey: detail
+          ])
+        }
+        connection = "Practice server reachable · Preparing on-device voice…"
         try await audio.start(api: api)
         setupNotice = ""
-        connection = "On-device voice ready"
+        connection = "On-device voice ready · Practice server reachable"
         go(.lobby, "When you’re ready to start, say START!")
         headsetReady = false
         world.scene.isPaused = !pauses.isEmpty
@@ -303,7 +330,7 @@ import SwiftUI
         loading = false
         pendingPhase = nil
         connection = "Not connected"
-        setupNotice = "Voice couldn’t start: " + error.localizedDescription
+        setupNotice = "Practice couldn’t start: " + error.localizedDescription
         connection = error.localizedDescription
       }
     }
@@ -315,6 +342,7 @@ import SwiftUI
     Task {
       defer { connecting = false }
       do {
+        try await api.checkConnection()
         try await audio.start(api: api)
         audio.setCommandPhrases(scenario?.definition.steps.flatMap { $0.actions.flatMap(\.phrases) } ?? [])
         pause("command_channel_unavailable", enabled: false)
@@ -396,6 +424,8 @@ import SwiftUI
       return
     }
     transcript = text
+    speechFeedback = final ? "Got it" : "Hearing your words…"
+    speechFeedbackExpiresAt = ProcessInfo.processInfo.systemUptime + (final ? 1.5 : 3)
     let words = text.lowercased().split(whereSeparator: { !$0.isLetter }).map(String.init)
     // Conservative STOP works on partials. Device voice processing handles playback echo; verify in goggles.
     if canStop && words.contains("stop") {
@@ -441,6 +471,10 @@ import SwiftUI
       }
     case .headset:
       if VoiceAnswer.confirmsHeadset(text) {
+        guard world.trackingAvailable else {
+          pause("tracking_unavailable", enabled: true)
+          return
+        }
         world.recenter()
         headsetReady = true
         if let saved = pendingRecovery {
@@ -707,7 +741,7 @@ import SwiftUI
             ])
           }
           try await Task.sleep(for: .milliseconds(600))
-          let j = try await api.call("/v1/jobs/" + jobID, timeout: max(0.1, min(35, generationDeadline - ProcessInfo.processInfo.systemUptime)))
+          let j = try await api.pollJob(jobID, deadline: generationDeadline)
           guard owner == sessionID, rev == revision, !Task.isCancelled else { return }
           message = j["stage"].text + " · Say hey builder to add details"
           if j["status"].text == "failed" {
@@ -798,6 +832,7 @@ import SwiftUI
   }
   func tick() {
     let now = ProcessInfo.processInfo.systemUptime
+    if !speechFeedback.isEmpty && now >= speechFeedbackExpiresAt { speechFeedback = "" }
     let dt = min(0.2, now - lastTick)
     lastTick = now
     guard pauses.isEmpty else { return }
@@ -822,9 +857,9 @@ import SwiftUI
       }
       return
     }
-    voiceListening = audio.ready && audio.engine.isRunning
+    let listening = audio.ready && audio.engine.isRunning
       && (audio.captureStats.snapshot(engineRunning: true)["callbacks"] as? Int ?? 0) > 0
-    if voiceListening { connection = "Listening" }
+    if voiceListening != listening { voiceListening = listening }
     if phase == .intro {
       introTime += dt
       if introTime >= 8 {

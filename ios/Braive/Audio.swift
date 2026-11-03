@@ -161,9 +161,16 @@ import AVFoundation
     confirmationID = ObjectIdentifier(utterance); confirmationFinished = completion
     promptSpeech.speak(utterance)
   }
-  func previewVoice() {
+  func previewVoice(using voice: AVSpeechSynthesisVoice?) throws {
+    // Settings can open before voice capture has configured an audio session.
+    // Playback must remain audible with the phone's silent switch enabled.
+    if !engine.isRunning {
+      let session = AVAudioSession.sharedInstance()
+      try session.setCategory(.playback, mode: .default)
+      try session.setActive(true)
+    }
     previewSpeech.stopSpeaking(at: .immediate)
-    previewSpeech.speak(SpeechVoice.utterance("Take your time. We’ll practice this together, one step at a time."))
+    previewSpeech.speak(SpeechVoice.utterance("Take your time. We’ll practice this together, one step at a time.", voice: voice))
   }
   func stopVoicePreview() { previewSpeech.stopSpeaking(at: .immediate) }
   func pause() {

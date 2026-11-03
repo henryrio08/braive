@@ -7,7 +7,7 @@
 <key>CFBundleName</key><string>$(PRODUCT_NAME)</string>
 <key>CFBundlePackageType</key><string>APPL</string>
 <key>CFBundleShortVersionString</key><string>0.4</string>
-<key>CFBundleVersion</key><string>5</string>
+<key>CFBundleVersion</key><string>6</string>
 <key>NSMicrophoneUsageDescription</key><string>Braive listens for commands, your practice answers, and optional reflections.</string>
 <key>NSSpeechRecognitionUsageDescription</key><string>Braive turns your speech into practice commands and answers on this iPhone.</string>
 <key>NSLocalNetworkUsageDescription</key><string>Connect to the Braive backend running on your Mac.</string>

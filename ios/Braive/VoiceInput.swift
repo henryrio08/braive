@@ -37,7 +37,7 @@ struct SpeechTurnBuffer {
     guard !speaking, draft.isEmpty, !stable.isEmpty else { return nil }
     let quick = ["start", "yes", "no", "retry", "cancel", "begin practice", "start over"]
       .contains(VoiceAnswer.normalized(stable)) || fastPhrases.contains(VoiceAnswer.normalized(stable))
-    return max(0, quietSince + (quick ? 0.7 : 1.8) - now)
+    return max(0, quietSince + (quick ? 0.35 : 0.9) - now)
   }
   mutating func take(now: Double) -> (text: String, id: String)? {
     guard let delay = delay(now: now), delay <= 0 else { return nil }
