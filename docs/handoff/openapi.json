@@ -1,8 +1,8 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "Generative VR practice \u2014 proposed project API",
-    "version": "1.1.0",
+    "title": "Braive project API and artifact contracts",
+    "version": "1.1.1",
     "description": "Project-owned contracts, not provider endpoints. Authenticate owner-scoped requests. Internal specialist endpoints may be functions in the same backend, not separate services. Numeric limits are configurable initial budgets. Cross-field checks are specified in development-plan.md."
   },
   "security": [
@@ -13,7 +13,7 @@
   "paths": {
     "/v1/session-plans": {
       "post": {
-        "summary": "Coordinate plan and run scene/audio generation; Idempotency-Key required.",
+        "summary": "Coordinate plan and run scene/audio generation. Session revision must increase.",
         "requestBody": {
           "required": true,
           "content": {
@@ -45,18 +45,7 @@
               }
             }
           }
-        },
-        "parameters": [
-          {
-            "in": "header",
-            "name": "Idempotency-Key",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "maxLength": 200
-            }
-          }
-        ]
+        }
       }
     },
     "/v1/scene-revisions": {
@@ -130,7 +119,9 @@
               }
             }
           }
-        }
+        },
+        "deprecated": true,
+        "description": "Historical interface; not exposed by the current server. Scene/audio specialists are internal; speech recognition runs on the iPhone."
       }
     },
     "/v1/audio-plans": {
@@ -167,7 +158,9 @@
               }
             }
           }
-        }
+        },
+        "deprecated": true,
+        "description": "Historical interface; not exposed by the current server. Scene/audio specialists are internal; speech recognition runs on the iPhone."
       }
     },
     "/v1/dialogue": {
@@ -315,7 +308,9 @@
               }
             }
           }
-        }
+        },
+        "deprecated": true,
+        "description": "Historical interface; not exposed by the current server. Scene/audio specialists are internal; speech recognition runs on the iPhone."
       }
     },
     "/v1/jobs/{job_id}": {
@@ -349,6 +344,75 @@
         "responses": {
           "204": {
             "description": "Cancelled"
+          }
+        }
+      }
+    },
+    "/v1/jobs/{job_id}/validation": {
+      "parameters": [
+        {
+          "in": "path",
+          "name": "job_id",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "post": {
+        "summary": "Repair native validation failure using the original deadline and shared repair allowance",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "message": {
+                    "type": "string",
+                    "maxLength": 2000
+                  }
+                },
+                "required": [
+                  "message"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Repair started",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Job"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "No repair available or request rejected"
+          }
+        }
+      }
+    },
+    "/v1/provenance/{session_id}": {
+      "get": {
+        "summary": "Read generation request provenance",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Model IDs and provider request IDs"
           }
         }
       }
@@ -1117,7 +1181,8 @@
           "capabilities_version",
           "asset_manifest"
         ],
-        "additionalProperties": false
+        "additionalProperties": false,
+        "description": "Internal specialist artifact shape; specialists are called inside the generation job, not through a separate public HTTP endpoint."
       },
       "Geometry": {
         "oneOf": [
@@ -1241,7 +1306,8 @@
           },
           "texture_asset_id": {
             "type": "string",
-            "maxLength": 100
+            "maxLength": 100,
+            "description": "Reserved legacy field; no texture assets are currently registered. New output must omit it."
           },
           "opacity": {
             "type": "number",
@@ -1656,7 +1722,7 @@
             "items": {
               "$ref": "#/components/schemas/SceneNode"
             },
-            "maxItems": 500
+            "maxItems": 350
           },
           "viewpoints": {
             "type": "array",
@@ -1843,7 +1909,8 @@
           "plan",
           "available_assets"
         ],
-        "additionalProperties": false
+        "additionalProperties": false,
+        "description": "Internal specialist artifact shape; specialists are called inside the generation job, not through a separate public HTTP endpoint."
       },
       "AudioLayer": {
         "type": "object",
@@ -1878,7 +1945,8 @@
               "type": "number"
             },
             "minItems": 3,
-            "maxItems": 3
+            "maxItems": 3,
+            "description": "Reserved legacy field; current playback is non-spatial. New output must omit it."
           },
           "start_active_second": {
             "type": "number",
@@ -2648,6 +2716,12 @@
           },
           "reflection": {
             "type": "object"
+          },
+          "scene": {
+            "$ref": "#/components/schemas/SceneSpec"
+          },
+          "audio": {
+            "$ref": "#/components/schemas/AudioPlan"
           }
         },
         "required": [

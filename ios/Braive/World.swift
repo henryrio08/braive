@@ -29,6 +29,7 @@ extension UIColor {
   private var attachmentRig: SCNNode?
   private var attachmentOrigin = SIMD3<Float>(repeating: 0)
   var activeElapsed: Double { practiceClock.elapsed }
+  var hasPendingMotion: Bool { viewerMotion != nil || !nodeMotions.isEmpty }
   func beginPracticeClock() { animationOrigin = renderTime; practiceClock.begin() }
   func pausePracticeClock() { practiceClock.pause(); renderMotion() }
   func resumePracticeClock() { practiceClock.resume() }
@@ -220,8 +221,27 @@ extension UIColor {
     else { throw failure("Duplicate viewpoints") }
     let views = Dictionary(
       uniqueKeysWithValues: spec["viewpoints"].list.map { ($0["id"].text, vector($0["position"])) })
-    guard let initial = views[spec["initial_viewpoint_id"].text] else {
+    guard var initial = views[spec["initial_viewpoint_id"].text] else {
       throw failure("Missing initial viewpoint")
+    }
+    // Check the actual opening state, including changes made before the first
+    // active frame. These idempotent changes are replayed by the runtime.
+    let opening = spec["scenario"]["steps"].list.first?["start_operations"].list ?? []
+    let zeroEvents = spec["events"].list.filter { $0["at_active_second"].value == 0 }.map { $0["operation"] }
+    for op in opening + zeroEvents {
+      switch op["type"].text {
+      case "set_visible": built[op["node_id"].text]?.isHidden = !(op["visible"].bool ?? true)
+      case "set_material":
+        if let node = built[op["node_id"].text] {
+          if AssetLibrary.isCharacter(node) { AssetLibrary.recolor(node, hex: op["material"]["color"].string) }
+          else {
+            node.enumerateChildNodes { n, _ in n.geometry?.materials = [material(op["material"])] }
+            node.geometry?.materials = [material(op["material"])]
+          }
+        }
+      case "viewpoint_transition": if let point = views[op["destination_id"].text] { initial = point }
+      default: break
+      }
     }
     let focusEntries = list.filter { $0["role"].text == "task_focus" }
     // A procedural object's nearby named parts form one visible target, like a GLB subtree.

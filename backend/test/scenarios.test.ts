@@ -15,6 +15,34 @@ test('action scenario requires real motion and ordered, executable stages',()=>{
  for(const path of scene.motion_paths!)validate('MotionPath',path);
  assert.deepEqual(sceneIssues(plan,scene,audio),[]);
 });
+
+test('audio identity and schedule failures are rejected before native playback',()=>{
+ const {plan,scene,audio}=setup();
+ const layer={id:'wind',asset_id:'wind',role:'ambience' as const,loop:true,gain:0.2,start_active_second:0,end_active_second:60,ramps:[]};
+ audio.layers=[layer,{...layer}];
+ assert.ok(sceneIssues(plan,scene,audio).some(i=>i.rule==='unique'));
+ audio.layers=[layer,{...layer,id:'second_wind'}];
+ assert.deepEqual(sceneIssues(plan,scene,audio),[]); // One asset may supply independent layers.
+ audio.layers[0]={...layer,start_active_second:30,end_active_second:10};
+ assert.ok(sceneIssues(plan,scene,audio).some(i=>i.rule==='clock'));
+ audio.layers=[{...layer,ramps:[{at_active_second:59,gain:0.5,fade_seconds:2}]}];
+ assert.ok(sceneIssues(plan,scene,audio).some(i=>i.rule==='clock'));
+});
+
+test('a stage cannot wait for motion launched only in a future stage',()=>{
+ const {plan,scene,audio}=setup();
+ scene.scenario!.steps[0].actions=[];plan.experience!.stages[0].action_ids=[];
+ scene.scenario!.steps[1].start_operations=[{type:'move_viewer',path_id:'freefall'}];
+ scene.scenario!.steps[0].completion={trigger:'motion_complete',motion_path_id:'glide_path',next_step_id:'fall'};
+ assert.ok(sceneIssues(plan,scene,audio).some(i=>i.path==='/scenario'&&i.rule==='motion'));
+ scene.scenario!.steps[0].start_operations=[{type:'move_viewer',path_id:'glide_path'}];
+ assert.deepEqual(sceneIssues(plan,scene,audio),[]);
+});
+
+test('unsupported texture output is rejected instead of silently ignored',()=>{
+ const {plan,scene,audio}=setup();scene.nodes[0].material.texture_asset_id='invented';
+ assert.ok(sceneIssues(plan,scene,audio).some(i=>i.rule==='capability'));
+});
 test('solo scenarios and coherent viewer-carried equipment use the new action runtime',()=>{
  const {plan,scene,audio}=setup();plan.interaction_mode='solo';
  scene.nodes.push({...scene.nodes[0],id:'canopy',role:'prop',description:'Parachute canopy'},

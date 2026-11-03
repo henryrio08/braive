@@ -18,6 +18,14 @@ export function sceneIssues(plan: SessionPlan, scene: SceneSpec, audio: AudioPla
  const issues: ValidationIssue[] = [];
  const fail = (path: string, rule: string, message: string) => issues.push({path,rule,message});
  for (const [key, output] of Object.entries({scene,audio})) if(output.session_id !== plan.session_id || output.revision !== plan.revision) fail(`/${key}/revision`,'revision','Must match approved plan');
+ for(const [i,l] of audio.layers.entries()) {
+  if(audio.layers.findIndex(other=>other.id===l.id)!==i)fail(`/audio/layers/${i}/id`,'unique','Audio layer IDs must be unique');
+  const end=l.end_active_second??plan.duration_sec;
+  if(l.start_active_second>=end||end>plan.duration_sec)fail(`/audio/layers/${i}`,'clock','Audio must start before its end, within the practice duration');
+  if(l.ramps.some(r=>r.at_active_second<l.start_active_second||r.at_active_second+r.fade_seconds>end))fail(`/audio/layers/${i}/ramps`,'clock','Audio ramps must fit within their layer');
+  if(l.position)fail(`/audio/layers/${i}/position`,'capability','Spatial audio placement is not supported by the current player');
+ }
+ if(audio.transition_whoosh_asset_id && audio.transition_whoosh_asset_id!=='whoosh')fail('/audio/transition_whoosh_asset_id','asset','Use the registered whoosh transition');
  const nodes = new Map(scene.nodes.map(n => [n.id,n]));
  const supportsSit=(id:string)=>assetManifest.find(a=>a.id===id)?.animation_clips?.some(n=>n.toLowerCase().endsWith('_sitting'))===true;
  const attached=new Set(scene.viewer_attached_node_ids??[]);
@@ -35,6 +43,7 @@ export function sceneIssues(plan: SessionPlan, scene: SceneSpec, audio: AudioPla
   while(p && nodes.has(p)) { if(seen.has(p)) { fail(`/nodes/${i}`,'cycle','Cyclic hierarchy'); break; } seen.add(p); p=nodes.get(p)!.parent_id; }
   if(![...n.position,...n.rotation_radians,...n.scale].every(Number.isFinite) || n.scale.some(v=>v<=0)) fail(`/nodes/${i}`,'transform','Positive finite transforms required');
   const g=n.geometry;
+  if(n.material.texture_asset_id)fail(`/nodes/${i}/material/texture_asset_id`,'capability','No texture assets are registered by this renderer');
   const approvedProp=!!n.prop_name&&!!plan.props?.includes(n.prop_name);
   if(n.prop_name&&!approvedProp)fail(`/nodes/${i}/prop_name`,'prop_match','Scene prop name must match an approved plan prop');
   if(g.kind!=='asset' && n.role!=='environment' && !(plan.experience&&(n.role==='task_focus'||n.role==='prop'&&(approvedProp||carried(n.id))))) fail(`/nodes/${i}/geometry`,'architecture_only','Use GLBs or coherent procedural assemblies bound to an approved plan prop; characters require the registered rig');
@@ -98,9 +107,16 @@ export function sceneIssues(plan: SessionPlan, scene: SceneSpec, audio: AudioPla
     const effects=[...action.operations,...(steps.get(action.next_step_id??'')?.start_operations??[])];
     if(plan.experience?.kind==='action' && !effects.some(o=>!['narrate','play_sound','character_action'].includes(o.type)))fail(`/scenario/steps/${i}/actions`,'task_action','Action practice must change the world or move the viewer, not just trigger speech');
    }
+   if(step.terminal && step.actions.length)fail(`/scenario/steps/${i}/actions`,'terminal','Finish participant actions before entering the terminal stage');
    const completion=step.completion;
+   // A future stage cannot cause this stage to finish. Include incoming actions
+   // because a path may begin on the transition into the current stage.
+   const reachableOps=[...scenario.steps.slice(0,i+1).flatMap(s=>s.start_operations),
+    ...scenario.steps.slice(0,i).flatMap(s=>s.actions.flatMap(a=>a.operations)),
+    ...step.actions.filter(a=>a.next_step_id===null).flatMap(a=>a.operations),
+    ...scene.events.map(e=>e.operation)];
    if(completion?.trigger==='after_seconds' && !(completion.after_seconds!>0&&completion.after_seconds!<=plan.duration_sec))fail('/scenario','clock','Timed stage requires a valid duration');
-   if(completion?.trigger==='motion_complete' && (!paths.has(completion.motion_path_id??'') || !ops.some(o=>(o.type==='move_viewer'||o.type==='move_node')&&o.path_id===completion.motion_path_id)))fail('/scenario','motion','Motion completion must reference an executed path');
+   if(completion?.trigger==='motion_complete' && (!paths.has(completion.motion_path_id??'') || !reachableOps.some(o=>(o.type==='move_viewer'||o.type==='move_node')&&o.path_id===completion.motion_path_id)))fail('/scenario','motion','Motion completion must reference an executed path');
   }
   if(plan.experience?.requires_motion && !ops.some(o=>o.type==='move_viewer'))fail('/scenario','motion','The requested activity requires actual viewer motion');
   if(plan.experience?.requires_motion){

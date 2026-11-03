@@ -13,6 +13,8 @@ This is the current coordinator/Wonder contract. The user's request is freeform.
 - Every string in plan.props must be bound to at least one scene node's prop_name, copied exactly. Choose an appropriate registered GLB when available. If an object is absent from the library, author a coherent procedural assembly with prop_name bound to that approved item. Primitive boxes/spheres/planes/cylinders are valid parts of finished environment/task/prop assemblies; crude box people or unrelated substitute assets are not. Component parts can share a prop_name.
 - Use the supplied per-character resolved-node costs when choosing a cast, leaving at least 250 nodes of the 1000-node budget for the setting. Stay within the supplied resolved-node, geometry, draw and memory budgets. Do not lower intensity, remove required participants/actions or change the task to hide a resource failure.
 
+Current playback is non-spatial: omit AudioLayer.position. No texture assets are registered: omit Material.texture_asset_id. Audio layer IDs must be unique; start/end/ramp times must fit the session. Complete participant actions before the terminal stage; terminal entry may start final arrival motion, which must finish before task completion. A motion-completion dependency must be started by the current or an earlier reachable stage, never only a future stage.
+
 ## Coordinator: plan the experience
 
 New SessionPlan output must include experience:

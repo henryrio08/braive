@@ -45,7 +45,7 @@ The source normalization scales target approximately 1.75m for the new standing 
 
 ## Authoring capabilities and gaps
 
-Spark and Wonder receive named assets derived from the same manifest used for validation. Characters must use the neutral base with coordinator color; props must use registered GLBs. Box/plane/sphere/cylinder remain architecture fill only. Unknown IDs fail validation. SceneSpec's `geometry.kind: asset` and `asset_id` shape is unchanged. Previous procedural IDs were removed; development fixtures now select real manifest IDs.
+Spark and Wonder receive named assets derived from the same manifest used for validation. Characters must use a registered rigged base with coordinator clothing color. Prefer the clothed adults for everyday people. Props use registered GLBs or coherent procedural assemblies bound to approved plan props. Box/plane/sphere/cylinder can form environment and approved task assemblies. Unknown IDs fail validation. SceneSpec's `geometry.kind: asset` and `asset_id` shape is unchanged. Previous procedural IDs were removed; development fixtures now select real manifest IDs.
 
 Intentionally empty, with no invented replacement assets:
 

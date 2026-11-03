@@ -15,6 +15,13 @@ import SwiftUI
   @Published var loading = false
   @Published var remaining = 0.0
   @Published var reveal = 0.0
+  var revealFadeProgress: Double { revealProgress("fade_seconds") }
+  var revealBlurProgress: Double { revealProgress("blur_to_clear_seconds") }
+  private func revealProgress(_ key: String) -> Double {
+    let fade = scene["reveal"]["fade_seconds"].number ?? 1.5
+    let blur = scene["reveal"]["blur_to_clear_seconds"].number ?? 1.5
+    return min(1, reveal * max(fade, blur) / max(0.1, scene["reveal"][key].number ?? 1.5))
+  }
   @Published var connection = "Not connected"
   @Published var server =
     UserDefaults.standard.string(forKey: "server") ?? "http://braive.local:8787"
@@ -28,6 +35,9 @@ import SwiftUI
   @Published var characterReplyPending = false
   var scenario: ScenarioRuntime?
   var scenarioCompletedAt: Double?
+  var feedbackTask: Task<Void, Never>?
+  var feedbackNonce = UUID()
+  func cancelFeedback() { feedbackTask?.cancel(); feedbackTask = nil; feedbackNonce = UUID() }
   let world = World(), audio = Audio(), store = SessionStore()
   var api: API { API(base: server.trimmingCharacters(in: .whitespacesAndNewlines), token: token) }
   var plan = JSON(), scene = JSON(), audioPlan = JSON(), record = JSON(), reflection = JSON()
@@ -448,6 +458,7 @@ import SwiftUI
     return JSON()
   }
   func newSession() {
+    cancelFeedback()
     sessionID = UUID().uuidString
     revision = 0
     additions = []
@@ -550,7 +561,7 @@ import SwiftUI
               try Task.checkCancellation()
             }
             guard rev == revision else { return }
-            let fittedIntro = await audio.fitIntro(result["plan"]["narrator_intro_8s"].text)
+            let fittedIntro = try await audio.fitIntro(result["plan"]["narrator_intro_8s"].text)
             try Task.checkCancellation()
             while !pauses.isEmpty {
               try await Task.sleep(for: .milliseconds(100))
@@ -590,6 +601,7 @@ import SwiftUI
             record = JSON([
               "schema_version": "1", "session_id": sessionID,
               "started_at": ISO8601DateFormatter().string(from: Date()), "outcome": "running",
+              "scene": scene.raw, "audio": audioPlan.raw,
               "plan": plan.raw, "topic_short": plan["topic_short"].raw,
               "intensity_1_10": plan["intensity_1_10"].raw, "use_history": useHistory,
               "chained_rerun": parent != nil, "scene_revision": revision,
@@ -657,7 +669,8 @@ import SwiftUI
         reveal = 0
       }
     } else if phase == .reveal {
-      reveal += dt / 1.5
+      let duration = max(scene["reveal"]["fade_seconds"].number ?? 1.5, scene["reveal"]["blur_to_clear_seconds"].number ?? 1.5)
+      reveal += dt / max(0.1, duration)
       if reveal >= 1 {
         phase = .active
         world.beginPracticeClock()
@@ -681,7 +694,7 @@ import SwiftUI
         beatFired.insert(i)
         narration.enqueue(b["text"].text, at: active)
       }
-      if remaining <= 0 || (scenarioCompletedAt.map { active - $0 >= 3 } == true && !audio.narrated && !narration.hasPending && speechFloor.available(now: now)) { finish(early: false) }
+      if remaining <= 0 || (scenarioCanFinish(terminalAt: scenarioCompletedAt, active: active, motionPending: world.hasPendingMotion) && !audio.narrated && !narration.hasPending && speechFloor.available(now: now)) { finish(early: false) }
       else if turnTask == nil, !audio.narrated,
         speechFloor.available(now: now), let text = narration.take(at: active) {
         audio.say(text)
@@ -810,10 +823,14 @@ import SwiftUI
     }
     phase = .feedback
     message = "Reviewing your session…"
-    Task {
+    cancelFeedback()
+    let nonce = feedbackNonce, owner = sessionID, rev = revision
+    feedbackTask = Task {
       do {
         let f = try await api.call(
           "/v1/feedback", JSON(["plan": plan.raw, "observations": observations]))
+        guard !Task.isCancelled, nonce == feedbackNonce, owner == sessionID,
+          rev == revision, phase == .feedback else { return }
         record["feedback"] = f
         message =
           "Here’s what you did well. "
@@ -822,12 +839,15 @@ import SwiftUI
           + f["one_quick_fix"].text + " Say continue to save."
         audio.say(message)
       } catch {
+        guard !Task.isCancelled, nonce == feedbackNonce, owner == sessionID,
+          rev == revision, phase == .feedback else { return }
         message = "Feedback unavailable. Say continue to save your session."
         audio.say(message)
       }
     }
   }
   func save() {
+    cancelFeedback()
     if plan["session_id"].text.isEmpty {
       world.lobby()
       world.scene.isPaused = !pauses.isEmpty
@@ -895,6 +915,7 @@ import SwiftUI
     }
   }
   func fail(_ error: Error) {
+    cancelFeedback()
     pendingPhase = nil
     audio.silence()
     phase = .error
