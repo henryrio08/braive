@@ -13,7 +13,7 @@ test('cumulative approval rejects unknown pricing and wrong model roles before s
    await assert.rejects(model('AudioPlan',{},'',AbortSignal.timeout(100)),/No verified test pricing/);
   }
   process.env.WONDER_MODEL='muse-spark-1.3';
-  await assert.rejects(model('SceneSpec',{},'',AbortSignal.timeout(100),true),/No verified test pricing/);
+  await assert.rejects(model('SceneSpec',{},'',AbortSignal.timeout(100),'scene_builder'),/No verified test pricing/);
  } finally {
   for(const k of keys) {if(previous[k]===undefined)delete process.env[k];else process.env[k]=previous[k];}
  }
