@@ -75,7 +75,9 @@ struct JSON: Codable, Equatable {
 struct API {
   var base: String
   var token: String
+  var session: URLSession = .shared
   func call(_ path: String, _ body: JSON? = nil, method: String? = nil, timeout: TimeInterval = 35) async throws -> JSON {
+    try Task.checkCancellation()
     guard let url = URL(string: base + path), ["http", "https"].contains(url.scheme ?? "") else {
       throw URLError(.badURL)
     }
@@ -87,12 +89,15 @@ struct API {
       req.setValue("application/json", forHTTPHeaderField: "Content-Type")
     }
     req.timeoutInterval = timeout
-    let (data, response) = try await URLSession.shared.data(for: req)
-    let result = data.isEmpty ? JSON() : try JSONDecoder().decode(JSON.self, from: data)
+    let (data, response) = try await session.data(for: req)
     guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+      let result = try? JSONDecoder().decode(JSON.self, from: data)
+      let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+      let detail = result?["message"].text ?? ""
       throw NSError(
-        domain: "Braive", code: 1, userInfo: [NSLocalizedDescriptionKey: result["message"].text])
+        domain: "Braive", code: status, userInfo: [NSLocalizedDescriptionKey: detail.isEmpty ? "The practice server returned HTTP \(status)." : detail])
     }
-    return result
+    try Task.checkCancellation()
+    return data.isEmpty ? JSON() : try JSONDecoder().decode(JSON.self, from: data)
   }
 }

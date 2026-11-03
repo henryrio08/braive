@@ -56,6 +56,16 @@ import Foundation
       try check(phase == .repeatPrompt && store.records.count == 2, "Feedback completion must save and advance automatically")
       deliverFeedback(JSON(["one_quick_fix":"Stale feedback"]),nonce:nonce)
       try check(phase == .repeatPrompt && !message.contains("Stale feedback"), "Late feedback cannot speak on the repeat screen")
+      audio.silence(); audio.play("forest", gain:0.14)
+      audio.say("First narration.")
+      try check(abs((audio.players["forest"]?.volume ?? -1) - 0.035) < 0.001, "Narration ducks the intended gain")
+      audio.say("Replacement narration.")
+      try check(abs((audio.players["forest"]?.volume ?? -1) - 0.035) < 0.001, "Replacing speech must not compound ducking")
+      audio.speechFinished()
+      try check(abs((audio.players["forest"]?.volume ?? -1) - 0.14) < 0.001, "Speech completion restores the exact intended gain")
+      history = [parent]; useHistory = true
+      try deleteHistory(); flush()
+      try check(store.records.isEmpty && history.isEmpty && !useHistory && plan.object == nil, "Delete must clear durable and in-memory session/history state")
       let result = JSON(["status":"passed","checks":checks,"mode":"synthetic native controller audit; no microphone or provider calls"])
       try JSONEncoder().encode(result).write(to:FileManager.default.urls(for:.documentDirectory,in:.userDomainMask)[0].appendingPathComponent("PostSessionAudit.json"),options:.atomic)
     } catch {

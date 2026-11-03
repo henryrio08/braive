@@ -67,7 +67,19 @@ test('compact generation catalog preserves every licensed asset and its complexi
 });
 test('coordinator budgets real skeleton node costs before scene construction',()=>{
  const p={...plan,narrator_intro_8s:'To stop at any time, just say STOP!',stop_reminder:'To stop at any time, just say STOP!',narrator_beats:[],tool_calls:[],
-  characters:Array.from({length:12},(_,i)=>({id:'person_'+i,asset_id:'character.base.casual_adult_01',voice_id:'default'}))} as unknown as SessionPlan;
+  characters:Array.from({length:12},(_,i)=>({id:'person_'+i,scene_node_id:'person_root_'+i,asset_id:'character.base.casual_adult_01',voice_id:'default'}))} as unknown as SessionPlan;
  assert.ok(planIssues(p).some(i=>i.rule==='budget'));
  p.characters=p.characters.slice(0,8);assert.deepEqual(planIssues(p),[]);
+});
+
+test('distinct approved characters cannot share one scene root',()=>{
+ const p={...plan,narrator_intro_8s:'STOP',stop_reminder:'STOP',narrator_beats:[],tool_calls:[],characters:
+  ['a','b'].map(id=>({id,scene_node_id:'shared',voice_id:'default',asset_id:'character.base.neutral_humanoid_01'}))} as unknown as SessionPlan;
+ assert.ok(planIssues(p).some(i=>i.rule==='unique'&&i.path==='/characters'));
+});
+test('the server and phone agree on the first scenario step',()=>{
+ const s=scene();s.scenario={objective:'test',initial_step_id:'last',dialogue_policy:'disabled',steps:[
+  {id:'first',prompt:'',terminal:false,actions:[],start_operations:[],completion:{trigger:'after_seconds',after_seconds:1,next_step_id:'last'}},
+  {id:'last',prompt:'',terminal:true,actions:[],start_operations:[]}]};
+ assert.ok(sceneIssues(plan,s,audio).some(i=>i.rule==='reference'&&i.message.includes('initial step')));
 });

@@ -38,4 +38,12 @@ class ImportTests(unittest.TestCase):
    changed=json.loads(json.dumps(original));changed['images'][0]['uri']=uri;chunk=json.dumps(changed).encode();chunk+=b' '*((-len(chunk))%4)
    path=self.root/'unsafe.glb';path.write_bytes(struct.pack('<4sII',b'glTF',2,20+len(chunk)+len(tail))+struct.pack('<II',len(chunk),0x4e4f534a)+chunk+tail)
    with self.assertRaisesRegex(ValueError,'Unsafe texture'):module.inspect_glb(path)
+ def test_negative_offsets_and_references_are_rejected(self):
+  original={'asset':{'version':'2.0'},'buffers':[{'byteLength':16}],'bufferViews':[{'buffer':0,'byteLength':16}], 'accessors':[{'bufferView':0,'componentType':5126,'type':'SCALAR','count':1}],'meshes':[{}],'skins':[{}],'nodes':[{'mesh':0,'skin':0}]}
+  for group,key,value in [('bufferViews','byteOffset',-1),('accessors','bufferView',-1),('accessors','byteOffset',-1),('nodes','mesh',-1),('nodes','skin',-1)]:
+   changed=json.loads(json.dumps(original));changed[group][0][key]=value
+   chunk=json.dumps(changed).encode();chunk+=b' '*((-len(chunk))%4)
+   tail=struct.pack('<II',16,0x004e4942)+bytes(16)
+   path=self.root/'invalid-index.glb';path.write_bytes(struct.pack('<4sII',b'glTF',2,20+len(chunk)+len(tail))+struct.pack('<II',len(chunk),0x4e4f534a)+chunk+tail)
+   with self.assertRaises(ValueError):module.inspect_glb(path)
 if __name__=='__main__':unittest.main()

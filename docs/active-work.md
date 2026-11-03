@@ -1,5 +1,7 @@
 # Current coordination — November 2, 2026
 
+Henry requested a branch-wide logical-consistency review after the post-session fixes. Findings and verification are in [consistency-review-2026-11-02.md](consistency-review-2026-11-02.md). This review fixes demonstrated lifecycle, mixing, deletion/recovery and native preflight failures. It does not merge BraveWork's `240e47c` visual construction. Merge these fixes before further overlapping work and rerun native checks after integration; push every commit immediately.
+
 Henry also assigned the post-session loop audit/fixes to this chat after tips. Native save timing/retries, ratings, reflection linkage, feedback completion and repeat consent fixes are documented in [post-session-audit.md](post-session-audit.md). The isolated native controller audit passes 16 checks; the physical pass remains pending. Fetch the pushed commit before overlapping Session/SessionStore changes. No generation, visual or model-prompt edits were made for this task.
 
 Henry subsequently assigned contextual loading tips to this chat. That focused work is based on BraveWork `5cb7522`; see [loading-tips.md](loading-tips.md). Native builds and tip layout review pass; device verification remains pending. Scene generation, visual construction and model prompts stay with BraveWork. Fetch the pushed tips commit before overlapping Session/HUD changes.

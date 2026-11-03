@@ -8,6 +8,11 @@ import AVFoundation
   private var introVoice: AVSpeechSynthesisVoice?
   let engine = AVAudioEngine()
   var players: [String: AVAudioPlayer] = [:]
+  private var gains: [String: Float] = [:]
+  private func refreshGains() {
+    let duck = Float(schedule["duck_gain_during_speech"].number ?? 0.25)
+    for (key, player) in players { player.volume = (gains[key] ?? 0) * (narrated ? duck : 1) }
+  }
   private var pausedPlayers = Set<String>()
   var ready = false
   var receivedAudioSeconds = 0.0
@@ -113,7 +118,7 @@ import AVFoundation
     finished = completion
     narrated = true
     spokenText = text
-    for p in players.values { p.volume *= 0.25 }
+    refreshGains()
     let u = SpeechVoice.utterance(text, voice: intro ? introVoice : SpeechVoice.selected)
     utteranceID = ObjectIdentifier(u)
     speech.speak(u)
@@ -139,7 +144,7 @@ import AVFoundation
     playbackEndedAt = ProcessInfo.processInfo.systemUptime
     let f = finished
     finished = nil
-    for p in players.values { p.volume = min(0.2, p.volume * 4) }
+    refreshGains()
     f?()
   }
   func interruptSpeech() {
@@ -183,6 +188,7 @@ import AVFoundation
     finished = nil
     for p in players.values { p.stop() }
     players = [:]
+    gains = [:]
     pausedPlayers = []
   }
   func play(_ name: String, loop: Bool = true, gain: Float = 0.14, key: String? = nil, offset: Double = 0) {
@@ -198,6 +204,8 @@ import AVFoundation
     p.play()
     players[key ?? name]?.stop()
     players[key ?? name] = p
+    gains[key ?? name] = gain
+    refreshGains()
   }
   func lobby() {
     silence()
@@ -207,6 +215,7 @@ import AVFoundation
   func apply(_ plan: JSON, active: Double = 0) {
     for p in players.values { p.stop() }
     players = [:]
+    gains = [:]
     activeLayers = []
     schedule = plan
     cueAssets = [:]
@@ -227,6 +236,7 @@ import AVFoundation
       guard active >= start else { continue }
       if active >= end {
         players.removeValue(forKey: "layer:" + id)?.stop()
+        gains.removeValue(forKey: "layer:" + id)
         continue
       }
       if activeLayers.insert(id).inserted {
@@ -241,10 +251,9 @@ import AVFoundation
         let blend = min(1, (active - at) / max(0.01, ramp["fade_seconds"].value))
         gain += (ramp["gain"].value - gain) * blend
       }
-      players["layer:" + id]?.volume =
-        Float(gain) * 0.3
-        * (narrated ? Float(schedule["duck_gain_during_speech"].number ?? 0.25) : 1)
+      gains["layer:" + id] = Float(gain) * 0.3
     }
+    refreshGains()
   }
 }
 

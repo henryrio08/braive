@@ -10,6 +10,9 @@ import SceneKit
   static func check(root: SCNNode, points: [SCNVector3], walking: Bool,
     ignored: [SCNNode] = [], radius: Float = 0.25, eyeHeight: Float = 1.6) throws {
     guard points.count > 1 else { return }
+    // Segment queries use SceneKit's committed geometry/transforms. Preflight
+    // creates and moves nodes synchronously, before the normal render commit.
+    SCNTransaction.flush()
     func ignoredHit(_ node: SCNNode) -> Bool {
       var cursor: SCNNode? = node
       while let n = cursor {
@@ -20,7 +23,7 @@ import SceneKit
       return false
     }
     func hits(_ a: SCNVector3, _ b: SCNVector3) -> [SCNHitTestResult] {
-      root.hitTestWithSegment(from:a,to:b,options:[SCNHitTestOption.backFaceCulling.rawValue:false,SCNHitTestOption.ignoreHiddenNodes.rawValue:true])
+      root.hitTestWithSegment(from:a,to:b,options:[SCNHitTestOption.backFaceCulling.rawValue:false,SCNHitTestOption.ignoreHiddenNodes.rawValue:true,SCNHitTestOption.clipToZRange.rawValue:false,SCNHitTestOption.searchMode.rawValue:SCNHitTestSearchMode.all.rawValue])
         .filter { !ignoredHit($0.node) }
     }
     for i in 1..<points.count {
@@ -44,16 +47,17 @@ import SceneKit
           let foot=p.y-eyeHeight
           let support=hits(SCNVector3(p.x,foot+0.3,p.z),SCNVector3(p.x,foot-0.35,p.z))
           guard support.contains(where: { $0.worldNormal.y > 0.5 }) else {
-            throw ScenePreflight.error("Route support missing on segment \(i-1) near sample \(sample)")
+            throw ScenePreflight.error("Route support missing on segment \(i-1) near sample \(sample) (\(support.count) hits, Y normals \(support.map { $0.worldNormal.y }))")
           }
         }
       }
     }
   }
   static func support(root: SCNNode, node: SCNNode, support: SCNNode) throws {
+    SCNTransaction.flush()
     let bounds=node.boundingBox
     let foot=node.convertPosition(SCNVector3((bounds.min.x+bounds.max.x)/2,bounds.min.y,(bounds.min.z+bounds.max.z)/2),to:root)
-    let hits=root.hitTestWithSegment(from:SCNVector3(foot.x,foot.y+0.2,foot.z),to:SCNVector3(foot.x,foot.y-0.25,foot.z),options:[SCNHitTestOption.backFaceCulling.rawValue:false]).filter { hit in
+    let hits=root.hitTestWithSegment(from:SCNVector3(foot.x,foot.y+0.2,foot.z),to:SCNVector3(foot.x,foot.y-0.25,foot.z),options:[SCNHitTestOption.backFaceCulling.rawValue:false,SCNHitTestOption.clipToZRange.rawValue:false,SCNHitTestOption.searchMode.rawValue:SCNHitTestSearchMode.all.rawValue]).filter { hit in
       var cursor:SCNNode?=hit.node
       while let n=cursor { if n === support { return true };cursor=n.parent }
       return false
@@ -62,7 +66,8 @@ import SceneKit
   }
   #if DEBUG
   static func verify() throws {
-    let root=SCNNode()
+    let scene=SCNScene(), root: SCNNode
+    root=scene.rootNode
     let floor=SCNNode(geometry:SCNBox(width:6,height:0.1,length:8,chamferRadius:0));floor.position=SCNVector3(0,-0.05,-3);root.addChildNode(floor)
     let points=[SCNVector3(0,1.6,0),SCNVector3(0,1.6,-5)]
     try check(root:root,points:points,walking:true)
