@@ -1,4 +1,6 @@
-# Current coordination — November 2, 2026
+# Current coordination — November 3, 2026
+
+After a real generation exceeded the former two-minute ceiling, the phone and backend now allow ten minutes for the whole generation/readiness attempt, including the one shared repair and native loading. The authoring prompt targets a complete ordinary scene in a few minutes through concise, coherent construction rather than sacrificing task fidelity or visual checks. This is a target until measured on Henry's device. Henry's separate branch owns UI and repeat-transcription confirmation changes; do not overwrite those while merging.
 
 The partner's contextual loading tips, post-session save/feedback/repeat fixes, and generation cancellation fixes are integrated into BraveWork; see [loading-tips.md](loading-tips.md) and [post-session-audit.md](post-session-audit.md). The later branch-wide [consistency review](consistency-review-2026-11-02.md) is integrated too: audio mixing, deletion/recovery, consent, native preflight and import validation fixes. Its route support improvement is combined with BraveWork's explicit object contact-point check. Scene generation, visual construction and model prompts remain on BraveWork.
 

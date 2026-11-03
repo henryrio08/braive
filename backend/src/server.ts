@@ -42,6 +42,7 @@ app.use((req,_res,next)=>{
 });
 const approved=new Map<string,{plan:SessionPlan,scene:SceneSpec,audio:AudioPlan}>();
 const attempts=new Map<string,{deadline:number,repairs:number}>();
+const generationLimitMs=10*60*1000;
 const jobs=new Map<string,Job>(); const running=new Map<string,AbortController>(); const revisions=new Map<string,number>();
 
 const capabilities={version:'iphone-initial-1',nodes:350,resolved_nodes:1000,primitives:180000,geometry_bytes:24000000,resource_notes:'Draw-call, texture and resident-memory targets require physical-device profiling; they are not runtime-enforced caps.',units:'meters',eye_height:1.6,initial_forward:'negative Z',geometry:['box','plane','sphere','cylinder','asset'],characters:'Use approved soft_adult character.base assets with their original palette. These are intentionally simple, friendly stylized people. Keep comfortable personal space; default at least 2.5m from the viewer unless the user asks for closer contact. Do not use legacy neutral/casual models for new experiences.',voices:['default'],asset_catalog_format:'category.subcategory: [[asset_id, triangle_count], ...]. All assets normalized to meters, base y=0, forward -Z. Use each GLB intact; do not author its mesh or skeleton children.',assets:meshCatalog, audio_assets:['forest','piano','wind','room','crowd','whoosh']};
@@ -99,13 +100,13 @@ app.post(['/v1/session-plans','/v1/scene-revisions'],(req,res,next)=>{
   supersedeGeneration(input.session_id,jobs,running);
   revisions.set(input.session_id,input.revision);
   const job:Job={job_id:randomUUID(),session_id:input.session_id,revision:input.revision,status:'running',stage:'Starting generation'};
-  attempts.set(job.job_id,{deadline:Date.now()+120000,repairs:0});
+  attempts.set(job.job_id,{deadline:Date.now()+generationLimitMs,repairs:0});
   jobs.set(job.job_id,job); const controller=new AbortController(); running.set(job.job_id,controller);
-  const timer=setTimeout(()=>controller.abort(new Error('120-second generation ceiling reached')),120000);
+  const timer=setTimeout(()=>controller.abort(new Error('Ten-minute generation ceiling reached')),generationLimitMs);
   void generate(input,job,controller.signal).catch(e=>{
    if(job.status==='cancelled') return;
-   job.status='failed';job.error={code:controller.signal.aborted?'TIMEOUT':e.code??'PROVIDER_UNAVAILABLE',message:controller.signal.aborted?'Generation ended at two minutes. Retry, revise, or cancel.':e.message,retryable:true,request_id:job.job_id,issues:e.issues};
-  }).finally(()=>{clearTimeout(timer);releaseGeneration(job.job_id,controller,running);console.log('[generation]',JSON.stringify({job_id:job.job_id,status:job.status,elapsed_seconds:(Date.now()-(attempts.get(job.job_id)!.deadline-120000))/1000,error_code:job.error?.code,nodes:job.result?.scene.nodes.length}));});
+   job.status='failed';job.error={code:controller.signal.aborted?'TIMEOUT':e.code??'PROVIDER_UNAVAILABLE',message:controller.signal.aborted?'Generation ended at ten minutes. Retry, revise, or cancel.':e.message,retryable:true,request_id:job.job_id,issues:e.issues};
+  }).finally(()=>{clearTimeout(timer);releaseGeneration(job.job_id,controller,running);console.log('[generation]',JSON.stringify({job_id:job.job_id,status:job.status,elapsed_seconds:(Date.now()-(attempts.get(job.job_id)!.deadline-generationLimitMs))/1000,error_code:job.error?.code,nodes:job.result?.scene.nodes.length}));});
   res.status(202).json(job);
  } catch(e){next(e);}
 });

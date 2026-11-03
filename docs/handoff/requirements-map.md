@@ -25,7 +25,7 @@ All references below point to headings in development-plan.md. The extracted ori
 | Specialist schemas, coherent setting/sound, decisions stable unless user input | Coordinate and construct; specialist schemas |
 | Setup narration / hey builder | Coordinate and construct, exact narration; repeated additions supported |
 | Setup's first STOP tip | Global presentation; Coordinate and construct, exact text |
-| Around one-minute average, ideally <=2 minutes | Coordinate and construct; timeout edge case |
+| Usually a few minutes; ten-minute recovery ceiling | Coordinate and construct a complete scene, then validate and load it |
 | Eight-second black intro including STOP; black fade and blurry-to-clear scene | Introduction and timed experience |
 | STOP immediately pauses; black-tinted overlay / white Quit simulation?; YES skips / NO resumes | STOP section, exact text and semantics |
 | Coordinator-chosen countdown | Intake; Introduction; SessionPlan schema |
@@ -53,7 +53,7 @@ Implementation additions include scene graphs, runtime validation, TTS, dialogue
 ## Authoritative addendum clarifications
 
 - Spark runtime role explicitly corrected; Muse Code alone is build-time-only.
-- Generation attempt has a 120-second hard ceiling; internal retries share it.
+- Generation and native readiness have a ten-minute hard ceiling; internal retries share it. Prefer concise valid output and useful scene detail so ordinary descriptions finish in a few minutes.
 - Reflection display filename is `[DATE] [HH:MM] - [TOPIC <=30 chars]`.
 - Coordinator has scalar intensity_1_10, short topic, intro/STOP/audio brief, interaction mode, and an enforced safety decision.
 - Tool calls carry typed specialist arguments and execution phase.
