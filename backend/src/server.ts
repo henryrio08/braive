@@ -1,4 +1,5 @@
 import {activeBudget} from './budget.js';
+import {cancelGeneration,releaseGeneration,supersedeGeneration} from './job-lifecycle.js';
 import {PhoneTestWindow} from './phone-test-window.js';
 import {canonicalSceneReferences} from './scene-references.js';
 import {assertCurrentDialogue,dialogueContext} from './dialogue.js';
@@ -87,17 +88,16 @@ app.post(['/v1/session-plans','/v1/scene-revisions'],(req,res,next)=>{
   if(!input.use_history && input.relevant_history.length) throw new AppError('INVALID_INPUT','Declined history must be empty');
   if(input.chained_rerun && !input.parent_session_id) throw new AppError('INVALID_INPUT','Chained session needs parent');
   if((revisions.get(input.session_id)??0)>=input.revision) throw new AppError('CONFLICT','Revision must increase',[],409);
-  for(const [id,j] of jobs) if(j.session_id===input.session_id && running.has(id)) {running.get(id)!.abort(); j.status='cancelled';}
+  supersedeGeneration(input.session_id,jobs,running);
   revisions.set(input.session_id,input.revision);
   const job:Job={job_id:randomUUID(),session_id:input.session_id,revision:input.revision,status:'running',stage:'Starting generation'};
-  if(running.size>=3) throw new AppError("RATE_LIMITED","Too many active generation jobs",[],429);
   attempts.set(job.job_id,{deadline:Date.now()+120000,repairs:0});
   jobs.set(job.job_id,job); const controller=new AbortController(); running.set(job.job_id,controller);
   const timer=setTimeout(()=>controller.abort(new Error('120-second generation ceiling reached')),120000);
   void generate(input,job,controller.signal).catch(e=>{
    if(job.status==='cancelled') return;
    job.status='failed';job.error={code:controller.signal.aborted?'TIMEOUT':e.code??'PROVIDER_UNAVAILABLE',message:controller.signal.aborted?'Generation ended at two minutes. Retry, revise, or cancel.':e.message,retryable:true,request_id:job.job_id,issues:e.issues};
-  }).finally(()=>{clearTimeout(timer);running.delete(job.job_id);console.log('[generation]',JSON.stringify({job_id:job.job_id,status:job.status,elapsed_seconds:(Date.now()-(attempts.get(job.job_id)!.deadline-120000))/1000,error_code:job.error?.code,nodes:job.result?.scene.nodes.length}));});
+  }).finally(()=>{clearTimeout(timer);releaseGeneration(job.job_id,controller,running);console.log('[generation]',JSON.stringify({job_id:job.job_id,status:job.status,elapsed_seconds:(Date.now()-(attempts.get(job.job_id)!.deadline-120000))/1000,error_code:job.error?.code,nodes:job.result?.scene.nodes.length}));});
   res.status(202).json(job);
  } catch(e){next(e);}
 });
@@ -118,12 +118,12 @@ app.post('/v1/jobs/:id/validation',async(req,res,next)=>{
    const errors=sceneIssues(plan,repaired,audio);if(errors.length) throw new AppError('INVALID_MODEL_OUTPUT','Native repair invalid',errors);
    controller.signal.throwIfAborted();if(revisions.get(job.session_id)!==job.revision)return;
    job.result={plan,audio,scene:repaired};approved.set(job.session_id,job.result);job.status='succeeded';job.stage='Ready for device validation';
-  }catch(e:any){job.status='failed';job.error={code:controller.signal.aborted?'TIMEOUT':e.code??'INVALID_MODEL_OUTPUT',message:e.message,retryable:true,request_id:job.job_id,issues:e.issues};}
-  finally{clearTimeout(timer);running.delete(job.job_id);}
+  }catch(e:any){if(jobs.get(job.job_id)?.status!=='cancelled'){job.status='failed';job.error={code:controller.signal.aborted?'TIMEOUT':e.code??'INVALID_MODEL_OUTPUT',message:e.message,retryable:true,request_id:job.job_id,issues:e.issues};}}
+  finally{clearTimeout(timer);releaseGeneration(job.job_id,controller,running);}
  }catch(e){next(e);}
 });
 app.get('/v1/jobs/:id',(req,res)=>{const j=jobs.get(req.params.id); j?res.json(j):res.status(404).json({message:'Job not found'});});
-app.delete('/v1/jobs/:id',(req,res)=>{const j=jobs.get(req.params.id); if(j){running.get(j.job_id)?.abort();j.status='cancelled';}res.sendStatus(204);});
+app.delete('/v1/jobs/:id',(req,res)=>{cancelGeneration(req.params.id,jobs,running);res.sendStatus(204);});
 const routes=[['dialogue','DialogueRequest','DialogueResult','Respond as the specified character to the actual user answer. At most two short sentences, 35 words total. One speaker. Use character gestures only; scenario actions own movement and world changes. Never invent observations.'],['feedback','FeedbackRequest','FeedbackResult','Only cite supplied observation IDs. Maximum three positive did_well and three noticed. Include a quick improvement if supported. No diagnosis or inferred eye contact.'],['adaptations','AdaptationRequest','AdaptationResult','Use self-report, preferences, and supplied evidence IDs. Maintain if evidence is missing; ease or maintain after early quit/high difficulty. Preserve scenario identity.']] as const;
 for(const [path,requestSchema,resultSchema,instructions] of routes) app.post(`/v1/${path}`,async(req,res,next)=>{
  try {validate(requestSchema,req.body);
