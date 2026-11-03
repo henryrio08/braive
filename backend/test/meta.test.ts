@@ -18,3 +18,8 @@ test('cumulative approval rejects unknown pricing and wrong model roles before s
   for(const k of keys) {if(previous[k]===undefined)delete process.env[k];else process.env[k]=previous[k];}
  }
 });
+
+test('an already cancelled model call stops before permission, pricing or ledger work',async()=>{
+ const controller=new AbortController();controller.abort(new Error('Already cancelled offline test'));
+ await assert.rejects(model('AudioPlan',{},'',controller.signal),/Already cancelled offline test/);
+});

@@ -94,6 +94,10 @@ import Speech
       .filter { seen.insert(VoiceAnswer.normalized($0)).inserted }.prefix(100).map { $0 }
     try? await analyzer?.setContext(context)
   }
+  func discardPending(tail: Double = 0) {
+    endpointTask?.cancel(); endpointTask = nil
+    turn.discard(through: (sink?.audioSeconds ?? 0) + tail)
+  }
   func stop() {
     stopped = true
     sink?.finish(); sink = nil
@@ -109,6 +113,9 @@ import Speech
 
 @available(iOS 26.0, *)
 final class LocalSpeechSink: @unchecked Sendable {
+  private let clockLock = NSLock()
+  private var emittedFrames = 0.0
+  var audioSeconds: Double { clockLock.lock(); defer { clockLock.unlock() }; return emittedFrames / target.sampleRate }
   private let converter: AVAudioConverter
   private let input: AVAudioFormat, target: AVAudioFormat
   private let continuation: AsyncStream<AnalyzerInput>.Continuation
@@ -130,6 +137,7 @@ final class LocalSpeechSink: @unchecked Sendable {
     }
     if let error { onError(error.localizedDescription); return }
     guard output.frameLength > 0 else { return }
+    clockLock.lock(); emittedFrames += Double(output.frameLength); clockLock.unlock()
     if case .dropped = continuation.yield(AnalyzerInput(buffer: output)) {
       onError("On-device voice could not keep up with the microphone. Please reconnect voice.")
     }

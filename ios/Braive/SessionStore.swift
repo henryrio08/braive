@@ -27,18 +27,23 @@ import Foundation
     records.sort { $0["started_at"].text < $1["started_at"].text }
     try? rebuildCSV()
   }
-  func save(_ record: JSON) throws {
+  var recoverable: JSON? {
+    records.reversed().first { $0["outcome"].text == "interrupted" && $0["checkpoint"]["version"].value == 1 && $0["scene"].object != nil }
+  }
+  func save(_ record: JSON, rebuild: Bool = true) throws {
     let id = record["session_id"].text
     guard UUID(uuidString: id) != nil else { throw CocoaError(.fileWriteInvalidFileName) }
     try JSONEncoder().encode(record).write(
       to: root.appendingPathComponent("Sessions/\(id).json"), options: .atomic)
     records.removeAll { $0["session_id"].text == id }
     records.append(record)
-    try rebuildCSV()
+    records.sort { $0["started_at"].text < $1["started_at"].text }
+    if rebuild { try rebuildCSV() }
   }
-  func reflection(_ text: String, topic: String) throws -> JSON {
-    let date = Date()
+  func reflection(_ text: String, topic: String, date: Date = Date()) throws -> JSON {
     let d = DateFormatter()
+    d.locale = Locale(identifier: "en_US_POSIX")
+    d.calendar = Calendar(identifier: .gregorian)
     d.dateFormat = "yyyy-MM-dd"
     let day = d.string(from: date)
     d.dateFormat = "HH:mm"
@@ -65,7 +70,8 @@ import Foundation
       })
     return Array(
       records.reversed().filter { r in
-        !words.isDisjoint(
+        guard ["completed", "user_ended"].contains(r["outcome"].text) else { return false }
+        return !words.isDisjoint(
           with: Set(
             r["plan"]["topic"].text.lowercased().split(whereSeparator: { !$0.isLetter }).map(
               String.init)))

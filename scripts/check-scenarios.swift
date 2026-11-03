@@ -79,6 +79,17 @@ import simd
     check(commandTurn.take(now:1.8)?.text == "Swim to buoy", "Generated action phrases use the responsive local-command window")
     let continuing = ViewerMotion.start(path:fixture.motion_paths[0],origin:mid.position,at:6,frame:heading,replacing:fall)
     check(continuing.startedAt == fall.startedAt && continuing.sample(at:6).position == mid.position, "Repeating an in-flight absolute route continues rather than rewinding")
+    let guidedDefinition = try JSONDecoder().decode(ScenarioDefinition.self,from:Data(contentsOf:URL(fileURLWithPath:"tests/fixtures/guided-scenario.json")))
+    var guided = try ScenarioRuntime(guidedDefinition)
+    check(guided.start(at:0).operations.first?["type"].text == "move_viewer","Experience starts moving without a command")
+    check(guided.hear("walk forward",at:1) == nil,"Guided practice never needs spoken navigation")
+    check(guided.conversationTarget == nil,"Quiet travel does not trigger unsolicited dialogue")
+    check(guided.tick(at:6,completedMotion:"approach")?.stepID == "conversation","Arrival progresses automatically")
+    check(guided.conversationTarget == "host","Normal speech has an unambiguous target only in the authored conversation window")
+    check(!guided.step.terminal,"An ongoing conversation cannot finish the experience prematurely")
+    check(guided.tick(at:35,completedMotion:nil) == nil,"Conversation time remains available without saying begin or next")
+    check(guided.tick(at:36,completedMotion:nil)?.terminal == true,"The experience reaches its completed state without a command")
+    check(guided.conversationTarget == nil,"Completed experiences do not keep responding to speech")
     print("Scenario/movement checks passed: \(count). No network, microphone, or provider calls.")
   }
 }

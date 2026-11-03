@@ -1,0 +1,9 @@
+{
+  "objective":"Experience an arrival and a short conversation without commands",
+  "initial_step_id":"arrival","progression":"guided","dialogue_policy":"natural",
+  "steps":[
+    {"id":"arrival","prompt":"","terminal":false,"actions":[],"start_operations":[{"type":"move_viewer","path_id":"approach"}],"completion":{"trigger":"motion_complete","motion_path_id":"approach","next_step_id":"conversation"}},
+    {"id":"conversation","prompt":"What would you like to share?","terminal":false,"actions":[],"start_operations":[],"conversation_target":"host","completion":{"trigger":"after_seconds","after_seconds":30,"next_step_id":"completed"}},
+    {"id":"completed","prompt":"","terminal":true,"actions":[],"start_operations":[]}
+  ]
+}

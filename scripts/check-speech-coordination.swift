@@ -8,6 +8,21 @@ import Foundation
       count += 1
     }
     var floor = SpeechFloor()
+    var confirmation = StopConfirmation()
+    confirmation.begin()
+    check(confirmation.answer("no",at:100) == nil,"A transcript during the quit prompt cannot resume")
+    confirmation.arm(at:101)
+    check(confirmation.answer("no",at:100.9) == nil,"The post-playback echo tail cannot resume")
+    check(confirmation.answer("Say yes to end or no to continue",at:102) == nil,"The complete confirmation prompt is never a user decision")
+    check(confirmation.answer("I said no to that idea earlier",at:102) == nil,"An embedded no is not a resume instruction")
+    check(confirmation.answer("No.",at:103) == .resume,"A fresh exact no resumes deliberately")
+    check(confirmation.answer("yes",at:104) == nil,"A consumed confirmation cannot act twice")
+    confirmation.begin(); confirmation.arm(at:105)
+    check(confirmation.answer("Yes please",at:106) == .end,"An exact yes deliberately ends")
+    check(VoiceAnswer.binary("Say yes or no") == nil,"App yes/no narration cannot answer other binary prompts")
+    check(SpokenEcho.matches("would you like to end it",spoken:"Practice paused. Would you like to end it?"),"Recognize multiword playback echo")
+    check(!SpokenEcho.matches("STOP",spoken:"To stop at any time, just say STOP"),"A user's immediate STOP remains available")
+    check(!SpokenEcho.matches("Please stop now",spoken:"To stop at any time, just say STOP"),"A spoken request distinct from playback is preserved")
     check(floor.available(now: 0), "Initial quiet scene can introduce the task")
     floor.detect(true, now: 1)
     check(!floor.available(now: 20), "Timer cue cannot interrupt detected speech")
@@ -41,6 +56,9 @@ import Foundation
     queue.enqueue("Thanks for explaining.", at: 160)
     queue.markSpoken("Thanks for explaining!", at: 160)
     check(queue.take(at: 161) == nil, "A reply and its matching narrate operation speak once")
+    check(!scenarioCanFinish(terminalAt: 0, active: 4, motionPending: true), "Terminal travel cannot be cut off by the three-second grace period")
+    check(!scenarioCanFinish(terminalAt: nil, active: 20, motionPending: false), "An ordinary stage is not completed by quiet alone")
+    check(scenarioCanFinish(terminalAt: 0, active: 10, motionPending: false), "Terminal arrival can finish after movement ends")
     print("Speech coordination checks passed: \(count). No microphone or provider calls.")
   }
 }

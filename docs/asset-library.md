@@ -1,10 +1,10 @@
 # Bundled CC0 low-poly library
 
-The shared allowlist contains **349 original GLBs** from the supplied pack. `assets/lowpoly_cc0/LICENSE_INDEX.csv` is the license authority. The importer rejects missing/duplicate rows, non-`CC0-1.0` licenses, unsafe paths, mismatched filename IDs, nonpositive scales, malformed/truncated GLBs, and external dependencies. It never downloads, regenerates, converts, remeshes, or substitutes models. Source and runtime GLBs have identical SHA-256 hashes.
+The shared allowlist contains **355 GLBs**: all 349 supplied originals, two retained Quaternius adults, and four [Kenney Mini Characters](https://kenney.nl/assets/mini-characters) approved for new scenes. All are CC0. `assets/lowpoly_cc0/LICENSE_INDEX.csv` is the license authority; provenance records source URLs and generation eligibility. The importer rejects missing/duplicate rows, non-CC0 licenses, unsafe paths, malformed GLBs and unapproved dependencies. Source/runtime GLBs are byte-identical. The Kenney palette is a validated, hash-recorded local PNG dependency; remote, traversal and missing dependencies are rejected. No meshes, weights or skeletons are regenerated.
 
 ## Rebuild and check
 
-The pack is extracted under `assets/lowpoly_cc0/`, preserving category/subcategory directories. Both the source and bundle copies are committed (each copy is approximately 8.5 MB; Git deduplicates their identical contents). No Git LFS installation or private download is required after cloning.
+The pack is extracted under `assets/lowpoly_cc0/`, preserving category/subcategory directories. Both the source and bundle copies are committed (each copy is approximately 10.5 MB; Git deduplicates their identical contents). No Git LFS installation or private download is required after cloning.
 
 ```sh
 python3 scripts/import-lowpoly-pack.py --dry-run
@@ -35,13 +35,17 @@ Assets are cached as normalized templates. Instances share immutable vertex data
 
 ## Characters and color
 
-All app characters use `character.base.neutral_humanoid_01`. Other `character.crowd_proxy` meshes remain importable inventory objects but are rejected as character nodes. The coordinator chooses optional `Character.color_hex`; Wonder copies it into the existing character node's `Material.color`. The backend checks that match, and iOS applies a single solid diffuse UIColor to the neutral figure. If neither field supplies a valid hex, iOS chooses a random solid color. No wardrobe textures are generated or required. Other GLBs retain their source materials and textures.
+New generation selects `character.base.soft_adult_01` through `soft_adult_04`: deliberately soft, stylized Kenney people with unchanged source skin, hair and wardrobe palettes. Henry approved actual native-renderer previews. They normalize to approximately 1.65m standing height. `generation_enabled` excludes the original mannequin and the rejected casual adults from new coordinator output; those files remain available for historical records. Crowd proxies are not characters.
 
-The neutral asset has a skeleton and **no authored animation clips**, in its original T pose. `idle`, `listen`, `speak`, and `gesture` prefer a matching supplied clip; for this known base they use small app-owned chest/head/elbow joint motions around the original pose. They do not fabricate GLB clips, replace the skeleton, alter vertex/weight data, or claim a seated or lip-synced animation. An absent/unrecognized rig binding safely no-ops. Dialogue and TTS remain app services. Future authored, appropriately licensed clips can bind to the preserved rig.
+The source palette PNG is bundled beside the GLBs. The app preserves textured materials instead of replacing the complete character with a solid color. Older clothing-tint bindings remain narrow and never affect skin/hair/eyes. The importer copies all bundled author license notices and records dependency hashes. The original models and archive licensing are preserved.
+
+Only appropriate idle, walk, sprint/run, gesture and sitting clips are registered. Other source clips are retained in the original GLB but never exposed as tools. Players and rigs remain independent. Sitting persists through listening/speaking; movement releases the posture. Furniture must fit the actual supported pose. The original mannequin retains app-owned motions for old records. No lip sync or full-body tracking is supplied.
+
+The phone enforces 1,000 resolved nodes, 180,000 primitives and 24MB of geometry data. Texture, resident-memory and draw-call targets require physical profiling. The native 355-asset audit passes; a passing asset audit does not prove generated scene composition or comfort.
 
 ## Authoring capabilities and gaps
 
-Spark and Wonder receive named assets derived from the same manifest used for validation. Characters must use the neutral base with coordinator color; props must use registered GLBs. Box/plane/sphere/cylinder remain architecture fill only. Unknown IDs fail validation. SceneSpec's `geometry.kind: asset` and `asset_id` shape is unchanged. Previous procedural IDs were removed; development fixtures now select real manifest IDs.
+Spark and Wonder receive named assets derived from the same manifest used for validation. Characters must use a registered rigged base with coordinator clothing color. Prefer the clothed adults for everyday people. Props use registered GLBs or coherent procedural assemblies bound to approved plan props. Box/plane/sphere/cylinder can form environment and approved task assemblies. Unknown IDs fail validation. SceneSpec's `geometry.kind: asset` and `asset_id` shape is unchanged. Previous procedural IDs were removed; development fixtures now select real manifest IDs.
 
 Intentionally empty, with no invented replacement assets:
 

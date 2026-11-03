@@ -17,6 +17,8 @@ struct AssetEntry: Decodable {
   let character_rigged: Bool
   let license: String
   let normalization: Normalization
+  let material_tint_names: [String]?
+  let generation_enabled: Bool?
 }
 
 /// Only byte-preserved, CC0 manifest assets can enter the renderer. No procedural object fallback.
@@ -40,6 +42,9 @@ struct AssetEntry: Decodable {
   private static let poses = NSMapTable<SCNNode, RigPose>(
     keyOptions: .weakMemory, valueOptions: .strongMemory)
   private static var templates: [String: SCNNode] = [:]
+  private static var clips: [String: [String: SCNAnimation]] = [:]
+  private static let postures = NSMapTable<SCNNode, NSString>(keyOptions: .weakMemory, valueOptions: .strongMemory)
+  private static let activeClips = NSMapTable<SCNNode, NSString>(keyOptions: .weakMemory, valueOptions: .strongMemory)
   static var entries: [AssetEntry] {
     get throws {
       if let cachedEntries { return cachedEntries }
@@ -108,10 +113,34 @@ struct AssetEntry: Decodable {
         throw ScenePreflight.error("Empty GLB: " + id)
       }
       normalized.position = SCNVector3(-(low.x + high.x) / 2, -low.y, -(low.z + high.z) / 2)
+      var registered: [String: SCNAnimation] = [:]
+      for clip in source.animations {
+        let name = clip.name.components(separatedBy: "|").last!.lowercased().replacingOccurrences(of: "female_", with: "")
+        let role: String?
+        switch name {
+        case "idle", "idle_neutral", "standing": role = "idle"
+        case "walk": role = "walk"
+        case "run", "sprint": role = "run"
+        case "sitting", "sit": role = "sit"
+        case "wave", "interact", "emote-yes": role = "gesture"
+        default: role = nil
+        }
+        if let role, registered[role] == nil || name == "idle_neutral" || name == "wave" {
+          registered[role] = clip.animationPlayer.animation
+        }
+      }
+      clips[id] = registered
       templates[id] = placement
     }
     let instance = try clone(templates[id]!)
     instanceIDs.setObject(id as NSString, forKey: instance)
+    for (role, source) in clips[id] ?? [:] {
+      let animation = source.copy() as! SCNAnimation
+      animation.usesSceneTimeBase = true
+      animation.blendInDuration = 0.18; animation.blendOutDuration = 0.15
+      instance.addAnimationPlayer(SCNAnimationPlayer(animation: animation), forKey: "braive_clip_" + role)
+      instance.animationPlayer(forKey: "braive_clip_" + role)?.stop()
+    }
     if entry.category == "character" && entry.subcategory == "base" {
       recolor(instance, hex: colorHex)
     }
@@ -126,7 +155,10 @@ struct AssetEntry: Decodable {
       for (x, y) in zip(a.childNodes, b.childNodes) { pair(x, y) }
     }
     pair(source, copy)
-    for node in mapping.values { node.geometry = node.geometry?.copy() as? SCNGeometry }
+    for node in mapping.values {
+      node.geometry = node.geometry?.copy() as? SCNGeometry
+      node.geometry?.materials = node.geometry?.materials.map { $0.copy() as! SCNMaterial } ?? []
+    }
     func rebind(_ original: SCNNode) throws {
       guard let target = mapping[ObjectIdentifier(original)] else { return }
       if let skin = original.skinner {
@@ -150,6 +182,17 @@ struct AssetEntry: Decodable {
     return copy
   }
   static func recolor(_ node: SCNNode, hex: String?) {
+    let id = instanceIDs.object(forKey: node) as String? ?? ""
+    let tintNames = (try? entries.first(where: { $0.id == id })?.material_tint_names) ?? []
+    if id != "character.base.neutral_humanoid_01" {
+      guard !tintNames.isEmpty, let hex else { return }
+      node.enumerateChildNodes { n, _ in
+        for material in n.geometry?.materials ?? [] where tintNames.contains(material.name ?? "") {
+          material.diffuse.contents = UIColor(hex: hex)
+        }
+      }
+      return
+    }
     let color: UIColor
     if let hex, hex.range(of: "^#[0-9A-Fa-f]{6}$", options: .regularExpression) != nil {
       color = UIColor(hex: hex)
@@ -177,7 +220,21 @@ struct AssetEntry: Decodable {
   }
   /// Preserve authored clips. The neutral rig gets small app-controlled joint motions, never new mesh data.
   static func animate(_ node: SCNNode, behavior: String) {
-    guard ["idle", "listen", "speak", "gesture", "walk", "run", "swim"].contains(behavior) else { return }
+    guard ["idle", "listen", "speak", "gesture", "walk", "run", "swim", "sit"].contains(behavior) else { return }
+    if behavior == "sit" { postures.setObject("sit", forKey: node) }
+    if ["walk", "run", "swim"].contains(behavior) { postures.removeObject(forKey: node) }
+    let seated = postures.object(forKey: node) == "sit"
+    let wanted = seated ? "sit" : ["listen", "speak"].contains(behavior) ? "idle" : behavior
+    if node.animationKeys.contains(where: { $0.hasPrefix("braive_clip_") }) {
+      let key = node.animationPlayer(forKey: "braive_clip_" + wanted) != nil ? "braive_clip_" + wanted : "braive_clip_idle"
+      for name in node.animationKeys {
+        guard let player = node.animationPlayer(forKey: name) else { continue }
+        if name == key { if activeClips.object(forKey: node) as String? != key { player.play() } }
+        else { player.stop(withBlendOutDuration: 0.15) }
+      }
+      activeClips.setObject(key as NSString, forKey: node)
+      return
+    }
     var usedClip = false
     node.enumerateChildNodes { n, _ in
       for key in n.animationKeys {
@@ -289,17 +346,38 @@ struct AssetEntry: Decodable {
           throw ScenePreflight.error("Character instances share bones")
         }
         var colorsValid = true
+        let tinted = entry.material_tint_names ?? []
+        var tintedCount = 0
         node.enumerateChildNodes { n, _ in
           if let g = n.geometry {
             for m in g.materials {
+              if entry.id != "character.base.neutral_humanoid_01" && !tinted.contains(m.name ?? "") { continue }
+              tintedCount += 1
               if !(m.diffuse.contents as? UIColor ?? .clear).isEqual(UIColor(hex: "#3A8FBC")) {
                 colorsValid = false
               }
             }
           }
         }
-        guard colorsValid else {
+        guard colorsValid && (tintedCount > 0 || (entry.id != "character.base.neutral_humanoid_01" && tinted.isEmpty)) else {
           throw ScenePreflight.error("Neutral diffuse recoloring leaked between instances")
+        }
+        if entry.id != "character.base.neutral_humanoid_01" {
+          for role in ["idle", "walk", "run"] {
+            guard let p = node.animationPlayer(forKey: "braive_clip_" + role),
+              let q = other.animationPlayer(forKey: "braive_clip_" + role), p !== q else {
+              throw ScenePreflight.error("Character clip missing or shared: " + entry.id)
+            }
+          }
+          if tinted.isEmpty {
+            var textured = false
+            node.enumerateChildNodes { n,_ in
+              for material in n.geometry?.materials ?? [] {
+                if let value = material.diffuse.contents, !(value is UIColor) { textured = true }
+              }
+            }
+            guard textured else { throw ScenePreflight.error("Character palette texture is missing: " + entry.id) }
+          }
         }
         for behavior in ["idle", "listen", "speak", "gesture"] { animate(node, behavior: behavior) }
       }

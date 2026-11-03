@@ -3,10 +3,14 @@ import Foundation
 /// Deterministic renderer check, available only through the --preflight-audit development launch argument.
 @MainActor enum PreflightAudit {
   static func run(_ world: World) throws {
+    #if DEBUG
+    try ScenePreflight.verifyRejections()
+    try RouteAudit.verify()
+    #endif
     let id = UUID().uuidString
     let table = try AssetLibrary.first(category: "furniture", subcategory: "table")
     let chair = try AssetLibrary.first(category: "furniture", subcategory: "chair")
-    let shelf = try AssetLibrary.first(category: "furniture", subcategory: "bookshelf")
+    let shelf = try AssetLibrary.first(category: "furniture", subcategory: "shelf")
     let character = try AssetLibrary.first(category: "character", subcategory: "base")
     func node(
       _ id: String, _ role: String, _ geometry: [String: Any], _ position: [Double],

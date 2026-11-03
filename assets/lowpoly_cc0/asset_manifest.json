@@ -26,7 +26,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -1.1,
+        0,
+        -1.1
+      ],
+      "max": [
+        1.1,
+        0.4,
+        1.1
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.ceiling.building_roof_flat_corner_inner_01",
@@ -55,7 +68,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -1.1,
+        0,
+        -1.1
+      ],
+      "max": [
+        1.1,
+        0.5,
+        1.1
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.ceiling.building_roof_flat_patch_01",
@@ -84,7 +110,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.55,
+        0,
+        -0.55
+      ],
+      "max": [
+        0.55,
+        0.05,
+        0.55
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.ceiling.building_roof_flat_patch_large_01",
@@ -113,7 +152,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.8,
+        0,
+        -0.8
+      ],
+      "max": [
+        0.8,
+        0.05,
+        0.8
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.ceiling.building_roof_flat_side_01",
@@ -142,7 +194,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -1.1,
+        0,
+        -1.0
+      ],
+      "max": [
+        1.1,
+        0.4,
+        1.0
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.ceiling.building_roof_flat_square_01",
@@ -171,7 +236,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -1.197258,
+        0,
+        -1.197258
+      ],
+      "max": [
+        1.197258,
+        0.4,
+        1.197258
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.ceiling.rustic_structure_metal_roof_01",
@@ -200,7 +278,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.5442,
+        0,
+        -0.55
+      ],
+      "max": [
+        0.5442,
+        1.0,
+        0.55
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.ceiling.rustic_structure_roof_01",
@@ -229,7 +320,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.535471,
+        0,
+        -0.551855
+      ],
+      "max": [
+        0.535471,
+        1.314366,
+        0.551855
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.column.blockout_column_rounded_01",
@@ -258,7 +362,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.2,
+        0,
+        -0.2
+      ],
+      "max": [
+        0.2,
+        2.0,
+        0.2
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.column.blockout_column_triangle_01",
@@ -287,7 +404,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.2,
+        0,
+        -0.2
+      ],
+      "max": [
+        0.2,
+        2.0,
+        0.2
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.column.building_column_01",
@@ -316,7 +446,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.25,
+        0,
+        -0.25
+      ],
+      "max": [
+        0.25,
+        2.4,
+        0.25
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.column.building_column_thin_01",
@@ -345,7 +488,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.2,
+        0,
+        -0.2
+      ],
+      "max": [
+        0.2,
+        2.4,
+        0.2
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.column.building_column_wide_01",
@@ -374,7 +530,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.35,
+        0,
+        -0.35
+      ],
+      "max": [
+        0.35,
+        2.4,
+        0.35
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.column.building_wall_corner_column_01",
@@ -403,7 +572,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -1.0375,
+        0,
+        -1.0375
+      ],
+      "max": [
+        1.0375,
+        2.4,
+        1.0375
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.column.building_wall_corner_column_bottom_01",
@@ -432,7 +614,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -1.0625,
+        0,
+        -1.0625
+      ],
+      "max": [
+        1.0625,
+        2.4,
+        1.0625
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.column.home_column_round1_01",
@@ -461,7 +656,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.350009,
+        0,
+        -0.368021
+      ],
+      "max": [
+        0.350009,
+        0.886376,
+        0.368021
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.column.home_column_round2_01",
@@ -490,7 +698,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.350009,
+        0,
+        -0.368021
+      ],
+      "max": [
+        0.350009,
+        2.000323,
+        0.368021
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.column.home_column_round3_01",
@@ -519,7 +740,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.350009,
+        0,
+        -0.368021
+      ],
+      "max": [
+        0.350009,
+        2.714494,
+        0.368021
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.column.home_column_square_big_01",
@@ -548,7 +782,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.226817,
+        0,
+        -0.226817
+      ],
+      "max": [
+        0.226817,
+        2.079298,
+        0.226817
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.column.home_column_square_small_01",
@@ -577,7 +824,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.226817,
+        0,
+        -0.226817
+      ],
+      "max": [
+        0.226817,
+        1.22351,
+        0.226817
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.door.blockout_door_garage_01",
@@ -611,7 +871,20 @@
       "open",
       "close",
       "open-and-close"
-    ]
+    ],
+    "bounds_meters": {
+      "min": [
+        -0.35,
+        0,
+        -1.1
+      ],
+      "max": [
+        0.35,
+        1.6,
+        1.1
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.door.blockout_door_sliding_01",
@@ -645,7 +918,20 @@
       "open",
       "close",
       "open-and-close"
-    ]
+    ],
+    "bounds_meters": {
+      "min": [
+        -0.35,
+        0,
+        -0.7
+      ],
+      "max": [
+        0.35,
+        1.6,
+        0.7
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.door.blockout_door_sliding_double_01",
@@ -679,7 +965,20 @@
       "open",
       "close",
       "open-and-close"
-    ]
+    ],
+    "bounds_meters": {
+      "min": [
+        -0.35,
+        0,
+        -0.9
+      ],
+      "max": [
+        0.35,
+        1.6,
+        0.9
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.door.blockout_door_sliding_double_round_01",
@@ -713,7 +1012,20 @@
       "open",
       "close",
       "open-and-close"
-    ]
+    ],
+    "bounds_meters": {
+      "min": [
+        -0.175,
+        0,
+        -1.1
+      ],
+      "max": [
+        0.175,
+        1.6,
+        1.1
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.door.blockout_door_sliding_double_wide_01",
@@ -747,7 +1059,20 @@
       "open",
       "close",
       "open-and-close"
-    ]
+    ],
+    "bounds_meters": {
+      "min": [
+        -0.35,
+        0,
+        -1.4
+      ],
+      "max": [
+        0.35,
+        1.6,
+        1.4
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.door.building_door_rotate_round_a_01",
@@ -781,7 +1106,20 @@
       "open",
       "close",
       "open-and-close"
-    ]
+    ],
+    "bounds_meters": {
+      "min": [
+        -0.125,
+        0,
+        -0.4625
+      ],
+      "max": [
+        0.125,
+        2.1,
+        0.4625
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.door.building_door_rotate_round_b_01",
@@ -815,7 +1153,20 @@
       "open",
       "close",
       "open-and-close"
-    ]
+    ],
+    "bounds_meters": {
+      "min": [
+        -0.125,
+        0,
+        -0.4625
+      ],
+      "max": [
+        0.125,
+        2.1,
+        0.4625
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.door.building_door_rotate_round_c_01",
@@ -849,7 +1200,20 @@
       "open",
       "close",
       "open-and-close"
-    ]
+    ],
+    "bounds_meters": {
+      "min": [
+        -0.125,
+        0,
+        -0.4625
+      ],
+      "max": [
+        0.125,
+        2.1,
+        0.4625
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.door.building_door_rotate_round_d_01",
@@ -883,7 +1247,20 @@
       "open",
       "close",
       "open-and-close"
-    ]
+    ],
+    "bounds_meters": {
+      "min": [
+        -0.125,
+        0,
+        -0.4625
+      ],
+      "max": [
+        0.125,
+        2.1,
+        0.4625
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.door.building_door_rotate_square_a_01",
@@ -917,7 +1294,20 @@
       "open",
       "close",
       "open-and-close"
-    ]
+    ],
+    "bounds_meters": {
+      "min": [
+        -0.125,
+        0,
+        -0.4625
+      ],
+      "max": [
+        0.125,
+        2.1,
+        0.4625
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.door.building_door_rotate_square_b_01",
@@ -951,7 +1341,20 @@
       "open",
       "close",
       "open-and-close"
-    ]
+    ],
+    "bounds_meters": {
+      "min": [
+        -0.125,
+        0,
+        -0.4625
+      ],
+      "max": [
+        0.125,
+        2.1,
+        0.4625
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.door.building_door_rotate_square_c_01",
@@ -985,7 +1388,20 @@
       "open",
       "close",
       "open-and-close"
-    ]
+    ],
+    "bounds_meters": {
+      "min": [
+        -0.125,
+        0,
+        -0.4625
+      ],
+      "max": [
+        0.125,
+        2.1,
+        0.4625
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.door.building_door_rotate_square_d_01",
@@ -1019,7 +1435,20 @@
       "open",
       "close",
       "open-and-close"
-    ]
+    ],
+    "bounds_meters": {
+      "min": [
+        -0.125,
+        0,
+        -0.4625
+      ],
+      "max": [
+        0.125,
+        2.1,
+        0.4625
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.door.home_door_1_01",
@@ -1048,7 +1477,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.433943,
+        0,
+        -0.105033
+      ],
+      "max": [
+        0.433943,
+        2.093918,
+        0.105033
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.door.home_door_2_01",
@@ -1077,7 +1519,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.434961,
+        0,
+        -0.105279
+      ],
+      "max": [
+        0.434961,
+        2.098829,
+        0.105279
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.door.home_door_3_01",
@@ -1106,7 +1561,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.433943,
+        0,
+        -0.103963
+      ],
+      "max": [
+        0.433943,
+        2.093918,
+        0.103963
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.door.home_door_double_01",
@@ -1135,7 +1603,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.870652,
+        0,
+        -0.107449
+      ],
+      "max": [
+        0.870652,
+        2.093918,
+        0.107449
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.floor.building_floor_01",
@@ -1164,7 +1645,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -1.0,
+        0,
+        -1.0
+      ],
+      "max": [
+        1.0,
+        0.1,
+        1.0
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.floor.building_floor_corner_diagonal_01",
@@ -1193,7 +1687,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -1.0,
+        0,
+        -1.0
+      ],
+      "max": [
+        1.0,
+        0.1,
+        1.0
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.floor.building_floor_corner_round_01",
@@ -1222,7 +1729,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -1.0,
+        0,
+        -1.0
+      ],
+      "max": [
+        1.0,
+        0.1,
+        1.0
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.floor.building_floor_half_01",
@@ -1251,7 +1771,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.5,
+        0,
+        -1.0
+      ],
+      "max": [
+        0.5,
+        0.1,
+        1.0
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.floor.building_floor_quarter_01",
@@ -1280,7 +1813,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.5,
+        0,
+        -0.5
+      ],
+      "max": [
+        0.5,
+        0.1,
+        0.5
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.floor.rustic_floor_hole_01",
@@ -1309,7 +1855,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.5,
+        0,
+        -0.5
+      ],
+      "max": [
+        0.5,
+        0.1336,
+        0.5
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.floor.rustic_floor_old_01",
@@ -1338,7 +1897,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.5,
+        0,
+        -0.5
+      ],
+      "max": [
+        0.5,
+        0.1024,
+        0.5
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.floor.rustic_structure_metal_floor_01",
@@ -1367,7 +1939,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.5,
+        0,
+        -0.5
+      ],
+      "max": [
+        0.5,
+        1.025,
+        0.5
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.floor.station_floor_01",
@@ -1396,7 +1981,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -1.0,
+        0,
+        -1.0
+      ],
+      "max": [
+        1.0,
+        0.6,
+        1.0
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.floor.station_floor_detail_01",
@@ -1425,7 +2023,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -1.0,
+        0,
+        -1.0
+      ],
+      "max": [
+        1.0,
+        0.65,
+        1.0
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.floor.station_floor_panel_01",
@@ -1454,7 +2065,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -1.0,
+        0,
+        -1.0
+      ],
+      "max": [
+        1.0,
+        0.6,
+        1.0
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.floor.station_floor_panel_corner_01",
@@ -1483,7 +2107,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -1.0,
+        0,
+        -1.0
+      ],
+      "max": [
+        1.0,
+        0.6,
+        1.0
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.floor.station_floor_panel_end_01",
@@ -1512,7 +2149,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -1.0,
+        0,
+        -1.0
+      ],
+      "max": [
+        1.0,
+        0.6,
+        1.0
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.floor.station_floor_panel_straight_01",
@@ -1541,7 +2191,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -1.0,
+        0,
+        -1.0
+      ],
+      "max": [
+        1.0,
+        0.6,
+        1.0
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.stairs.blockout_stairs_diagonal_01",
@@ -1570,7 +2233,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -1.0,
+        0,
+        -1.0
+      ],
+      "max": [
+        1.0,
+        2.0,
+        1.0
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.stairs.blockout_stairs_diagonal_narrow_01",
@@ -1599,7 +2275,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -1.0,
+        0,
+        -0.5
+      ],
+      "max": [
+        1.0,
+        2.0,
+        0.5
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.stairs.building_stairs_center_01",
@@ -1628,7 +2317,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.65,
+        0,
+        -2.0
+      ],
+      "max": [
+        0.65,
+        2.5,
+        2.0
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.stairs.building_stairs_center_short_01",
@@ -1657,7 +2359,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.65,
+        0,
+        -1.0
+      ],
+      "max": [
+        0.65,
+        1.3,
+        1.0
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.stairs.building_stairs_closed_01",
@@ -1686,7 +2401,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.65,
+        0,
+        -2.0
+      ],
+      "max": [
+        0.65,
+        2.5,
+        2.0
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.stairs.building_stairs_closed_short_01",
@@ -1715,7 +2443,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.65,
+        0,
+        -1.0
+      ],
+      "max": [
+        0.65,
+        1.3,
+        1.0
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.stairs.building_stairs_open_01",
@@ -1744,7 +2485,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.65,
+        0,
+        -2.0
+      ],
+      "max": [
+        0.65,
+        2.5,
+        2.0
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.stairs.building_stairs_open_short_01",
@@ -1773,7 +2527,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.65,
+        0,
+        -1.0
+      ],
+      "max": [
+        0.65,
+        1.3,
+        1.0
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.stairs.building_stairs_sides_01",
@@ -1802,7 +2569,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.75,
+        0,
+        -2.0
+      ],
+      "max": [
+        0.75,
+        2.55,
+        2.0
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.stairs.building_stairs_sides_short_01",
@@ -1831,7 +2611,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.75,
+        0,
+        -1.0
+      ],
+      "max": [
+        0.75,
+        1.35,
+        1.0
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.stairs.concert_stairs_001_01",
@@ -1860,7 +2653,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -1.208405,
+        0,
+        -1.227463
+      ],
+      "max": [
+        1.208405,
+        2.0,
+        1.227463
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.stairs.station_stairs_01",
@@ -1889,7 +2695,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -1.0,
+        0,
+        -1.0
+      ],
+      "max": [
+        1.0,
+        0.6,
+        1.0
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.stairs.station_stairs_corner_01",
@@ -1918,7 +2737,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -1.0,
+        0,
+        -1.0
+      ],
+      "max": [
+        1.0,
+        0.6,
+        1.0
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.stairs.station_stairs_corner_inner_01",
@@ -1947,7 +2779,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -1.0,
+        0,
+        -1.0
+      ],
+      "max": [
+        1.0,
+        0.6,
+        1.0
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.stairs.station_stairs_handrail_01",
@@ -1976,7 +2821,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -1.0,
+        0,
+        -1.0
+      ],
+      "max": [
+        1.0,
+        1.125,
+        1.0
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.stairs.station_stairs_handrail_single_01",
@@ -2005,7 +2863,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.1,
+        0,
+        -1.0
+      ],
+      "max": [
+        0.1,
+        1.125,
+        1.0
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.stairs.station_stairs_ramp_01",
@@ -2034,7 +2905,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -1.0,
+        0,
+        -1.0
+      ],
+      "max": [
+        1.0,
+        0.6,
+        1.0
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.stairs.station_stairs_small_corner_01",
@@ -2063,7 +2947,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.3,
+        0,
+        -0.3
+      ],
+      "max": [
+        0.3,
+        0.6,
+        0.3
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.stairs.station_stairs_small_corner_inner_01",
@@ -2092,7 +2989,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.3,
+        0,
+        -0.3
+      ],
+      "max": [
+        0.3,
+        0.6,
+        0.3
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.wall.blockout_wall_diagonal_01",
@@ -2121,7 +3031,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -1.0,
+        0,
+        -1.0
+      ],
+      "max": [
+        1.0,
+        2.0,
+        1.0
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.wall.blockout_wall_doorway_garage_01",
@@ -2150,7 +3073,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.3,
+        0,
+        -1.5
+      ],
+      "max": [
+        0.3,
+        2.0,
+        1.5
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.wall.blockout_wall_doorway_sliding_01",
@@ -2179,7 +3115,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.3,
+        0,
+        -1.5
+      ],
+      "max": [
+        0.3,
+        2.0,
+        1.5
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.wall.blockout_wall_doorway_wide_sliding_01",
@@ -2208,7 +3157,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.3,
+        0,
+        -3.0
+      ],
+      "max": [
+        0.3,
+        2.0,
+        3.0
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.wall.blockout_wall_round_01",
@@ -2237,7 +3199,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -1.0,
+        0,
+        -1.0
+      ],
+      "max": [
+        1.0,
+        2.0,
+        1.0
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.wall.building_wall_01",
@@ -2266,7 +3241,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.05,
+        0,
+        -1.0
+      ],
+      "max": [
+        0.05,
+        2.4,
+        1.0
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.wall.building_wall_corner_01",
@@ -2295,7 +3283,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -1.0,
+        0,
+        -1.0
+      ],
+      "max": [
+        1.0,
+        2.4,
+        1.0
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.wall.building_wall_corner_diagonal_01",
@@ -2324,7 +3325,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -1.0,
+        0,
+        -1.0
+      ],
+      "max": [
+        1.0,
+        2.4,
+        1.0
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.wall.building_wall_corner_round_01",
@@ -2353,7 +3367,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -1.0,
+        0,
+        -1.0
+      ],
+      "max": [
+        1.0,
+        2.4,
+        1.0
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.wall.building_wall_doorway_round_01",
@@ -2382,7 +3409,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.1,
+        0,
+        -1.0
+      ],
+      "max": [
+        0.1,
+        2.4,
+        1.0
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.wall.building_wall_doorway_square_01",
@@ -2411,7 +3451,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.1,
+        0,
+        -1.0
+      ],
+      "max": [
+        0.1,
+        2.4,
+        1.0
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.wall.building_wall_doorway_wide_round_01",
@@ -2440,7 +3493,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.1,
+        0,
+        -2.0
+      ],
+      "max": [
+        0.1,
+        2.4,
+        2.0
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.wall.building_wall_doorway_wide_square_01",
@@ -2469,7 +3535,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.1,
+        0,
+        -2.0
+      ],
+      "max": [
+        0.1,
+        2.4,
+        2.0
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.wall.building_wall_half_01",
@@ -2498,7 +3577,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.05,
+        0,
+        -0.5
+      ],
+      "max": [
+        0.05,
+        2.4,
+        0.5
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.wall.building_wall_low_01",
@@ -2527,7 +3619,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.05,
+        0,
+        -1.0
+      ],
+      "max": [
+        0.05,
+        1.2,
+        1.0
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.wall.station_wall_corner_round_01",
@@ -2556,7 +3661,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.8,
+        0,
+        -0.8
+      ],
+      "max": [
+        0.8,
+        2.0,
+        0.8
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.wall.station_wall_detail_01",
@@ -2585,7 +3703,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.4,
+        0,
+        -0.173205
+      ],
+      "max": [
+        0.4,
+        1.4,
+        0.173205
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.wall.station_wall_door_center_01",
@@ -2614,7 +3745,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -1.0,
+        0,
+        -0.3
+      ],
+      "max": [
+        1.0,
+        0.6,
+        0.3
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.wall.station_wall_door_edge_01",
@@ -2643,7 +3787,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -1.0,
+        0,
+        -0.3
+      ],
+      "max": [
+        1.0,
+        2.0,
+        0.3
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.wall.station_wall_door_wide_01",
@@ -2672,7 +3829,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -1.0,
+        0,
+        -0.3
+      ],
+      "max": [
+        1.0,
+        2.0,
+        0.3
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.window.building_wall_window_round_01",
@@ -2701,7 +3871,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.1,
+        0,
+        -1.0
+      ],
+      "max": [
+        0.1,
+        2.4,
+        1.0
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.window.building_wall_window_round_detailed_01",
@@ -2730,7 +3913,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.1,
+        0,
+        -1.0
+      ],
+      "max": [
+        0.1,
+        2.4,
+        1.0
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.window.building_wall_window_square_01",
@@ -2759,7 +3955,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.1,
+        0,
+        -1.0
+      ],
+      "max": [
+        0.1,
+        2.4,
+        1.0
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.window.building_wall_window_square_detailed_01",
@@ -2788,7 +3997,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.1,
+        0,
+        -1.0
+      ],
+      "max": [
+        0.1,
+        2.4,
+        1.0
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.window.building_wall_window_wide_round_01",
@@ -2817,7 +4039,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.1,
+        0,
+        -2.0
+      ],
+      "max": [
+        0.1,
+        2.4,
+        2.0
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.window.building_wall_window_wide_round_detailed_01",
@@ -2846,7 +4081,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.1,
+        0,
+        -2.0
+      ],
+      "max": [
+        0.1,
+        2.4,
+        2.0
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.window.building_wall_window_wide_square_01",
@@ -2875,7 +4123,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.1,
+        0,
+        -2.0
+      ],
+      "max": [
+        0.1,
+        2.4,
+        2.0
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.window.building_wall_window_wide_square_detailed_01",
@@ -2904,7 +4165,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.1,
+        0,
+        -2.0
+      ],
+      "max": [
+        0.1,
+        2.4,
+        2.0
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.window.home_window_large1_01",
@@ -2933,7 +4207,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.458107,
+        0,
+        -0.035276
+      ],
+      "max": [
+        0.458107,
+        0.849227,
+        0.035276
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.window.home_window_large2_01",
@@ -2962,7 +4249,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.458108,
+        0,
+        -0.035276
+      ],
+      "max": [
+        0.458108,
+        0.849226,
+        0.035276
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.window.home_window_round1_01",
@@ -2991,7 +4291,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.226598,
+        0,
+        -0.028139
+      ],
+      "max": [
+        0.226598,
+        0.7749,
+        0.028139
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.window.home_window_round2_01",
@@ -3020,7 +4333,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.226598,
+        0,
+        -0.028139
+      ],
+      "max": [
+        0.226598,
+        0.7749,
+        0.028139
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.window.home_window_round3_01",
@@ -3049,7 +4375,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.226598,
+        0,
+        -0.028139
+      ],
+      "max": [
+        0.226598,
+        0.7749,
+        0.028139
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.window.home_window_small1_01",
@@ -3078,7 +4417,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.232049,
+        0,
+        -0.035276
+      ],
+      "max": [
+        0.232049,
+        0.618976,
+        0.035276
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.window.home_window_small2_01",
@@ -3107,7 +4459,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.23205,
+        0,
+        -0.035276
+      ],
+      "max": [
+        0.23205,
+        0.618976,
+        0.035276
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.window.home_window_small3_01",
@@ -3136,7 +4501,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.23205,
+        0,
+        -0.035276
+      ],
+      "max": [
+        0.23205,
+        0.618976,
+        0.035276
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.window.station_wall_window_frame_01",
@@ -3165,7 +4543,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.6,
+        0,
+        -0.1
+      ],
+      "max": [
+        0.6,
+        0.8,
+        0.1
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "architecture.window.station_wall_window_shutters_01",
@@ -3194,7 +4585,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.6,
+        0,
+        -0.1
+      ],
+      "max": [
+        0.6,
+        0.8,
+        0.1
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "audience.curtain.home_curtains_double_01",
@@ -3223,7 +4627,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.867199,
+        0,
+        -0.11912
+      ],
+      "max": [
+        0.867199,
+        2.17224,
+        0.11912
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "audience.curtain.home_curtains_single_01",
@@ -3252,7 +4669,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.407999,
+        0,
+        -0.11912
+      ],
+      "max": [
+        0.407999,
+        2.17224,
+        0.11912
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "audience.seat_row.racing_grand_stand_01",
@@ -3281,7 +4711,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -2.5,
+        0,
+        -2.5
+      ],
+      "max": [
+        2.5,
+        4.481313,
+        2.5
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "audience.seat_row.racing_grand_stand_covered_01",
@@ -3310,7 +4753,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -2.5,
+        0,
+        -2.55
+      ],
+      "max": [
+        2.5,
+        5.93196,
+        2.55
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "audience.spotlight.concert_spotlight_001_01",
@@ -3339,7 +4795,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.168461,
+        0,
+        -0.209819
+      ],
+      "max": [
+        0.168461,
+        0.464889,
+        0.209819
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "audience.spotlight.concert_spotlight_002_01",
@@ -3368,7 +4837,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.168461,
+        0,
+        -0.13928
+      ],
+      "max": [
+        0.168461,
+        0.473187,
+        0.13928
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "audience.spotlight.concert_spotlight_003_01",
@@ -3397,7 +4879,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.168461,
+        0,
+        -0.156618
+      ],
+      "max": [
+        0.168461,
+        0.590409,
+        0.156618
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "audience.spotlight.concert_spotlight_004_01",
@@ -3426,7 +4921,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.166308,
+        0,
+        -0.18791
+      ],
+      "max": [
+        0.166308,
+        0.512415,
+        0.18791
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "audience.spotlight.concert_spotlight_005_01",
@@ -3455,7 +4963,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.098988,
+        0,
+        -0.098988
+      ],
+      "max": [
+        0.098988,
+        0.317621,
+        0.098988
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "audience.stage.concert_stage_001_01",
@@ -3484,7 +5005,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -3.901042,
+        0,
+        -3.693553
+      ],
+      "max": [
+        3.901042,
+        0.284225,
+        3.693553
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "audience.stage.concert_stage_002_01",
@@ -3513,7 +5047,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -3.46522,
+        0,
+        -4.155142
+      ],
+      "max": [
+        3.46522,
+        0.5,
+        4.155142
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "audience.stage.concert_stage_003_01",
@@ -3542,7 +5089,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -3.46522,
+        0,
+        -1.816344
+      ],
+      "max": [
+        3.46522,
+        0.164671,
+        1.816344
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "audience.stage.concert_stage_004_01",
@@ -3571,7 +5131,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -1.168601,
+        0,
+        -0.725642
+      ],
+      "max": [
+        1.168601,
+        0.357056,
+        0.725642
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "audience.stage.concert_stage_005_01",
@@ -3600,7 +5173,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -3.46522,
+        0,
+        -2.125
+      ],
+      "max": [
+        3.46522,
+        0.5,
+        2.125
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "audience.stage.concert_stage_007_01",
@@ -3629,7 +5215,161 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -1.168361,
+        0,
+        -0.725642
+      ],
+      "max": [
+        1.168361,
+        0.357056,
+        0.725642
+      ],
+      "basis": "normalized_rest_geometry"
+    }
+  },
+  {
+    "id": "character.base.casual_adult_01",
+    "relative_path": "LowPoly/character/base/character.base.casual_adult_01.glb",
+    "category": "character",
+    "subcategory": "base",
+    "tags": [
+      "character",
+      "base",
+      "casual",
+      "adult",
+      "hoodie",
+      "hair",
+      "face",
+      "rigged",
+      "animated"
+    ],
+    "suggested_scale_m": 0.941884885982501,
+    "y_up": true,
+    "character_rigged": true,
+    "license": "CC0-1.0",
+    "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "source_url": "https://poly.pizza/m/kZ3DmIoGip",
+    "author": "Quaternius",
+    "approx_tris": 5776,
+    "sha256": "fea7e71271203e7073f1a073fa1208de7402df276f87f80e149bf7589b5d46b4",
+    "normalization": {
+      "axis_rotation_x_radians": 0,
+      "forward_rotation_y_radians": 3.141592653589793,
+      "source_forward_assumption": "+Z",
+      "semantic_front_verified": false,
+      "placement": "center_xz_min_y_after_scale_and_rotation"
+    },
+    "animation_clips": [
+      "CharacterArmature|Death",
+      "CharacterArmature|Gun_Shoot",
+      "CharacterArmature|HitRecieve",
+      "CharacterArmature|HitRecieve_2",
+      "CharacterArmature|Idle",
+      "CharacterArmature|Idle_Gun",
+      "CharacterArmature|Idle_Gun_Pointing",
+      "CharacterArmature|Idle_Gun_Shoot",
+      "CharacterArmature|Idle_Neutral",
+      "CharacterArmature|Idle_Sword",
+      "CharacterArmature|Interact",
+      "CharacterArmature|Kick_Left",
+      "CharacterArmature|Kick_Right",
+      "CharacterArmature|Punch_Left",
+      "CharacterArmature|Punch_Right",
+      "CharacterArmature|Roll",
+      "CharacterArmature|Run",
+      "CharacterArmature|Run_Back",
+      "CharacterArmature|Run_Left",
+      "CharacterArmature|Run_Right",
+      "CharacterArmature|Run_Shoot",
+      "CharacterArmature|Sword_Slash",
+      "CharacterArmature|Walk",
+      "CharacterArmature|Wave"
+    ],
+    "bounds_meters": {
+      "min": [
+        -0.789049,
+        0,
+        -0.214134
+      ],
+      "max": [
+        0.789049,
+        1.75,
+        0.214134
+      ],
+      "basis": "normalized_rest_geometry"
+    },
+    "material_tint_names": [
+      "LightBrown"
+    ],
+    "resolved_node_count": 88,
+    "generation_enabled": false
+  },
+  {
+    "id": "character.base.casual_adult_02",
+    "relative_path": "LowPoly/character/base/character.base.casual_adult_02.glb",
+    "category": "character",
+    "subcategory": "base",
+    "tags": [
+      "character",
+      "base",
+      "casual",
+      "adult",
+      "woman",
+      "hair",
+      "face",
+      "rigged",
+      "animated"
+    ],
+    "suggested_scale_m": 0.37591854203227465,
+    "y_up": true,
+    "character_rigged": true,
+    "license": "CC0-1.0",
+    "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "source_url": "https://poly.pizza/m/jpKRgGDxhk",
+    "author": "Quaternius",
+    "approx_tris": 2776,
+    "sha256": "99c4df0aaabd19022809facc68f5fb5f564d35df3a9893c273a31fdaacf68e96",
+    "normalization": {
+      "axis_rotation_x_radians": 0,
+      "forward_rotation_y_radians": 3.141592653589793,
+      "source_forward_assumption": "+Z",
+      "semantic_front_verified": false,
+      "placement": "center_xz_min_y_after_scale_and_rotation"
+    },
+    "animation_clips": [
+      "HumanArmature|Female_Clapping",
+      "HumanArmature|Female_Death",
+      "HumanArmature|Female_Idle",
+      "HumanArmature|Female_Jump",
+      "HumanArmature|Female_Punch",
+      "HumanArmature|Female_Run",
+      "HumanArmature|Female_RunningJump",
+      "HumanArmature|Female_Sitting",
+      "HumanArmature|Female_Standing",
+      "HumanArmature|Female_SwordSlash",
+      "HumanArmature|Female_Walk"
+    ],
+    "bounds_meters": {
+      "min": [
+        -0.944675,
+        0,
+        -0.182865
+      ],
+      "max": [
+        0.944675,
+        1.75,
+        0.182865
+      ],
+      "basis": "normalized_rest_geometry"
+    },
+    "material_tint_names": [
+      "Shirt"
+    ],
+    "resolved_node_count": 48,
+    "generation_enabled": false
   },
   {
     "id": "character.base.neutral_humanoid_01",
@@ -3659,7 +5399,370 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.887361,
+        0,
+        -0.1896
+      ],
+      "max": [
+        0.887361,
+        1.792761,
+        0.1896
+      ],
+      "basis": "normalized_rest_geometry"
+    },
+    "resolved_node_count": 20,
+    "generation_enabled": false
+  },
+  {
+    "id": "character.base.soft_adult_01",
+    "relative_path": "LowPoly/character/base/character.base.soft_adult_01.glb",
+    "category": "character",
+    "subcategory": "base",
+    "tags": [
+      "character",
+      "base",
+      "stylized",
+      "soft",
+      "friendly",
+      "rigged",
+      "animated",
+      "fixed_palette"
+    ],
+    "suggested_scale_m": 2.4578264390436004,
+    "y_up": true,
+    "character_rigged": true,
+    "license": "CC0-1.0",
+    "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "source_url": "https://opengameart.org/node/165679",
+    "author": "Kenney",
+    "approx_tris": 723,
+    "sha256": "77572792bfe2773b715b8cd8e18644b52b3e1f155fe10450254b50f9c364382a",
+    "normalization": {
+      "axis_rotation_x_radians": 0,
+      "forward_rotation_y_radians": 3.141592653589793,
+      "source_forward_assumption": "+Z",
+      "semantic_front_verified": false,
+      "placement": "center_xz_min_y_after_scale_and_rotation"
+    },
+    "animation_clips": [
+      "static",
+      "idle",
+      "walk",
+      "sprint",
+      "jump",
+      "fall",
+      "crouch",
+      "sit",
+      "drive",
+      "die",
+      "pick-up",
+      "emote-yes",
+      "emote-no",
+      "holding-right",
+      "holding-left",
+      "holding-both",
+      "holding-right-shoot",
+      "holding-left-shoot",
+      "holding-both-shoot",
+      "attack-melee-right",
+      "attack-melee-left",
+      "attack-kick-right",
+      "attack-kick-left",
+      "interact-right",
+      "interact-left",
+      "wheelchair-sit",
+      "wheelchair-look-left",
+      "wheelchair-look-right",
+      "wheelchair-move-forward",
+      "wheelchair-move-back",
+      "wheelchair-move-left",
+      "wheelchair-move-right"
+    ],
+    "bounds_meters": {
+      "min": [
+        -0.942783,
+        0,
+        -0.41783
+      ],
+      "max": [
+        0.942783,
+        1.65,
+        0.41783
+      ],
+      "basis": "normalized_rest_geometry"
+    },
+    "resolved_node_count": 13,
+    "generation_enabled": true,
+    "bundled_textures": [
+      {
+        "relative_path": "character/base/Textures/colormap.png",
+        "sha256": "0d4947d34ff32acf4a359c7f22ca784e057e7e72f622170a9a77b6fc88fdb70e"
+      }
+    ]
+  },
+  {
+    "id": "character.base.soft_adult_02",
+    "relative_path": "LowPoly/character/base/character.base.soft_adult_02.glb",
+    "category": "character",
+    "subcategory": "base",
+    "tags": [
+      "character",
+      "base",
+      "stylized",
+      "soft",
+      "friendly",
+      "rigged",
+      "animated",
+      "fixed_palette"
+    ],
+    "suggested_scale_m": 2.127582023963537,
+    "y_up": true,
+    "character_rigged": true,
+    "license": "CC0-1.0",
+    "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "source_url": "https://opengameart.org/node/165679",
+    "author": "Kenney",
+    "approx_tris": 876,
+    "sha256": "8cfcff43460da8b421f2a7fdfb43ec177321cad2746db9497cbf128d5806e2a8",
+    "normalization": {
+      "axis_rotation_x_radians": 0,
+      "forward_rotation_y_radians": 3.141592653589793,
+      "source_forward_assumption": "+Z",
+      "semantic_front_verified": false,
+      "placement": "center_xz_min_y_after_scale_and_rotation"
+    },
+    "animation_clips": [
+      "static",
+      "idle",
+      "walk",
+      "sprint",
+      "jump",
+      "fall",
+      "crouch",
+      "sit",
+      "drive",
+      "die",
+      "pick-up",
+      "emote-yes",
+      "emote-no",
+      "holding-right",
+      "holding-left",
+      "holding-both",
+      "holding-right-shoot",
+      "holding-left-shoot",
+      "holding-both-shoot",
+      "attack-melee-right",
+      "attack-melee-left",
+      "attack-kick-right",
+      "attack-kick-left",
+      "interact-right",
+      "interact-left",
+      "wheelchair-sit",
+      "wheelchair-look-left",
+      "wheelchair-look-right",
+      "wheelchair-move-forward",
+      "wheelchair-move-back",
+      "wheelchair-move-left",
+      "wheelchair-move-right"
+    ],
+    "bounds_meters": {
+      "min": [
+        -1.16888,
+        0,
+        -0.531396
+      ],
+      "max": [
+        1.16888,
+        1.65,
+        0.531396
+      ],
+      "basis": "normalized_rest_geometry"
+    },
+    "resolved_node_count": 13,
+    "generation_enabled": true,
+    "bundled_textures": [
+      {
+        "relative_path": "character/base/Textures/colormap.png",
+        "sha256": "0d4947d34ff32acf4a359c7f22ca784e057e7e72f622170a9a77b6fc88fdb70e"
+      }
+    ]
+  },
+  {
+    "id": "character.base.soft_adult_03",
+    "relative_path": "LowPoly/character/base/character.base.soft_adult_03.glb",
+    "category": "character",
+    "subcategory": "base",
+    "tags": [
+      "character",
+      "base",
+      "stylized",
+      "soft",
+      "friendly",
+      "rigged",
+      "animated",
+      "fixed_palette"
+    ],
+    "suggested_scale_m": 2.494991593316753,
+    "y_up": true,
+    "character_rigged": true,
+    "license": "CC0-1.0",
+    "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "source_url": "https://opengameart.org/node/165679",
+    "author": "Kenney",
+    "approx_tris": 690,
+    "sha256": "791fc0c203924c175c0a3d5b60d030daf36797b039506689cf7cd01ef5253b3c",
+    "normalization": {
+      "axis_rotation_x_radians": 0,
+      "forward_rotation_y_radians": 3.141592653589793,
+      "source_forward_assumption": "+Z",
+      "semantic_front_verified": false,
+      "placement": "center_xz_min_y_after_scale_and_rotation"
+    },
+    "animation_clips": [
+      "static",
+      "idle",
+      "walk",
+      "sprint",
+      "jump",
+      "fall",
+      "crouch",
+      "sit",
+      "drive",
+      "die",
+      "pick-up",
+      "emote-yes",
+      "emote-no",
+      "holding-right",
+      "holding-left",
+      "holding-both",
+      "holding-right-shoot",
+      "holding-left-shoot",
+      "holding-both-shoot",
+      "attack-melee-right",
+      "attack-melee-left",
+      "attack-kick-right",
+      "attack-kick-left",
+      "interact-right",
+      "interact-left",
+      "wheelchair-sit",
+      "wheelchair-look-left",
+      "wheelchair-look-right",
+      "wheelchair-move-forward",
+      "wheelchair-move-back",
+      "wheelchair-move-left",
+      "wheelchair-move-right"
+    ],
+    "bounds_meters": {
+      "min": [
+        -0.957039,
+        0,
+        -0.485865
+      ],
+      "max": [
+        0.957039,
+        1.65,
+        0.485865
+      ],
+      "basis": "normalized_rest_geometry"
+    },
+    "resolved_node_count": 13,
+    "generation_enabled": true,
+    "bundled_textures": [
+      {
+        "relative_path": "character/base/Textures/colormap.png",
+        "sha256": "0d4947d34ff32acf4a359c7f22ca784e057e7e72f622170a9a77b6fc88fdb70e"
+      }
+    ]
+  },
+  {
+    "id": "character.base.soft_adult_04",
+    "relative_path": "LowPoly/character/base/character.base.soft_adult_04.glb",
+    "category": "character",
+    "subcategory": "base",
+    "tags": [
+      "character",
+      "base",
+      "stylized",
+      "soft",
+      "friendly",
+      "rigged",
+      "animated",
+      "fixed_palette"
+    ],
+    "suggested_scale_m": 2.281043459473561,
+    "y_up": true,
+    "character_rigged": true,
+    "license": "CC0-1.0",
+    "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "source_url": "https://opengameart.org/node/165679",
+    "author": "Kenney",
+    "approx_tris": 742,
+    "sha256": "2288438e7baf9acc91a870c82dc00d66710bb486592cfc3474ef8ed93a03863a",
+    "normalization": {
+      "axis_rotation_x_radians": 0,
+      "forward_rotation_y_radians": 3.141592653589793,
+      "source_forward_assumption": "+Z",
+      "semantic_front_verified": false,
+      "placement": "center_xz_min_y_after_scale_and_rotation"
+    },
+    "animation_clips": [
+      "static",
+      "idle",
+      "walk",
+      "sprint",
+      "jump",
+      "fall",
+      "crouch",
+      "sit",
+      "drive",
+      "die",
+      "pick-up",
+      "emote-yes",
+      "emote-no",
+      "holding-right",
+      "holding-left",
+      "holding-both",
+      "holding-right-shoot",
+      "holding-left-shoot",
+      "holding-both-shoot",
+      "attack-melee-right",
+      "attack-melee-left",
+      "attack-kick-right",
+      "attack-kick-left",
+      "interact-right",
+      "interact-left",
+      "wheelchair-sit",
+      "wheelchair-look-left",
+      "wheelchair-look-right",
+      "wheelchair-move-forward",
+      "wheelchair-move-back",
+      "wheelchair-move-left",
+      "wheelchair-move-right"
+    ],
+    "bounds_meters": {
+      "min": [
+        -0.874972,
+        0,
+        -0.477334
+      ],
+      "max": [
+        0.874972,
+        1.65,
+        0.477334
+      ],
+      "basis": "normalized_rest_geometry"
+    },
+    "resolved_node_count": 13,
+    "generation_enabled": true,
+    "bundled_textures": [
+      {
+        "relative_path": "character/base/Textures/colormap.png",
+        "sha256": "0d4947d34ff32acf4a359c7f22ca784e057e7e72f622170a9a77b6fc88fdb70e"
+      }
+    ]
   },
   {
     "id": "character.crowd_proxy.blockout_figurine_01",
@@ -3717,7 +5820,20 @@
       "wheelchair-move-back",
       "wheelchair-move-left",
       "wheelchair-move-right"
-    ]
+    ],
+    "bounds_meters": {
+      "min": [
+        -0.625,
+        0,
+        -0.25
+      ],
+      "max": [
+        0.625,
+        1.75,
+        0.25
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "character.crowd_proxy.blockout_figurine_cube_detailed_01",
@@ -3775,7 +5891,20 @@
       "wheelchair-move-back",
       "wheelchair-move-left",
       "wheelchair-move-right"
-    ]
+    ],
+    "bounds_meters": {
+      "min": [
+        -0.625,
+        0,
+        -0.375
+      ],
+      "max": [
+        0.625,
+        1.4375,
+        0.375
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "character.crowd_proxy.blockout_figurine_large_01",
@@ -3833,7 +5962,20 @@
       "wheelchair-move-back",
       "wheelchair-move-left",
       "wheelchair-move-right"
-    ]
+    ],
+    "bounds_meters": {
+      "min": [
+        -0.875,
+        0,
+        -0.375
+      ],
+      "max": [
+        0.875,
+        2.25,
+        0.375
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "confined.crate.blockout_crate_01",
@@ -3862,7 +6004,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.5,
+        0,
+        -0.5
+      ],
+      "max": [
+        0.5,
+        1.0,
+        0.5
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "confined.crate.factory_box_large_01",
@@ -3891,7 +6046,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -1.1,
+        0,
+        -1.0
+      ],
+      "max": [
+        1.1,
+        1.1,
+        1.0
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "confined.crate.factory_box_long_01",
@@ -3920,7 +6088,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -1.1,
+        0,
+        -0.5
+      ],
+      "max": [
+        1.1,
+        1.1,
+        0.5
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "confined.crate.factory_box_small_01",
@@ -3949,7 +6130,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.595,
+        0,
+        -0.5
+      ],
+      "max": [
+        0.595,
+        1.1,
+        0.5
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "confined.crate.factory_box_wide_01",
@@ -3978,7 +6172,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.595,
+        0,
+        -1.0
+      ],
+      "max": [
+        0.595,
+        1.1,
+        1.0
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "confined.crate.rustic_box_01",
@@ -4007,7 +6214,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.25,
+        0,
+        -0.25
+      ],
+      "max": [
+        0.25,
+        0.5,
+        0.25
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "confined.crate.rustic_box_large_01",
@@ -4036,7 +6256,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.25,
+        0,
+        -0.5
+      ],
+      "max": [
+        0.25,
+        0.5,
+        0.5
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "confined.crate.rustic_box_large_open_01",
@@ -4065,7 +6298,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.25,
+        0,
+        -0.5
+      ],
+      "max": [
+        0.25,
+        0.6125,
+        0.5
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "confined.crate.rustic_box_open_01",
@@ -4094,7 +6340,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.25,
+        0,
+        -0.25
+      ],
+      "max": [
+        0.25,
+        0.6125,
+        0.25
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "confined.crate.rustic_chest_01",
@@ -4128,7 +6387,20 @@
       "open",
       "close",
       "open-close"
-    ]
+    ],
+    "bounds_meters": {
+      "min": [
+        -0.2604,
+        0,
+        -0.272025
+      ],
+      "max": [
+        0.2604,
+        0.514383,
+        0.272025
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "confined.pipe.blockout_pipe_01",
@@ -4157,7 +6429,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.2,
+        0,
+        -0.173205
+      ],
+      "max": [
+        0.2,
+        2.0,
+        0.173205
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "confined.pipe.blockout_pipe_corner_01",
@@ -4186,7 +6471,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.2,
+        0,
+        -0.5
+      ],
+      "max": [
+        0.2,
+        1.0,
+        0.5
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "confined.pipe.blockout_pipe_section_01",
@@ -4215,7 +6513,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.3,
+        0,
+        -0.259808
+      ],
+      "max": [
+        0.3,
+        2.0,
+        0.259808
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "confined.pipe.blockout_pipe_split_01",
@@ -4244,7 +6555,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.2,
+        0,
+        -0.826795
+      ],
+      "max": [
+        0.2,
+        1.0,
+        0.826795
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "confined.pipe.factory_pipe_large_01",
@@ -4273,7 +6597,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -1.0,
+        0,
+        -1.0
+      ],
+      "max": [
+        1.0,
+        2.0,
+        1.0
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "confined.pipe.factory_pipe_large_bend_01",
@@ -4302,7 +6639,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -1.9,
+        0,
+        -1.9
+      ],
+      "max": [
+        1.9,
+        2.000478,
+        1.9
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "confined.pipe.factory_pipe_large_cross_01",
@@ -4331,7 +6681,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -2.0,
+        0,
+        -1.0
+      ],
+      "max": [
+        2.0,
+        4.0,
+        1.0
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "confined.pipe.factory_pipe_large_curve_01",
@@ -4360,7 +6723,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -1.502082,
+        0,
+        -1.246447
+      ],
+      "max": [
+        1.502082,
+        2.000478,
+        1.246447
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "confined.pipe.factory_pipe_large_junction_01",
@@ -4389,7 +6765,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -2.055635,
+        0,
+        -1.0
+      ],
+      "max": [
+        2.055635,
+        4.111269,
+        1.0
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "confined.pipe.factory_pipe_large_valve_01",
@@ -4418,7 +6807,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -1.0,
+        0,
+        -1.015601
+      ],
+      "max": [
+        1.0,
+        2.0,
+        1.015601
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "confined.pipe.station_pipe_01",
@@ -4447,7 +6849,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.24641,
+        0,
+        -0.28453
+      ],
+      "max": [
+        0.24641,
+        1.0,
+        0.28453
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "confined.pipe.station_pipe_bend_01",
@@ -4476,7 +6891,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.5,
+        0,
+        -0.28453
+      ],
+      "max": [
+        0.5,
+        1.0,
+        0.28453
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "confined.pipe.station_pipe_bend_diagonal_01",
@@ -4505,7 +6933,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.425725,
+        0,
+        -0.28453
+      ],
+      "max": [
+        0.425725,
+        1.214286,
+        0.28453
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "confined.pipe.station_pipe_end_01",
@@ -4534,7 +6975,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.34641,
+        0,
+        -0.4
+      ],
+      "max": [
+        0.34641,
+        1.0,
+        0.4
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "confined.pipe.station_pipe_ring_01",
@@ -4563,7 +7017,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.34641,
+        0,
+        -0.4
+      ],
+      "max": [
+        0.34641,
+        1.0,
+        0.4
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "furniture.chair.classic_chair_01",
@@ -4592,7 +7059,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.2,
+        0,
+        -0.2
+      ],
+      "max": [
+        0.2,
+        0.94,
+        0.2
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "furniture.chair.classic_chair_cushion_01",
@@ -4621,7 +7101,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.2,
+        0,
+        -0.2
+      ],
+      "max": [
+        0.2,
+        0.92,
+        0.2
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "furniture.chair.classic_chair_desk_01",
@@ -4650,7 +7143,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.33495,
+        0,
+        -0.314299
+      ],
+      "max": [
+        0.33495,
+        1.2152,
+        0.314299
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "furniture.chair.classic_chair_rounded_01",
@@ -4679,7 +7185,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.2,
+        0,
+        -0.2
+      ],
+      "max": [
+        0.2,
+        0.91,
+        0.2
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "furniture.chair.classic_lounge_chair_01",
@@ -4708,7 +7227,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.49,
+        0,
+        -0.41
+      ],
+      "max": [
+        0.49,
+        0.92,
+        0.41
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "furniture.chair.classic_lounge_chair_relax_01",
@@ -4737,7 +7269,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.49,
+        0,
+        -0.674693
+      ],
+      "max": [
+        0.49,
+        1.26,
+        0.674693
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "furniture.chair.classic_stool_bar_01",
@@ -4766,7 +7311,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.26544,
+        0,
+        -0.229878
+      ],
+      "max": [
+        0.26544,
+        0.87,
+        0.229878
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "furniture.chair.classic_stool_bar_square_01",
@@ -4795,7 +7353,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.1535,
+        0,
+        -0.147624
+      ],
+      "max": [
+        0.1535,
+        0.81,
+        0.147624
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "furniture.chair.home_chair_1_01",
@@ -4824,7 +7395,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.190431,
+        0,
+        -0.206358
+      ],
+      "max": [
+        0.190431,
+        0.883887,
+        0.206358
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "furniture.chair.home_chair_2_01",
@@ -4853,7 +7437,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.190431,
+        0,
+        -0.206358
+      ],
+      "max": [
+        0.190431,
+        0.844679,
+        0.206358
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "furniture.chair.home_chair_3_01",
@@ -4882,7 +7479,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.190431,
+        0,
+        -0.209377
+      ],
+      "max": [
+        0.190431,
+        0.847019,
+        0.209377
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "furniture.chair.home_chair_4_01",
@@ -4911,7 +7521,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.190431,
+        0,
+        -0.206358
+      ],
+      "max": [
+        0.190431,
+        0.883887,
+        0.206358
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "furniture.chair.home_stool_01",
@@ -4940,7 +7563,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.168836,
+        0,
+        -0.177525
+      ],
+      "max": [
+        0.168836,
+        0.686151,
+        0.177525
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "furniture.chair.station_chair_01",
@@ -4969,7 +7605,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.3,
+        0,
+        -0.35
+      ],
+      "max": [
+        0.3,
+        1.1,
+        0.35
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "furniture.chair.station_chair_armrest_01",
@@ -4998,7 +7647,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.5,
+        0,
+        -0.35
+      ],
+      "max": [
+        0.5,
+        1.1,
+        0.35
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "furniture.chair.station_chair_armrest_headrest_01",
@@ -5027,7 +7689,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.5,
+        0,
+        -0.35
+      ],
+      "max": [
+        0.5,
+        1.4,
+        0.35
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "furniture.chair.station_chair_cushion_headrest_01",
@@ -5056,7 +7731,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.3,
+        0,
+        -0.35
+      ],
+      "max": [
+        0.3,
+        1.4,
+        0.35
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "furniture.desk.classic_desk_01",
@@ -5085,7 +7773,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.734475,
+        0,
+        -0.3923
+      ],
+      "max": [
+        0.734475,
+        0.768815,
+        0.3923
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "furniture.desk.classic_desk_corner_01",
@@ -5114,7 +7815,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.974475,
+        0,
+        -0.974475
+      ],
+      "max": [
+        0.974475,
+        0.768815,
+        0.974475
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "furniture.desk.rustic_workbench_01",
@@ -5143,7 +7857,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.488479,
+        0,
+        -0.443479
+      ],
+      "max": [
+        0.488479,
+        0.859772,
+        0.443479
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "furniture.shelf.classic_bookcase_closed_01",
@@ -5172,7 +7899,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.4,
+        0,
+        -0.25
+      ],
+      "max": [
+        0.4,
+        1.7,
+        0.25
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "furniture.shelf.classic_bookcase_closed_doors_01",
@@ -5201,7 +7941,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.4,
+        0,
+        -0.25
+      ],
+      "max": [
+        0.4,
+        1.7,
+        0.25
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "furniture.shelf.classic_bookcase_closed_wide_01",
@@ -5230,7 +7983,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.8,
+        0,
+        -0.25
+      ],
+      "max": [
+        0.8,
+        1.58,
+        0.25
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "furniture.shelf.classic_bookcase_open_01",
@@ -5259,7 +8025,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.4,
+        0,
+        -0.25
+      ],
+      "max": [
+        0.4,
+        1.76,
+        0.25
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "furniture.shelf.classic_bookcase_open_low_01",
@@ -5288,7 +8067,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.4,
+        0,
+        -0.25
+      ],
+      "max": [
+        0.4,
+        0.8,
+        0.25
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "furniture.shelf.home_bookshelf_01",
@@ -5317,7 +8109,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.579581,
+        0,
+        -0.189
+      ],
+      "max": [
+        0.579581,
+        2.21904,
+        0.189
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "furniture.shelf.home_shelf_1_01",
@@ -5346,7 +8151,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.176836,
+        0,
+        -0.163046
+      ],
+      "max": [
+        0.176836,
+        1.583344,
+        0.163046
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "furniture.shelf.home_shelf_2_01",
@@ -5375,7 +8193,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.279787,
+        0,
+        -0.189
+      ],
+      "max": [
+        0.279787,
+        2.219039,
+        0.189
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "furniture.shelf.home_shelf_large_01",
@@ -5404,7 +8235,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.845224,
+        0,
+        -0.189
+      ],
+      "max": [
+        0.845224,
+        2.21904,
+        0.189
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "furniture.shelf.home_shelf_small1_01",
@@ -5433,7 +8277,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.486082,
+        0,
+        -0.137597
+      ],
+      "max": [
+        0.486082,
+        0.288689,
+        0.137597
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "furniture.shelf.home_shelf_small2_01",
@@ -5462,7 +8319,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.259905,
+        0,
+        -0.137597
+      ],
+      "max": [
+        0.259905,
+        0.194908,
+        0.137597
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "furniture.shelf.home_shelf_small3_01",
@@ -5491,7 +8361,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.259905,
+        0,
+        -0.137597
+      ],
+      "max": [
+        0.259905,
+        0.194908,
+        0.137597
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "furniture.sofa.classic_lounge_sofa_01",
@@ -5520,7 +8403,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.98,
+        0,
+        -0.41
+      ],
+      "max": [
+        0.98,
+        0.92,
+        0.41
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "furniture.sofa.classic_lounge_sofa_corner_01",
@@ -5549,7 +8445,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.98,
+        0,
+        -0.98
+      ],
+      "max": [
+        0.98,
+        0.92,
+        0.98
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "furniture.sofa.classic_lounge_sofa_long_01",
@@ -5578,7 +8487,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.98,
+        0,
+        -0.82
+      ],
+      "max": [
+        0.98,
+        0.92,
+        0.82
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "furniture.sofa.classic_lounge_sofa_ottoman_01",
@@ -5607,7 +8529,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.439829,
+        0,
+        -0.45
+      ],
+      "max": [
+        0.439829,
+        0.46,
+        0.45
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "furniture.sofa.home_couch_l_01",
@@ -5636,7 +8571,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -1.403602,
+        0,
+        -1.081743
+      ],
+      "max": [
+        1.403602,
+        1.130661,
+        1.081743
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "furniture.sofa.home_couch_large1_01",
@@ -5665,7 +8613,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -1.368873,
+        0,
+        -0.498072
+      ],
+      "max": [
+        1.368873,
+        1.05322,
+        0.498072
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "furniture.sofa.home_couch_large2_01",
@@ -5694,7 +8655,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -1.297731,
+        0,
+        -0.498072
+      ],
+      "max": [
+        1.297731,
+        1.054022,
+        0.498072
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "furniture.sofa.home_couch_medium1_01",
@@ -5723,7 +8697,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -1.172036,
+        0,
+        -0.550866
+      ],
+      "max": [
+        1.172036,
+        0.955014,
+        0.550866
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "furniture.sofa.home_couch_medium2_01",
@@ -5752,7 +8739,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -1.129665,
+        0,
+        -0.49987
+      ],
+      "max": [
+        1.129665,
+        0.979671,
+        0.49987
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "furniture.sofa.home_couch_small1_01",
@@ -5781,7 +8781,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.721367,
+        0,
+        -0.550866
+      ],
+      "max": [
+        0.721367,
+        0.955014,
+        0.550866
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "furniture.sofa.home_couch_small2_01",
@@ -5810,7 +8823,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.528413,
+        0,
+        -0.498072
+      ],
+      "max": [
+        0.528413,
+        0.634557,
+        0.498072
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "furniture.table.classic_side_table_01",
@@ -5839,7 +8865,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.534475,
+        0,
+        -0.22
+      ],
+      "max": [
+        0.534475,
+        0.768815,
+        0.22
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "furniture.table.classic_side_table_drawers_01",
@@ -5868,7 +8907,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.534475,
+        0,
+        -0.2223
+      ],
+      "max": [
+        0.534475,
+        0.768815,
+        0.2223
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "furniture.table.classic_table_01",
@@ -5897,7 +8949,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.841488,
+        0,
+        -0.447373
+      ],
+      "max": [
+        0.841488,
+        0.653468,
+        0.447373
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "furniture.table.classic_table_coffee_01",
@@ -5926,7 +8991,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.660996,
+        0,
+        -0.4
+      ],
+      "max": [
+        0.660996,
+        0.46,
+        0.4
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "furniture.table.classic_table_coffee_glass_01",
@@ -5955,7 +9033,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.660996,
+        0,
+        -0.4
+      ],
+      "max": [
+        0.660996,
+        0.46,
+        0.4
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "furniture.table.classic_table_coffee_glass_square_01",
@@ -5984,7 +9075,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.4,
+        0,
+        -0.4
+      ],
+      "max": [
+        0.4,
+        0.46,
+        0.4
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "furniture.table.classic_table_coffee_square_01",
@@ -6013,7 +9117,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.4,
+        0,
+        -0.4
+      ],
+      "max": [
+        0.4,
+        0.46,
+        0.4
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "furniture.table.classic_table_cross_01",
@@ -6042,7 +9159,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.85212,
+        0,
+        -0.447373
+      ],
+      "max": [
+        0.85212,
+        0.694827,
+        0.447373
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "furniture.table.classic_table_glass_01",
@@ -6071,7 +9201,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.841488,
+        0,
+        -0.447373
+      ],
+      "max": [
+        0.841488,
+        0.653468,
+        0.447373
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "furniture.table.classic_table_round_01",
@@ -6100,7 +9243,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.69282,
+        0,
+        -0.8
+      ],
+      "max": [
+        0.69282,
+        0.733468,
+        0.8
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "furniture.table.home_table_round_large_01",
@@ -6129,7 +9285,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.928342,
+        0,
+        -0.485247
+      ],
+      "max": [
+        0.928342,
+        0.560597,
+        0.485247
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "furniture.table.home_table_round_small2_01",
@@ -6158,7 +9327,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.485247,
+        0,
+        -0.485247
+      ],
+      "max": [
+        0.485247,
+        0.603893,
+        0.485247
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "furniture.table.home_table_round_small_01",
@@ -6187,7 +9369,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.485247,
+        0,
+        -0.485247
+      ],
+      "max": [
+        0.485247,
+        0.573666,
+        0.485247
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "furniture.table.station_table_01",
@@ -6216,7 +9411,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -1.1,
+        0,
+        -0.6
+      ],
+      "max": [
+        1.1,
+        0.8,
+        0.6
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "furniture.table.station_table_inset_01",
@@ -6245,7 +9453,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -1.241421,
+        0,
+        -0.741421
+      ],
+      "max": [
+        1.241421,
+        0.8,
+        0.741421
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "furniture.table.station_table_inset_small_01",
@@ -6274,7 +9495,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.841421,
+        0,
+        -0.741421
+      ],
+      "max": [
+        0.841421,
+        0.8,
+        0.741421
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "furniture.table.station_table_large_01",
@@ -6303,7 +9537,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -1.4,
+        0,
+        -0.9
+      ],
+      "max": [
+        1.4,
+        0.8,
+        0.9
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "interior_prop.cup.kitchen_cup_01",
@@ -6332,7 +9579,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.115,
+        0,
+        -0.146058
+      ],
+      "max": [
+        0.115,
+        0.2,
+        0.146058
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "interior_prop.cup.kitchen_cup_coffee_01",
@@ -6361,7 +9621,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.108145,
+        0,
+        -0.143325
+      ],
+      "max": [
+        0.108145,
+        0.14,
+        0.143325
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "interior_prop.cup.kitchen_cup_tea_01",
@@ -6390,7 +9663,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.118464,
+        0,
+        -0.146058
+      ],
+      "max": [
+        0.118464,
+        0.2,
+        0.146058
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "interior_prop.cup.kitchen_glass_01",
@@ -6419,7 +9705,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.079813,
+        0,
+        -0.09216
+      ],
+      "max": [
+        0.079813,
+        0.285143,
+        0.09216
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "interior_prop.cup.kitchen_glass_wine_01",
@@ -6448,7 +9747,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.113383,
+        0,
+        -0.098465
+      ],
+      "max": [
+        0.113383,
+        0.499862,
+        0.098465
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "interior_prop.cup.kitchen_mug_01",
@@ -6477,7 +9789,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.171835,
+        0,
+        -0.14256
+      ],
+      "max": [
+        0.171835,
+        0.27336,
+        0.14256
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "interior_prop.lamp.classic_lamp_round_floor_01",
@@ -6506,7 +9831,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.152039,
+        0,
+        -0.17556
+      ],
+      "max": [
+        0.152039,
+        1.72,
+        0.17556
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "interior_prop.lamp.classic_lamp_round_table_01",
@@ -6535,7 +9873,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.152039,
+        0,
+        -0.17556
+      ],
+      "max": [
+        0.152039,
+        0.6285,
+        0.17556
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "interior_prop.lamp.classic_lamp_square_ceiling_01",
@@ -6564,7 +9915,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.12,
+        0,
+        -0.12
+      ],
+      "max": [
+        0.12,
+        0.46,
+        0.12
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "interior_prop.lamp.classic_lamp_square_floor_01",
@@ -6593,7 +9957,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.12,
+        0,
+        -0.12
+      ],
+      "max": [
+        0.12,
+        1.72,
+        0.12
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "interior_prop.lamp.classic_lamp_square_table_01",
@@ -6622,7 +9999,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.12,
+        0,
+        -0.12
+      ],
+      "max": [
+        0.12,
+        0.58,
+        0.12
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "interior_prop.lamp.home_light_ceiling1_01",
@@ -6651,7 +10041,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.110128,
+        0,
+        -0.109007
+      ],
+      "max": [
+        0.110128,
+        0.411019,
+        0.109007
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "interior_prop.lamp.home_light_ceiling2_01",
@@ -6680,7 +10083,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.090201,
+        0,
+        -0.089283
+      ],
+      "max": [
+        0.090201,
+        0.506058,
+        0.089283
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "interior_prop.lamp.home_light_ceiling3_01",
@@ -6709,7 +10125,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.134261,
+        0,
+        -0.134261
+      ],
+      "max": [
+        0.134261,
+        0.338937,
+        0.134261
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "interior_prop.lamp.home_light_ceiling4_01",
@@ -6738,7 +10167,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.193936,
+        0,
+        -0.193936
+      ],
+      "max": [
+        0.193936,
+        0.648321,
+        0.193936
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "interior_prop.lamp.home_light_chandelier_01",
@@ -6767,7 +10209,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.203277,
+        0,
+        -0.203277
+      ],
+      "max": [
+        0.203277,
+        0.259408,
+        0.203277
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "interior_prop.lamp.home_light_desk_01",
@@ -6796,7 +10251,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.062882,
+        0,
+        -0.113294
+      ],
+      "max": [
+        0.062882,
+        0.286601,
+        0.113294
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "interior_prop.lamp.home_light_floor1_01",
@@ -6825,7 +10293,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.140446,
+        0,
+        -0.147674
+      ],
+      "max": [
+        0.140446,
+        1.603263,
+        0.147674
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "interior_prop.lamp.home_light_floor2_01",
@@ -6854,7 +10335,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.313288,
+        0,
+        -0.329411
+      ],
+      "max": [
+        0.313288,
+        1.513398,
+        0.329411
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "interior_prop.lamp.home_light_floor3_01",
@@ -6883,7 +10377,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.400246,
+        0,
+        -0.420844
+      ],
+      "max": [
+        0.400246,
+        1.788394,
+        0.420844
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "interior_prop.lamp.home_light_floor4_01",
@@ -6912,7 +10419,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.350733,
+        0,
+        -0.350734
+      ],
+      "max": [
+        0.350733,
+        1.5263,
+        0.350734
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "interior_prop.lamp.home_light_icosahedron_01",
@@ -6941,7 +10461,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.125537,
+        0,
+        -0.119824
+      ],
+      "max": [
+        0.125537,
+        0.439897,
+        0.119824
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "interior_prop.lamp.home_light_small_01",
@@ -6970,7 +10503,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.038797,
+        0,
+        -0.040794
+      ],
+      "max": [
+        0.038797,
+        0.053219,
+        0.040794
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "interior_prop.laptop.classic_laptop_01",
@@ -6999,7 +10545,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.264,
+        0,
+        -0.240065
+      ],
+      "max": [
+        0.264,
+        0.323619,
+        0.240065
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "interior_prop.mic.concert_mic_001_01",
@@ -7028,7 +10587,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.125411,
+        0,
+        -0.152835
+      ],
+      "max": [
+        0.125411,
+        1.624695,
+        0.152835
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "interior_prop.plant_pot.classic_plant_small1_01",
@@ -7057,7 +10629,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.094661,
+        0,
+        -0.094661
+      ],
+      "max": [
+        0.094661,
+        0.28,
+        0.094661
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "interior_prop.plant_pot.classic_plant_small2_01",
@@ -7086,7 +10671,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.094661,
+        0,
+        -0.094661
+      ],
+      "max": [
+        0.094661,
+        0.28,
+        0.094661
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "interior_prop.plant_pot.classic_plant_small3_01",
@@ -7115,7 +10713,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.098,
+        0,
+        -0.084871
+      ],
+      "max": [
+        0.098,
+        0.29,
+        0.084871
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "interior_prop.plant_pot.classic_potted_plant_01",
@@ -7144,7 +10755,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.212059,
+        0,
+        -0.241462
+      ],
+      "max": [
+        0.212059,
+        1.308034,
+        0.241462
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "interior_prop.plant_pot.home_houseplant_1_01",
@@ -7173,7 +10797,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.19226,
+        0,
+        -0.173565
+      ],
+      "max": [
+        0.19226,
+        0.358679,
+        0.173565
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "interior_prop.plant_pot.home_houseplant_2_01",
@@ -7202,7 +10839,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.062638,
+        0,
+        -0.062638
+      ],
+      "max": [
+        0.062638,
+        0.192446,
+        0.062638
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "interior_prop.plant_pot.home_houseplant_3_01",
@@ -7231,7 +10881,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.085644,
+        0,
+        -0.084564
+      ],
+      "max": [
+        0.085644,
+        0.422459,
+        0.084564
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "interior_prop.plant_pot.home_houseplant_4_01",
@@ -7260,7 +10923,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.084564,
+        0,
+        -0.084564
+      ],
+      "max": [
+        0.084564,
+        0.464186,
+        0.084564
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "interior_prop.plant_pot.home_houseplant_5_01",
@@ -7289,7 +10965,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.127946,
+        0,
+        -0.132089
+      ],
+      "max": [
+        0.127946,
+        0.211815,
+        0.132089
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "interior_prop.plant_pot.home_houseplant_6_01",
@@ -7318,7 +11007,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.259971,
+        0,
+        -0.262526
+      ],
+      "max": [
+        0.259971,
+        0.479304,
+        0.262526
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "interior_prop.plant_pot.home_houseplant_7_01",
@@ -7347,7 +11049,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.291562,
+        0,
+        -0.305015
+      ],
+      "max": [
+        0.291562,
+        0.440929,
+        0.305015
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "interior_prop.plant_pot.home_houseplant_8_01",
@@ -7376,7 +11091,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.129287,
+        0,
+        -0.129284
+      ],
+      "max": [
+        0.129287,
+        0.778299,
+        0.129284
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "interior_prop.plant_pot.nature_pot_large_01",
@@ -7405,7 +11133,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.281798,
+        0,
+        -0.244044
+      ],
+      "max": [
+        0.281798,
+        0.2,
+        0.244044
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "interior_prop.plant_pot.nature_pot_small_01",
@@ -7434,7 +11175,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.161725,
+        0,
+        -0.140058
+      ],
+      "max": [
+        0.161725,
+        0.268,
+        0.140058
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "nature.bush.nature_grass_large_01",
@@ -7463,7 +11217,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.408998,
+        0,
+        -0.407889
+      ],
+      "max": [
+        0.408998,
+        0.508,
+        0.407889
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "nature.bush.nature_grass_leafs_01",
@@ -7492,7 +11259,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.234486,
+        0,
+        -0.257308
+      ],
+      "max": [
+        0.234486,
+        0.285,
+        0.257308
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "nature.bush.nature_grass_leafs_large_01",
@@ -7521,7 +11301,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.475897,
+        0,
+        -0.487308
+      ],
+      "max": [
+        0.475897,
+        0.285,
+        0.487308
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "nature.bush.nature_plant_bush_01",
@@ -7550,7 +11343,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.396,
+        0,
+        -0.396
+      ],
+      "max": [
+        0.396,
+        0.488887,
+        0.396
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "nature.bush.nature_plant_bush_detailed_01",
@@ -7579,7 +11385,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.602544,
+        0,
+        -0.602544
+      ],
+      "max": [
+        0.602544,
+        0.720822,
+        0.602544
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "nature.bush.nature_plant_bush_large_01",
@@ -7608,7 +11427,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.37431,
+        0,
+        -0.335688
+      ],
+      "max": [
+        0.37431,
+        0.485866,
+        0.335688
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "nature.bush.nature_plant_bush_small_01",
@@ -7637,7 +11469,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.382977,
+        0,
+        -0.336342
+      ],
+      "max": [
+        0.382977,
+        0.414585,
+        0.336342
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "nature.bush.nature_plant_bush_triangle_01",
@@ -7666,7 +11511,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.364432,
+        0,
+        -0.413592
+      ],
+      "max": [
+        0.364432,
+        0.591074,
+        0.413592
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "nature.ground_patch.nature_ground_grass_01",
@@ -7695,7 +11553,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -1.0,
+        0,
+        -1.0
+      ],
+      "max": [
+        1.0,
+        0.0,
+        1.0
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "nature.ground_patch.nature_ground_path_corner_01",
@@ -7724,7 +11595,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -1.0,
+        0,
+        -1.0
+      ],
+      "max": [
+        1.0,
+        0.1,
+        1.0
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "nature.ground_patch.nature_ground_path_cross_01",
@@ -7753,7 +11637,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -1.0,
+        0,
+        -1.0
+      ],
+      "max": [
+        1.0,
+        0.1,
+        1.0
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "nature.ground_patch.nature_ground_path_end_01",
@@ -7782,7 +11679,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -1.0,
+        0,
+        -1.0
+      ],
+      "max": [
+        1.0,
+        0.1,
+        1.0
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "nature.ground_patch.nature_ground_path_open_01",
@@ -7811,7 +11721,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -1.0,
+        0,
+        -1.0
+      ],
+      "max": [
+        1.0,
+        0.0,
+        1.0
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "nature.ground_patch.nature_ground_path_side_01",
@@ -7840,7 +11763,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -1.0,
+        0,
+        -1.0
+      ],
+      "max": [
+        1.0,
+        0.1,
+        1.0
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "nature.ground_patch.nature_ground_path_straight_01",
@@ -7869,7 +11805,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -1.0,
+        0,
+        -1.0
+      ],
+      "max": [
+        1.0,
+        0.1,
+        1.0
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "nature.ground_patch.nature_ground_river_bend_01",
@@ -7898,7 +11847,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -1.0,
+        0,
+        -1.0
+      ],
+      "max": [
+        1.0,
+        0.1,
+        1.0
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "nature.ground_patch.nature_ground_river_corner_01",
@@ -7927,7 +11889,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -1.0,
+        0,
+        -1.0
+      ],
+      "max": [
+        1.0,
+        0.1,
+        1.0
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "nature.ground_patch.nature_ground_river_split_01",
@@ -7956,7 +11931,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -1.0,
+        0,
+        -1.0
+      ],
+      "max": [
+        1.0,
+        0.1,
+        1.0
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "nature.ground_patch.nature_path_stone_01",
@@ -7985,7 +11973,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -1.0,
+        0,
+        -0.576613
+      ],
+      "max": [
+        1.0,
+        0.1,
+        0.576613
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "nature.ground_patch.nature_path_stone_circle_01",
@@ -8014,7 +12015,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.932374,
+        0,
+        -0.876613
+      ],
+      "max": [
+        0.932374,
+        0.1,
+        0.876613
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "nature.ground_patch.nature_path_stone_corner_01",
@@ -8043,7 +12057,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.73827,
+        0,
+        -0.778373
+      ],
+      "max": [
+        0.73827,
+        0.1,
+        0.778373
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "nature.ground_patch.nature_path_wood_01",
@@ -8072,7 +12099,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -1.0,
+        0,
+        -0.514381
+      ],
+      "max": [
+        1.0,
+        0.1,
+        0.514381
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "nature.ground_patch.nature_path_wood_corner_01",
@@ -8101,7 +12141,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.75,
+        0,
+        -0.75
+      ],
+      "max": [
+        0.75,
+        0.1,
+        0.75
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "nature.ground_patch.rustic_patch_grass_01",
@@ -8130,7 +12183,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -1.2,
+        0,
+        -1.2
+      ],
+      "max": [
+        1.2,
+        0.0,
+        1.2
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "nature.ground_patch.rustic_patch_grass_large_01",
@@ -8159,7 +12225,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -1.4,
+        0,
+        -1.2
+      ],
+      "max": [
+        1.4,
+        0.0,
+        1.2
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "nature.rock.nature_rock_large_a_01",
@@ -8188,7 +12267,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.784907,
+        0,
+        -1.015461
+      ],
+      "max": [
+        0.784907,
+        0.519552,
+        1.015461
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "nature.rock.nature_rock_large_b_01",
@@ -8217,7 +12309,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.766715,
+        0,
+        -1.015461
+      ],
+      "max": [
+        0.766715,
+        0.860508,
+        1.015461
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "nature.rock.nature_rock_large_c_01",
@@ -8246,7 +12351,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -1.06441,
+        0,
+        -1.015662
+      ],
+      "max": [
+        1.06441,
+        0.642224,
+        1.015662
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "nature.rock.nature_rock_large_d_01",
@@ -8275,7 +12393,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -1.068777,
+        0,
+        -1.030283
+      ],
+      "max": [
+        1.068777,
+        1.13652,
+        1.030283
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "nature.rock.nature_rock_large_e_01",
@@ -8304,7 +12435,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -1.095459,
+        0,
+        -0.919871
+      ],
+      "max": [
+        1.095459,
+        0.584496,
+        0.919871
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "nature.rock.nature_rock_small_a_01",
@@ -8333,7 +12477,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.3608,
+        0,
+        -0.3608
+      ],
+      "max": [
+        0.3608,
+        0.382448,
+        0.3608
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "nature.rock.nature_rock_small_b_01",
@@ -8362,7 +12519,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.3608,
+        0,
+        -0.3608
+      ],
+      "max": [
+        0.3608,
+        0.353584,
+        0.3608
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "nature.rock.nature_rock_small_flat_a_01",
@@ -8391,7 +12561,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.49579,
+        0,
+        -0.429577
+      ],
+      "max": [
+        0.49579,
+        0.129888,
+        0.429577
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "nature.rock.nature_rock_small_top_a_01",
@@ -8420,7 +12603,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.487734,
+        0,
+        -0.489146
+      ],
+      "max": [
+        0.487734,
+        0.44,
+        0.489146
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "nature.rock.nature_rock_tall_a_01",
@@ -8449,7 +12645,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.983069,
+        0,
+        -0.683211
+      ],
+      "max": [
+        0.983069,
+        1.991852,
+        0.683211
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "nature.rock.nature_rock_tall_b_01",
@@ -8478,7 +12687,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.764788,
+        0,
+        -0.770037
+      ],
+      "max": [
+        0.764788,
+        1.767559,
+        0.770037
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "nature.rock.nature_rock_tall_c_01",
@@ -8507,7 +12729,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.456194,
+        0,
+        -0.436508
+      ],
+      "max": [
+        0.456194,
+        1.565872,
+        0.436508
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "nature.rock.nature_rock_tall_d_01",
@@ -8536,7 +12771,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.442836,
+        0,
+        -0.461482
+      ],
+      "max": [
+        0.442836,
+        1.544224,
+        0.461482
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "nature.rock.nature_rock_tall_e_01",
@@ -8565,7 +12813,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.456194,
+        0,
+        -0.526768
+      ],
+      "max": [
+        0.456194,
+        0.887568,
+        0.526768
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "nature.trail_marker.nature_sign_01",
@@ -8594,7 +12855,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.3,
+        0,
+        -0.07
+      ],
+      "max": [
+        0.3,
+        0.817541,
+        0.07
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "nature.trail_marker.rustic_signpost_01",
@@ -8623,7 +12897,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.214122,
+        0,
+        -0.042978
+      ],
+      "max": [
+        0.214122,
+        0.92016,
+        0.042978
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "nature.trail_marker.rustic_signpost_single_01",
@@ -8652,7 +12939,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.208636,
+        0,
+        -0.042978
+      ],
+      "max": [
+        0.208636,
+        0.92016,
+        0.042978
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "nature.tree.nature_tree_blocks_01",
@@ -8681,7 +12981,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -1.2,
+        0,
+        -1.2
+      ],
+      "max": [
+        1.2,
+        4.74,
+        1.2
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "nature.tree.nature_tree_cone_01",
@@ -8710,7 +13023,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -1.059327,
+        0,
+        -1.059327
+      ],
+      "max": [
+        1.059327,
+        5.721331,
+        1.059327
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "nature.tree.nature_tree_default_01",
@@ -8739,7 +13065,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -1.51,
+        0,
+        -1.307698
+      ],
+      "max": [
+        1.51,
+        6.83155,
+        1.307698
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "nature.tree.nature_tree_detailed_01",
@@ -8768,7 +13107,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -1.69423,
+        0,
+        -1.523205
+      ],
+      "max": [
+        1.69423,
+        5.329668,
+        1.523205
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "nature.tree.nature_tree_fat_01",
@@ -8797,7 +13149,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -1.51,
+        0,
+        -1.307698
+      ],
+      "max": [
+        1.51,
+        4.60155,
+        1.307698
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "nature.tree.nature_tree_oak_01",
@@ -8826,7 +13191,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -1.281108,
+        0,
+        -1.479296
+      ],
+      "max": [
+        1.281108,
+        4.90496,
+        1.479296
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "nature.tree.nature_tree_palm_01",
@@ -8855,7 +13233,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -1.870979,
+        0,
+        -2.025527
+      ],
+      "max": [
+        1.870979,
+        6.058362,
+        2.025527
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "nature.tree.nature_tree_palm_detailed_short_01",
@@ -8884,7 +13275,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -2.925524,
+        0,
+        -2.925524
+      ],
+      "max": [
+        2.925524,
+        4.496159,
+        2.925524
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "nature.tree.nature_tree_palm_short_01",
@@ -8913,7 +13317,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -2.068658,
+        0,
+        -2.068658
+      ],
+      "max": [
+        2.068658,
+        4.224927,
+        2.068658
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "nature.tree.nature_tree_pine_default_a_01",
@@ -8942,7 +13359,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -1.06392,
+        0,
+        -1.06392
+      ],
+      "max": [
+        1.06392,
+        6.183342,
+        1.06392
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "nature.tree.nature_tree_pine_ground_a_01",
@@ -8971,7 +13401,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.960769,
+        0,
+        -1.1094
+      ],
+      "max": [
+        0.960769,
+        3.657874,
+        1.1094
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "nature.tree.nature_tree_pine_round_a_01",
@@ -9000,7 +13443,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -1.234038,
+        0,
+        -1.424944
+      ],
+      "max": [
+        1.234038,
+        5.465749,
+        1.424944
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "nature.tree.nature_tree_pine_round_c_01",
@@ -9029,7 +13485,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.960769,
+        0,
+        -1.1094
+      ],
+      "max": [
+        0.960769,
+        5.011412,
+        1.1094
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "nature.tree.nature_tree_pine_small_a_01",
@@ -9058,7 +13527,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -1.0,
+        0,
+        -1.0
+      ],
+      "max": [
+        1.0,
+        3.8688,
+        1.0
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "nature.tree.nature_tree_pine_tall_a_01",
@@ -9087,7 +13569,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.772546,
+        0,
+        -0.7839
+      ],
+      "max": [
+        0.772546,
+        6.118424,
+        0.7839
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "nature.tree.nature_tree_pine_tall_a_detailed_01",
@@ -9116,7 +13611,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.772546,
+        0,
+        -0.7839
+      ],
+      "max": [
+        0.772546,
+        6.118424,
+        0.7839
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "nature.tree.nature_tree_plateau_01",
@@ -9145,7 +13653,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -1.223479,
+        0,
+        -1.3098
+      ],
+      "max": [
+        1.223479,
+        4.99736,
+        1.3098
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "nature.tree.nature_tree_thin_01",
@@ -9174,7 +13695,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -1.360873,
+        0,
+        -1.233045
+      ],
+      "max": [
+        1.360873,
+        5.961192,
+        1.233045
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "urban.bench.classic_bench_01",
@@ -9203,7 +13737,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.4,
+        0,
+        -0.2
+      ],
+      "max": [
+        0.4,
+        0.94,
+        0.2
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "urban.bench.classic_bench_cushion_01",
@@ -9232,7 +13779,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.4,
+        0,
+        -0.2
+      ],
+      "max": [
+        0.4,
+        0.92,
+        0.2
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "urban.bench.classic_bench_cushion_low_01",
@@ -9261,7 +13821,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.42,
+        0,
+        -0.22
+      ],
+      "max": [
+        0.42,
+        0.4,
+        0.22
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "urban.fence.nature_fence_bend_01",
@@ -9290,7 +13863,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -1.0,
+        0,
+        -1.0
+      ],
+      "max": [
+        1.0,
+        0.690055,
+        1.0
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "urban.fence.nature_fence_corner_01",
@@ -9319,7 +13905,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -1.0,
+        0,
+        -1.0
+      ],
+      "max": [
+        1.0,
+        0.690055,
+        1.0
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "urban.fence.nature_fence_gate_01",
@@ -9348,7 +13947,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -1.0,
+        0,
+        -0.07
+      ],
+      "max": [
+        1.0,
+        0.690055,
+        0.07
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "urban.fence.nature_fence_planks_01",
@@ -9377,7 +13989,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -1.0,
+        0,
+        -0.0959
+      ],
+      "max": [
+        1.0,
+        0.690055,
+        0.0959
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "urban.fence.nature_fence_simple_01",
@@ -9406,7 +14031,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -1.0,
+        0,
+        -0.07
+      ],
+      "max": [
+        1.0,
+        0.690055,
+        0.07
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "urban.fence.nature_fence_simple_center_01",
@@ -9435,7 +14073,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -1.0,
+        0,
+        -0.07
+      ],
+      "max": [
+        1.0,
+        0.690055,
+        0.07
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "urban.fence.rustic_fence_01",
@@ -9464,7 +14115,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.5,
+        0,
+        -0.04278
+      ],
+      "max": [
+        0.5,
+        1.034934,
+        0.04278
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "urban.fence.rustic_fence_doorway_01",
@@ -9493,7 +14157,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.5,
+        0,
+        -0.048127
+      ],
+      "max": [
+        0.5,
+        1.034934,
+        0.048127
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "urban.fence.rustic_fence_fortified_01",
@@ -9522,7 +14199,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.5,
+        0,
+        -0.053015
+      ],
+      "max": [
+        0.5,
+        1.034934,
+        0.053015
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "urban.fence.street_construction_barrier_01",
@@ -9551,7 +14241,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.4065,
+        0,
+        -0.675
+      ],
+      "max": [
+        0.4065,
+        0.78,
+        0.675
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "urban.fence.street_construction_fence_01",
@@ -9580,7 +14283,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.225,
+        0,
+        -1.125001
+      ],
+      "max": [
+        0.225,
+        1.0725,
+        1.125001
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "urban.sign.street_road_sign_empty_01",
@@ -9609,7 +14325,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.15,
+        0,
+        -0.15
+      ],
+      "max": [
+        0.15,
+        2.85,
+        0.15
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "urban.sign.street_road_sign_empty_hanging_01",
@@ -9638,7 +14367,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.27,
+        0,
+        -0.885
+      ],
+      "max": [
+        0.27,
+        2.85,
+        0.885
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "urban.sign.street_road_sign_stop_01",
@@ -9667,7 +14409,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.2325,
+        0,
+        -0.414637
+      ],
+      "max": [
+        0.2325,
+        2.964449,
+        0.414637
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "urban.sign.street_road_sign_street_01",
@@ -9696,7 +14451,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.58875,
+        0,
+        -0.588749
+      ],
+      "max": [
+        0.58875,
+        2.85,
+        0.588749
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "urban.sign.street_road_sign_warning_01",
@@ -9725,7 +14493,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.232038,
+        0,
+        -0.441562
+      ],
+      "max": [
+        0.232038,
+        2.991374,
+        0.441562
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "urban.sign.street_sign_highway_01",
@@ -9754,7 +14535,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.397125,
+        0,
+        -2.999999
+      ],
+      "max": [
+        0.397125,
+        4.24425,
+        2.999999
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "urban.sign.street_sign_highway_detailed_01",
@@ -9783,7 +14577,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.397125,
+        0,
+        -2.999999
+      ],
+      "max": [
+        0.397125,
+        4.93275,
+        2.999999
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "urban.sign.street_sign_highway_wide_01",
@@ -9812,7 +14619,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.397125,
+        0,
+        -2.999999
+      ],
+      "max": [
+        0.397125,
+        4.24425,
+        2.999999
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "urban.streetlamp.street_light_curved_01",
@@ -9841,7 +14661,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.15,
+        0,
+        -0.675
+      ],
+      "max": [
+        0.15,
+        4.05,
+        0.675
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "urban.streetlamp.street_light_curved_cross_01",
@@ -9870,7 +14703,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -1.2,
+        0,
+        -1.2
+      ],
+      "max": [
+        1.2,
+        4.05,
+        1.2
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "urban.streetlamp.street_light_curved_double_01",
@@ -9899,7 +14745,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.15,
+        0,
+        -1.2
+      ],
+      "max": [
+        0.15,
+        4.05,
+        1.2
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "urban.streetlamp.street_light_square_01",
@@ -9928,7 +14787,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.15,
+        0,
+        -0.7125
+      ],
+      "max": [
+        0.15,
+        3.6,
+        0.7125
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "urban.streetlamp.street_light_square_cross_01",
@@ -9957,7 +14829,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -1.275,
+        0,
+        -1.275
+      ],
+      "max": [
+        1.275,
+        3.6,
+        1.275
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "urban.streetlamp.street_light_square_double_01",
@@ -9986,7 +14871,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.15,
+        0,
+        -1.275
+      ],
+      "max": [
+        0.15,
+        3.6,
+        1.275
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "urban.vehicle_proxy.blockout_vehicle_01",
@@ -10015,7 +14913,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -2.133,
+        0,
+        -1.485
+      ],
+      "max": [
+        2.133,
+        2.33109,
+        1.485
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "urban.vehicle_proxy.blockout_vehicle_convertible_01",
@@ -10044,7 +14955,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -2.133,
+        0,
+        -1.36275
+      ],
+      "max": [
+        2.133,
+        2.03109,
+        1.36275
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "urban.vehicle_proxy.toy_vehicle_drag_racer_01",
@@ -10073,7 +14997,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.88125,
+        0,
+        -2.00625
+      ],
+      "max": [
+        0.88125,
+        1.81875,
+        2.00625
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "urban.vehicle_proxy.toy_vehicle_monster_truck_01",
@@ -10102,7 +15039,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.9375,
+        0,
+        -1.3125
+      ],
+      "max": [
+        0.9375,
+        2.25,
+        1.3125
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "urban.vehicle_proxy.toy_vehicle_racer_01",
@@ -10131,7 +15081,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.84375,
+        0,
+        -1.3125
+      ],
+      "max": [
+        0.84375,
+        1.35,
+        1.3125
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "urban.vehicle_proxy.toy_vehicle_racer_low_01",
@@ -10160,7 +15123,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.84375,
+        0,
+        -1.3125
+      ],
+      "max": [
+        0.84375,
+        1.1625,
+        1.3125
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "urban.vehicle_proxy.toy_vehicle_speedster_01",
@@ -10189,7 +15165,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.825,
+        0,
+        -1.3125
+      ],
+      "max": [
+        0.825,
+        1.125,
+        1.3125
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "urban.vehicle_proxy.toy_vehicle_suv_01",
@@ -10218,7 +15207,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.84375,
+        0,
+        -1.3125
+      ],
+      "max": [
+        0.84375,
+        1.515,
+        1.3125
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "urban.vehicle_proxy.toy_vehicle_truck_01",
@@ -10247,7 +15249,20 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.84375,
+        0,
+        -1.29375
+      ],
+      "max": [
+        0.84375,
+        1.575,
+        1.29375
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   },
   {
     "id": "urban.vehicle_proxy.toy_vehicle_vintage_racer_01",
@@ -10276,6 +15291,19 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "bounds_meters": {
+      "min": [
+        -0.825,
+        0,
+        -1.3125
+      ],
+      "max": [
+        0.825,
+        0.975,
+        1.3125
+      ],
+      "basis": "normalized_rest_geometry"
+    }
   }
 ]

@@ -1,0 +1,26 @@
+import type {AudioPlan,SceneSpec,SessionPlan} from '../../docs/handoff/contracts.js';
+
+/** Resolve exact references across app-owned identifier domains; never guess assets or ambiguous names. */
+export function canonicalSceneReferences(plan:SessionPlan,source:SceneSpec,audio:AudioPlan):SceneSpec {
+ const scene=structuredClone(source);
+ const characterIDs=new Set(plan.characters.map(c=>c.id)),cueIDs=new Set(audio.layers.map(l=>l.id));
+ const ops=[...scene.events.map(e=>e.operation),...scene.interactions.flatMap(i=>i.choices.flatMap(c=>c.operations)),
+  ...(scene.scenario?.steps.flatMap(s=>[...s.start_operations,...s.actions.flatMap(a=>a.operations)])??[])];
+ for(const op of ops){
+  if(op.type==='character_action'&&!characterIDs.has(op.character_id)){
+   const matches=plan.characters.filter(c=>c.scene_node_id===op.character_id);
+   if(matches.length===1)op.character_id=matches[0].id;
+  }
+  if(op.type==='play_sound'&&!cueIDs.has(op.cue_id)){
+   const matches=audio.layers.filter(l=>l.asset_id===op.cue_id);
+   if(matches.length===1)op.cue_id=matches[0].id;
+  }
+ }
+ for(const step of scene.scenario?.steps??[]){
+  if(step.conversation_target&&!characterIDs.has(step.conversation_target)){
+   const matches=plan.characters.filter(c=>c.scene_node_id===step.conversation_target);
+   if(matches.length===1)step.conversation_target=matches[0].id;
+  }
+ }
+ return scene;
+}

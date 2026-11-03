@@ -2,6 +2,9 @@
 """Validate the CC0 source pack and copy unchanged GLBs into the runtime bundle."""
 import argparse, collections, csv, hashlib, json, math, re, shutil, struct
 from pathlib import Path, PurePosixPath
+import sys
+sys.path.insert(0,str(Path(__file__).resolve().parent))
+from asset_bounds import normalized_bounds
 
 ROOT = Path(__file__).resolve().parents[1]
 GAPS = ['furniture.podium', 'interior_prop.whiteboard', 'confined.elevator_car', 'confined.elevator_panel', 'confined.vent']
@@ -21,24 +24,32 @@ def inspect_glb(path):
     for b in gltf.get('buffers', []):
         if b.get('uri') or b['byteLength'] > len(binary): raise ValueError(f'External or truncated buffer: {path}')
     for image in gltf.get('images', []):
-        if 'uri' in image and not image['uri'].startswith('data:'): raise ValueError(f'External image: {path}')
+        if 'uri' in image and not image['uri'].startswith('data:'):
+            rel=PurePosixPath(image['uri'])
+            if rel.is_absolute() or '..' in rel.parts or '\\' in image['uri'] or ':' in image['uri'] or rel.suffix.lower()!='.png': raise ValueError(f'Unsafe texture dependency: {path}')
+            texture=path.parent/str(rel)
+            if not texture.is_file() or texture.is_symlink() or not texture.resolve().is_relative_to(path.parent.resolve()) or texture.stat().st_size>2_000_000 or not texture.read_bytes().startswith(b'\x89PNG\r\n\x1a\n'): raise ValueError(f'Invalid bundled texture: {path}')
     views = gltf.get('bufferViews', [])
     for v in views:
-        if v.get('buffer', 0) != 0 or v.get('byteOffset', 0) + v['byteLength'] > len(binary): raise ValueError(f'Invalid buffer view: {path}')
+        if v.get('buffer', 0) != 0 or v.get('byteOffset', 0)<0 or v['byteLength']<0 or v.get('byteOffset', 0) + v['byteLength'] > len(binary): raise ValueError(f'Invalid buffer view: {path}')
     sizes={5120:1,5121:1,5122:2,5123:2,5125:4,5126:4}; widths={'SCALAR':1,'VEC2':2,'VEC3':3,'VEC4':4,'MAT2':4,'MAT3':9,'MAT4':16}
     for a in gltf.get('accessors', []):
         element=sizes[a['componentType']]*widths[a['type']]
         if a.get('count',0)<1: raise ValueError(f'Invalid accessor count: {path}')
         if 'bufferView' in a:
+            if not 0<=a['bufferView']<len(views) or a.get('byteOffset',0)<0: raise ValueError(f'Invalid accessor reference: {path}')
             v=views[a['bufferView']]; end=a.get('byteOffset',0)+(a['count']-1)*v.get('byteStride',element)+element
+            if v.get('byteStride',element)<element: raise ValueError(f'Invalid accessor stride: {path}')
             if end>v['byteLength']: raise ValueError(f'Accessor exceeds buffer: {path}')
     for node in gltf.get('nodes', []):
-        if 'mesh' in node and node['mesh']>=len(gltf.get('meshes', [])): raise ValueError(f'Invalid mesh reference: {path}')
-        if 'skin' in node and node['skin']>=len(gltf.get('skins', [])): raise ValueError(f'Invalid skin reference: {path}')
+        if 'mesh' in node and not 0<=node['mesh']<len(gltf.get('meshes', [])): raise ValueError(f'Invalid mesh reference: {path}')
+        if 'skin' in node and not 0<=node['skin']<len(gltf.get('skins', [])): raise ValueError(f'Invalid skin reference: {path}')
     return gltf, hashlib.sha256(data).hexdigest()
 
 def inventory(source):
     with (source/'LICENSE_INDEX.csv').open(encoding='utf-8-sig', newline='') as f: rows=list(csv.DictReader(f))
+    supplements_path=source/'character-provenance.json'
+    supplements={a['asset_id']:a for a in json.loads(supplements_path.read_text())} if supplements_path.exists() else {}
     indexed={}; ids=set(); manifest=[]
     for r in rows:
         rel=PurePosixPath(r['file_path'])
@@ -60,10 +71,24 @@ def inventory(source):
         if not path.is_file() or path.is_symlink() or not path.resolve().is_relative_to(source.resolve()): raise ValueError('Missing or unsafe GLB: '+str(rel))
         gltf,digest=inspect_glb(path)
         manifest.append(dict(id=expected,relative_path='LowPoly/'+str(rel),category=r['category'],subcategory=r['subcategory'],tags=r['tags'].split(';'),suggested_scale_m=scale,y_up=r['y_up']=='true',character_rigged=bool(gltf.get('skins')),license='CC0-1.0',license_url=r['license_url'],source_url=r['source_pack_or_url'],author=r['author'],approx_tris=int(r['approx_tris']),sha256=digest,normalization={'axis_rotation_x_radians':0 if r['y_up']=='true' else -math.pi/2,'forward_rotation_y_radians':math.pi,'source_forward_assumption':'+Z','semantic_front_verified':False,'placement':'center_xz_min_y_after_scale_and_rotation'},animation_clips=[a.get('name',f'clip_{i}') for i,a in enumerate(gltf.get('animations',[]))]))
+        manifest[-1]['bounds_meters']=normalized_bounds(gltf,scale,r['y_up']=='true')
+        tint_names=supplements.get(expected,{}).get('material_tint_names',[])
+        if tint_names:
+            names={m.get('name') for m in gltf.get('materials',[])}
+            if not isinstance(tint_names,list) or any(n not in names or any(p in n.lower() for p in ['skin','hair','eye']) for n in tint_names): raise ValueError('Invalid clothing tint binding: '+expected)
+            manifest[-1]['material_tint_names']=tint_names
+        if r['category']=='character' and r['subcategory']=='base': manifest[-1]['resolved_node_count']=len(gltf.get('nodes',[]))+3
+        if 'generation_enabled' in supplements.get(expected,{}):manifest[-1]['generation_enabled']=supplements[expected]['generation_enabled']
+        dependencies=[]
+        for image in gltf.get('images',[]):
+            uri=image.get('uri','')
+            if uri and not uri.startswith('data:'):
+                texture=path.parent/uri;dependencies.append({'relative_path':str(rel.parent/PurePosixPath(uri)),'sha256':hashlib.sha256(texture.read_bytes()).hexdigest()})
+        if dependencies:manifest[-1]['bundled_textures']=dependencies
     found={p.relative_to(source).as_posix() for p in source.rglob('*.glb')}
     if found!=set(indexed): raise ValueError('CSV/GLB mismatch; unindexed='+str(sorted(found-set(indexed)))+' missing='+str(sorted(set(indexed)-found)))
     bases=[r for r in manifest if r['id'].startswith('character.base.')]
-    if len(bases)!=1 or not bases[0]['character_rigged']: raise ValueError('Require exactly one skinned neutral character.base')
+    if not any(r['id']=='character.base.neutral_humanoid_01' for r in bases) or not all(r['character_rigged'] for r in bases): raise ValueError('Require the original neutral base and skinned registered character bases')
     return sorted(manifest,key=lambda r:r['id'])
 
 def main():
@@ -81,7 +106,10 @@ def main():
             if old.relative_to(destination).as_posix() not in expected:old.unlink()
     for a in assets:
         rel=a['relative_path'][len('LowPoly/'):];out=destination/rel;out.parent.mkdir(parents=True,exist_ok=True);shutil.copyfile(args.source/rel,out)
+        for texture in a.get('bundled_textures',[]):
+            rel=texture['relative_path'];out=destination/rel;out.parent.mkdir(parents=True,exist_ok=True);shutil.copyfile(args.source/rel,out)
     shutil.copyfile(args.source/'LICENSE_INDEX.csv',destination/'LICENSE_INDEX.csv')
+    for notice in args.source.glob('*LICENSE*.txt'):shutil.copyfile(notice,destination/notice.name)
     for gap in empty:(destination/Path(*gap.split('.'))).mkdir(parents=True,exist_ok=True)
     encoded=json.dumps(assets,indent=2)+'\n'
     for output in [args.source/'asset_manifest.json',runtime/'asset_manifest.json',ROOT/'backend/assets/asset_manifest.json']:

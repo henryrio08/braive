@@ -1,30 +1,26 @@
-import {AppError,outputSchema,validate} from './contracts.js';
+import {AppError,validate} from './contracts.js';
 import type {DialogueRequest,DialogueResult,SessionPlan,SceneSpec,AudioPlan} from '../../docs/handoff/contracts.js';
-
-const routingKeys=['schema_version','session_id','revision','turn_id','character_id'] as const;
 
 // Routing is deterministic application state. The model supplies only spoken content and actions.
 export function dialogueContentSchema(){
- const schema=outputSchema('DialogueResult');
- for(const key of routingKeys)delete schema.properties[key];
- schema.required=schema.required.filter((key:string)=>!routingKeys.includes(key as any));
- schema.$defs.WorldOperation.oneOf=schema.$defs.WorldOperation.oneOf.filter((v:any)=>v.properties.type.const==='character_action');
- schema.$defs.WorldOperation.oneOf[0].properties.behavior.enum=['idle','listen','speak','gesture'];
- return schema;
+ return {type:'object',additionalProperties:false,required:['reply','behavior'],properties:{
+  reply:{type:'string',minLength:1,maxLength:320},behavior:{type:'string',enum:['idle','listen','speak','gesture']}}};
 }
 export function completeDialogueResult(request:DialogueRequest,content:Record<string,unknown>):DialogueResult {
  if(Array.isArray(content.operations)&&content.operations.some((op:any)=>!op||op.type!=='character_action'||!['idle','listen','speak','gesture'].includes(op.behavior)))
   throw new AppError('INVALID_MODEL_OUTPUT','Conversation may gesture; scenario actions own world changes and movement');
- const result={...content,schema_version:'1',session_id:request.session_id,revision:request.revision,
+ const result={...content,context_summary:request.context_summary,operations:content.operations??[],schema_version:'1',session_id:request.session_id,revision:request.revision,
   turn_id:request.turn_id,character_id:request.character_id};
  validate('DialogueResult',result);
  return result as DialogueResult;
 }
 export function dialogueContext(request:DialogueRequest,saved:{plan:SessionPlan,scene:SceneSpec,audio:AudioPlan}){
- const {plan,scene,audio}=saved;
- return {...request,character:plan.characters.find(c=>c.id===request.character_id),objective:plan.experience?.objective??plan.task_instruction,
-  setting:plan.setting_brief,scene_summary:scene.description,world_references:{node_ids:scene.nodes.map(n=>n.id),character_ids:plan.characters.map(c=>c.id),
-   viewpoint_ids:scene.viewpoints.map(v=>v.id),cue_ids:audio.layers.map(l=>l.id)}};
+ const {plan}=saved, character=plan.characters.find(c=>c.id===request.character_id)!;
+ return {schema_version:request.schema_version,session_id:request.session_id,revision:request.revision,turn_id:request.turn_id,character_id:request.character_id,
+  user_utterance:request.user_utterance.slice(-1800),recent_turns:request.recent_turns.slice(-6).map(t=>({...t,text:t.text.slice(-500)})),
+  character:{name:character.name,role:character.role,goal:character.goal.slice(0,350),behavior_boundaries:character.behavior_boundaries},
+  objective:(plan.experience?.objective??plan.task_instruction).slice(0,500),setting:plan.setting_brief.slice(0,700),
+  context_summary:request.context_summary.slice(0,600),remaining_seconds:request.remaining_seconds};
 }
 export function assertCurrentDialogue(request:DialogueRequest,plan:SessionPlan|undefined,activeRevision:number|undefined){
  if(!plan || plan.session_id!==request.session_id || plan.revision!==request.revision || activeRevision!==request.revision)

@@ -31,16 +31,16 @@ struct ContentView: View {
     GeometryReader { geo in
       ZStack {
         StereoWorld(world: s.world).ignoresSafeArea().blur(
-          radius: s.phase == .setup ? 9 : s.phase == .reveal ? max(0, (1 - s.reveal) * 7) : 0)
+          radius: s.phase == .setup ? 9 : s.phase == .reveal ? max(0, (1 - s.revealBlurProgress) * 7) : 0)
         if s.phase == .setup {
           LinearGradient(colors: [ink.opacity(0.98), ink.opacity(0.8), ink.opacity(0.5)],
             startPoint: .leading, endPoint: .trailing).ignoresSafeArea()
-          welcome
+          ScrollView(.vertical) { welcome }.scrollIndicators(.hidden)
         } else {
           if [.intro, .planning, .error].contains(s.phase) || s.loading {
             Color.black.opacity(s.phase == .intro ? 1 : 0.82).ignoresSafeArea()
           }
-          if s.phase == .reveal { Color.black.opacity(max(0, 1 - s.reveal)).ignoresSafeArea() }
+          if s.phase == .reveal { Color.black.opacity(max(0, 1 - s.revealFadeProgress)).ignoresSafeArea() }
           HStack(spacing: 0) {
             eyeHUD.frame(width: geo.size.width / 2)
             eyeHUD.frame(width: geo.size.width / 2)
@@ -53,17 +53,27 @@ struct ContentView: View {
             pauseHUD.frame(width: geo.size.width / 2)
           }
         }
-        if s.phase == .setup {
+        if s.launching {
+          ZStack {
+            ink.ignoresSafeArea()
+            VStack(spacing: 18) {
+              Text("braive").font(.system(size: 36, weight: .regular, design: .serif))
+              ProgressView().tint(accent)
+              Text(s.loadingTip).font(.system(size: 17)).multilineTextAlignment(.center)
+            }.foregroundStyle(.white).padding(30)
+          }.accessibilityLabel("Getting Braive ready. " + s.loadingTip)
+        }
+        if s.phase == .setup && !s.launching {
         VStack {
           HStack {
-            Text("braive").font(.system(size: 22, weight: .semibold, design: .serif)).tracking(-0.5)
+            HStack(spacing: 9) {
+              if UIImage(named: "BrandMark") != nil { Image("BrandMark").resizable().scaledToFit().frame(width: 30,height:30).clipShape(RoundedRectangle(cornerRadius:7)) }
+              Text("braive").font(.system(size: 22, weight: .semibold, design: .serif)).tracking(-0.5)
+            }
             Spacer()
             Button { panel = .settings } label: {
               Image(systemName: "slider.horizontal.3").frame(width: 36, height: 36)
             }.accessibilityLabel("Settings")
-            if s.phase != .setup {
-              Button("End practice") { s.finish(early: true) }.font(.caption)
-            }
           }.foregroundStyle(.white.opacity(0.8)).padding(.horizontal, 28).padding(.top, 8)
           Spacer()
         }.allowsHitTesting(s.pauses.isEmpty)
@@ -79,6 +89,7 @@ struct ContentView: View {
     }
     .onAppear {
       UIApplication.shared.isIdleTimerDisabled = true
+      if s.launching { s.audio.play("whoosh", loop: false, gain: 0.15) }
       applyViewer()
     }
     .onChange(of: panel) { _, value in
@@ -96,7 +107,7 @@ struct ContentView: View {
         Text("Practice before\nit counts.")
           .font(.system(size: 43, weight: .regular, design: .serif)).tracking(-1.5)
           .fixedSize(horizontal: false, vertical: true)
-        Text("The presentation. The interview.\nThe conversation you keep putting off.")
+        Text("Try something unfamiliar.\nFind your footing. Go again.")
           .font(.system(size: 15)).foregroundStyle(.white.opacity(0.7)).lineSpacing(4)
         HStack(spacing: 8) {
           Image(systemName: "waveform").foregroundStyle(accent)
@@ -104,7 +115,7 @@ struct ContentView: View {
         }.font(.system(size: 12)).padding(.top, 4)
       }.frame(maxWidth: .infinity, alignment: .leading)
       VStack(alignment: .leading, spacing: 14) {
-        Text("A little preparation.\nA more confident next step.")
+        Text("Your voice.\nYour next challenge.")
           .font(.system(size: 20, weight: .medium, design: .serif))
         Text("Describe the moment you want to practice. Speech stays on this iPhone; your words shape the experience.")
           .font(.system(size: 13)).foregroundStyle(.white.opacity(0.65)).fixedSize(horizontal: false, vertical: true)
@@ -133,64 +144,13 @@ struct ContentView: View {
     }.padding(.horizontal, 44).padding(.top, 50).padding(.bottom, 16).frame(maxWidth: 1050)
   }
   var eyeHUD: some View {
-    VStack(spacing: 14) {
-      HStack(spacing: 6) {
-        Circle().fill(s.voiceListening ? Color.mint : Color.white.opacity(0.3)).frame(width: 5, height: 5)
-        Text(s.voiceListening ? "Listening" : s.connecting ? "Getting ready" : "Voice unavailable")
-          .font(.system(size: 10)).foregroundStyle(.white.opacity(0.65))
-        Spacer()
-        if s.phase == .active {
-          Text(Duration.seconds(s.remaining).formatted(.time(pattern: .minuteSecond)))
-            .font(.system(size: 18, weight: .medium, design: .monospaced)).foregroundStyle(accent)
-        }
-      }
-      Spacer(minLength: 5)
-      if s.loading || s.phase == .planning {
-        ProgressView().tint(accent)
-        Text(s.phase == .planning ? "PREPARING YOUR PRACTICE" : "ONE MOMENT")
-          .font(.system(size: 9, weight: .medium)).tracking(2).foregroundStyle(accent)
-      }
-      Text(s.message).font(.system(size: 17, weight: .medium, design: .rounded))
-        .multilineTextAlignment(.center).lineLimit(6).shadow(radius: 5)
-      if s.phase == .active {
-        Text(s.scenarioActions.joined(separator: " · "))
-          .font(.system(size: 10)).foregroundStyle(accent).lineLimit(2)
-      }
-      if !s.transcript.isEmpty {
-        Text("“" + s.transcript + "”").font(.system(size: 12)).foregroundStyle(.white.opacity(0.6)).lineLimit(2)
-      }
-      Spacer(minLength: 5)
-      if s.isCollectingAnswer {
-        Text("Say THAT’S ALL when finished · START OVER to replace your answer")
-          .font(.system(size: 10)).foregroundStyle(accent).multilineTextAlignment(.center)
-      } else if s.phase == .review {
-        Text("Say BEGIN PRACTICE · START OVER to change it")
-          .font(.system(size: 10)).foregroundStyle(accent).multilineTextAlignment(.center)
-      } else if s.canStop {
-        Text("Say STOP to pause").font(.system(size: 10)).foregroundStyle(.white.opacity(0.4))
-      }
-
-    }.padding(.horizontal, 28).padding(.top, 54).padding(.bottom, 20)
+    HeadsetHUD(copy: s.headsetCopy,
+      status: s.voiceListening ? (s.characterReplyPending ? "Reply on its way" : "Listening") : s.connecting ? "Getting ready" : "Voice unavailable",
+      remaining: s.phase == .active && !s.loading ? s.remaining : nil,
+      preparing: s.loading || (s.phase == .planning && !s.builder))
   }
   var pauseHUD: some View {
-    VStack(spacing: 16) {
-      Text(s.pauses.contains("user_stop") ? "End this practice?" : "Take a moment.")
-        .font(.system(size: 25, design: .serif))
-      if s.pauses.contains("user_stop") {
-        Text("Say YES to end · NO to continue").font(.system(size: 11)).foregroundStyle(.white.opacity(0.65))
-      }
-      if s.pauses.contains("portrait") {
-        Text("Turn your phone sideways to continue.").font(.system(size: 12))
-      }
-      if s.pauses.contains("command_channel_unavailable") {
-        Text("Voice was interrupted. Your place is saved.").font(.system(size: 12)).multilineTextAlignment(.center)
-        Text("Remove the viewer, then hold the screen for phone controls.")
-          .font(.system(size: 10)).foregroundStyle(.white.opacity(0.55)).multilineTextAlignment(.center)
-      }
-      if s.pauses.contains("audio_interruption") {
-        Text("Remove the viewer, then hold the screen to restore audio.").font(.system(size: 10))
-      }
-    }.padding(24)
+    HeadsetHUD(copy: s.pausedHeadsetCopy, status: "Paused")
   }
   func send(_ text: String) {
     // Sheet dismissal's onChange runs later; release only this pause before a manual command.
@@ -210,12 +170,15 @@ struct ContentView: View {
             Button(s.connecting ? "Reconnecting…" : "Reconnect voice") { s.reconnect() }.disabled(s.connecting)
           }
           if s.pauses.contains("user_stop") {
-            Button("Continue practice") { panel = nil; send("no") }
-            Button("End practice") { panel = nil; send("yes") }
+            Button("Continue practice") { panel = nil; s.pause("phone_controls",enabled:false); s.confirmStop(end:false) }
+            Button("End practice") { panel = nil; s.pause("phone_controls",enabled:false); s.confirmStop(end:true) }
           } else if s.canStop {
             Button("Pause practice") { panel = nil; s.stop() }
           }
-          if s.phase == .lobby { Button("Start practice") { panel = nil; send("start") } }
+          if s.phase == .lobby {
+            Button("Start practice") { panel = nil; send("start") }
+            if s.store.recoverable != nil { Button("Resume interrupted practice") { panel=nil; s.requestRecovery() } }
+          }
           if s.isCollectingAnswer {
             Button("Finish answer") { panel = nil; send("that's all") }
             Button("Replace answer") { panel = nil; send("start over") }
@@ -229,12 +192,18 @@ struct ContentView: View {
             Button("No") { panel = nil; send("no") }
           }
           if s.phase == .error {
-            ForEach(["Retry", "Revise", "Cancel"], id: \.self) { value in
+            ForEach(s.pendingPostSave == nil ? ["Retry", "Revise", "Cancel"] : ["Retry"], id: \.self) { value in
               Button(value) { panel = nil; send(value) }
             }
           }
           Button("Type an answer") { panel = .typing }
           Button("Settings") { panel = .settings }
+        }
+        Section("Full prompt") {
+          Text(s.message).textSelection(.enabled)
+        }
+        if !s.transcript.isEmpty {
+          Section("Your words") { Text(s.transcript).textSelection(.enabled) }
         }
       }.navigationTitle("Phone controls").tint(accent)
         .toolbar { Button("Done") { panel = nil } }
@@ -291,6 +260,14 @@ struct ContentView: View {
           ShareLink("Export session history", item: s.store.root.appendingPathComponent("SESSIONS.csv"))
           Button("Delete history and reflections", role: .destructive) { confirmDelete = true }
         }
+        Section("Voice controls") {
+          Text("Finish a setup answer with THAT’S ALL. Say HELP during practice to hear your next options. STOP pauses practice; NO resumes from your place.")
+            .font(.footnote).foregroundStyle(.secondary)
+        }
+        Section("About Braive") {
+          Text("Version \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "") (\(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? ""))")
+            .font(.footnote).foregroundStyle(.secondary)
+        }
         Section {
           DisclosureGroup("Connection setup") {
             TextField("Practice server address", text: $s.server).textInputAutocapitalization(.never)
@@ -308,7 +285,7 @@ struct ContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in refreshVoices() }
         .confirmationDialog("Delete your sessions and reflections?", isPresented: $confirmDelete) {
           Button("Delete all", role: .destructive) {
-            do { try s.store.deleteAll() } catch { s.fail(error) }
+            do { try s.deleteHistory() } catch { s.fail(error) }
           }
         }
     }

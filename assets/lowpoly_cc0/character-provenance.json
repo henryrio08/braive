@@ -1,0 +1,69 @@
+[
+  {
+    "asset_id": "character.base.casual_adult_01",
+    "source_url": "https://poly.pizza/m/kZ3DmIoGip",
+    "download_url": "https://static.poly.pizza/90a9e2d4-053f-42f1-99a2-8f5e1180ea7f.glb",
+    "author": "Quaternius",
+    "license": "CC0-1.0",
+    "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "sha256": "fea7e71271203e7073f1a073fa1208de7402df276f87f80e149bf7589b5d46b4",
+    "material_tint_names": [
+      "LightBrown"
+    ],
+    "generation_enabled": false
+  },
+  {
+    "asset_id": "character.base.casual_adult_02",
+    "source_url": "https://poly.pizza/m/jpKRgGDxhk",
+    "download_url": "https://static.poly.pizza/51d5abdd-bb87-4b8d-9967-21738ffb8437.glb",
+    "author": "Quaternius",
+    "license": "CC0-1.0",
+    "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "sha256": "99c4df0aaabd19022809facc68f5fb5f564d35df3a9893c273a31fdaacf68e96",
+    "material_tint_names": [
+      "Shirt"
+    ],
+    "generation_enabled": false
+  },
+  {
+    "asset_id": "character.base.neutral_humanoid_01",
+    "generation_enabled": false,
+    "note": "Retained for stored records; excluded from new generation after user appearance rejection."
+  },
+  {
+    "asset_id": "character.base.soft_adult_01",
+    "source_url": "https://kenney.nl/assets/mini-characters",
+    "download_url": "https://opengameart.org/sites/default/files/kenney_mini-characters.zip",
+    "author": "Kenney",
+    "license": "CC0-1.0",
+    "sha256": "77572792bfe2773b715b8cd8e18644b52b3e1f155fe10450254b50f9c364382a",
+    "generation_enabled": true
+  },
+  {
+    "asset_id": "character.base.soft_adult_02",
+    "source_url": "https://kenney.nl/assets/mini-characters",
+    "download_url": "https://opengameart.org/sites/default/files/kenney_mini-characters.zip",
+    "author": "Kenney",
+    "license": "CC0-1.0",
+    "sha256": "8cfcff43460da8b421f2a7fdfb43ec177321cad2746db9497cbf128d5806e2a8",
+    "generation_enabled": true
+  },
+  {
+    "asset_id": "character.base.soft_adult_03",
+    "source_url": "https://kenney.nl/assets/mini-characters",
+    "download_url": "https://opengameart.org/sites/default/files/kenney_mini-characters.zip",
+    "author": "Kenney",
+    "license": "CC0-1.0",
+    "sha256": "791fc0c203924c175c0a3d5b60d030daf36797b039506689cf7cd01ef5253b3c",
+    "generation_enabled": true
+  },
+  {
+    "asset_id": "character.base.soft_adult_04",
+    "source_url": "https://kenney.nl/assets/mini-characters",
+    "download_url": "https://opengameart.org/sites/default/files/kenney_mini-characters.zip",
+    "author": "Kenney",
+    "license": "CC0-1.0",
+    "sha256": "2288438e7baf9acc91a870c82dc00d66710bb486592cfc3474ef8ed93a03863a",
+    "generation_enabled": true
+  }
+]

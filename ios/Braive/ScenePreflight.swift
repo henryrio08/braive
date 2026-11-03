@@ -12,27 +12,47 @@ import UIKit
     }
     let staging = SCNScene()
     staging.background.contents = UIColor.black
+    let originalParent = root.parent
     staging.rootNode.addChildNode(root)
-    defer { root.removeFromParentNode() }
+    defer { root.removeFromParentNode(); originalParent?.addChildNode(root) }
+    SCNTransaction.flush()
     var materials: [(SCNGeometry, [SCNMaterial])] = []
     root.enumerateChildNodes { node, _ in
       if let g = node.geometry { materials.append((g, g.materials)) }
     }
     defer { for (g, saved) in materials { g.materials = saved } }
     // Depth layers follow actual scene scale, including tight enclosures.
-    let distances = materials.indices.compactMap { i -> Float? in
+    let rawDistances = materials.indices.compactMap { i -> Float? in
       var found: Float?
       root.enumerateChildNodes { n, _ in
         if n.geometry === materials[i].0 {
-          let p = n.convertPosition(SCNVector3Zero, to: root)
-          found = simd_length(SIMD3(p.x - position.x, p.y - position.y, p.z - position.z))
+          var visible = !materials[i].1.allSatisfy { $0.transparency <= 0 }
+          var ancestor: SCNNode? = n
+          while let node = ancestor {
+            if node.isHidden || node.opacity <= 0 { visible = false }
+            ancestor = node.parent
+          }
+          if visible {
+            let p = n.convertPosition(SCNVector3Zero, to: root)
+            if p.z < position.z { found = position.z - p.z }
+          }
         }
       }
       return found
     }.sorted()
-    guard distances.count >= 3 else { throw error("Scene needs visible spatial composition") }
-    let near = distances[distances.count / 3]
-    let far = distances[min(distances.count - 1, distances.count * 2 / 3)]
+    // Multipart assets should not outweigh the entire room simply because
+    // their meshes share one depth. Count distinct depth groups instead.
+    var distances: [Float] = []
+    for depth in rawDistances {
+      if distances.last.map({ depth - $0 > 0.1 }) ?? true { distances.append(depth) }
+    }
+    guard distances.count >= 3 else { throw error("Scene needs visible spatial composition (depth groups: \(distances))") }
+    // Compare view-space depth with view-space depth. Cut between depth groups,
+    // not through an object's center (its front-facing surface lies nearer).
+    let nearIndex = max(1, distances.count / 3)
+    let farIndex = min(distances.count - 1, max(nearIndex + 1, distances.count * 2 / 3))
+    let near = (distances[nearIndex - 1] + distances[nearIndex]) / 2
+    let far = (distances[farIndex - 1] + distances[farIndex]) / 2
     guard far - near > 0.1 else { throw error("Scene geometry has insufficient depth separation") }
     let renderer = SCNRenderer(device: device, options: nil)
     renderer.scene = staging
@@ -50,10 +70,14 @@ import UIKit
       // First pass: a red focus mask against black occluders, with real depth testing.
       root.enumerateChildNodes { n, _ in
         guard let g = n.geometry else { return }
-        let m = SCNMaterial()
-        m.lightingModel = .constant
-        m.diffuse.contents = isFocus(n, focus) ? UIColor.red : UIColor.black
-        g.materials = [m]
+        g.materials = g.materials.map { source in
+          let m = maskMaterial(source)
+          let rgb = isFocus(n, focus) ? "float3(1,0,0)" : "float3(0,0,0)"
+          var modifiers=m.shaderModifiers ?? [:]
+          modifiers[.fragment]="_output.color.rgb = " + rgb + ";"
+          m.shaderModifiers=modifiers
+          return m
+        }
       }
       let focusPixels = try pixels(
         renderer.snapshot(
@@ -68,24 +92,40 @@ import UIKit
       // A large floor/water plane spans several depths even when its origin is far away.
       root.enumerateChildNodes { n, _ in
         guard let g = n.geometry else { return }
-        let m = SCNMaterial()
-        m.lightingModel = .constant
-        m.shaderModifiers = [.fragment: """
+        g.materials = g.materials.map { source in
+        let m = maskMaterial(source)
+        var modifiers=m.shaderModifiers ?? [:]
+        modifiers[.fragment] = """
           float distanceFromEye = max(0.0, -_surface.position.z);
-          _output.color = float4(distanceFromEye <= \(near) ? float3(1.0, 0.0, 0.0)
-            : distanceFromEye >= \(far) ? float3(0.0, 0.0, 1.0) : float3(0.0, 1.0, 0.0), 1.0);
-          """]
-        g.materials = [m]
+          _output.color.rgb = distanceFromEye <= \(near) ? float3(1.0, 0.0, 0.0)
+            : distanceFromEye >= \(far) ? float3(0.0, 0.0, 1.0) : float3(0.0, 1.0, 0.0);
+          """
+        m.shaderModifiers=modifiers
+        return m
+        }
       }
       let mask = try pixels(
         renderer.snapshot(
           atTime: 0, with: CGSize(width: 320, height: 320 / max(0.5, aspect)),
           antialiasingMode: .none))
-      guard mask.strideCount({ r, g, b in r > 180 && g < 40 && b < 40 }) > 40,
-        mask.strideCount({ r, g, b in g > 180 && r < 40 && b < 40 }) > 40,
-        mask.strideCount({ r, g, b in b > 180 && r < 40 && g < 40 }) > 40
-      else { throw error("Foreground, middle, and far geometry must be visible in both eyes") }
+      let nearPixels = mask.strideCount({ r, g, b in r > 180 && g < 40 && b < 40 })
+      let middlePixels = mask.strideCount({ r, g, b in g > 180 && r < 40 && b < 40 })
+      let farPixels = mask.strideCount({ r, g, b in b > 180 && r < 40 && g < 40 })
+      guard nearPixels > 40, middlePixels > 40, farPixels > 40
+      else { throw error("Foreground, middle, and far geometry must be visible in both eyes (\(nearPixels)/\(middlePixels)/\(farPixels) pixels; cuts \(near)/\(far))") }
     }
+  }
+  private static func maskMaterial(_ source: SCNMaterial) -> SCNMaterial {
+    let m = source.copy() as! SCNMaterial
+    m.lightingModel = .constant
+    m.transparency = source.transparency
+    m.transparencyMode = source.transparencyMode
+    m.transparent.contents = source.transparent.contents
+    m.isDoubleSided = source.isDoubleSided
+    m.cullMode = source.cullMode
+    m.readsFromDepthBuffer = source.readsFromDepthBuffer
+    m.writesToDepthBuffer = source.writesToDepthBuffer
+    return m
   }
   static func isFocus(_ node: SCNNode, _ targets: [SCNNode]) -> Bool {
     var cursor: SCNNode? = node
@@ -113,7 +153,7 @@ import UIKit
   #if DEBUG
   /// Negative controls for the actual GPU passes, run only by explicit scene review.
   static func verifyRejections() throws {
-    for mode in ["occluded", "tiny", "flat"] {
+    for mode in ["occluded", "tiny", "flat", "transparent", "cutout"] {
       let root = SCNNode()
       var focus: [SCNNode] = []
       if mode == "flat" {
@@ -124,7 +164,7 @@ import UIKit
       } else {
         let target = SCNNode(geometry: SCNSphere(radius: mode == "tiny" ? 0.005 : 0.7))
         target.position = SCNVector3(0, 1.6, -5); root.addChildNode(target); focus = [target]
-        for (x, z): (Float, Float) in [(-2, -2), (2, -8)] {
+        for (x, z): (Float, Float) in [(-0.9, -2), (2, -8)] {
           let node = SCNNode(geometry: SCNSphere(radius: 0.4))
           node.position = SCNVector3(x, 1.6, z); root.addChildNode(node)
         }
@@ -132,12 +172,30 @@ import UIKit
           let wall = SCNNode(geometry: SCNBox(width: 3, height: 3, length: 0.2, chamferRadius: 0))
           wall.position = SCNVector3(0, 1.6, -3); root.addChildNode(wall)
         }
+        if mode == "transparent" || mode == "cutout" {
+          let pane=SCNNode(geometry:SCNPlane(width:3,height:3))
+          let source=SCNMaterial();source.isDoubleSided=true
+          if mode == "transparent" { source.transparency=0 }
+          else {
+            let texture=UIGraphicsImageRenderer(size:CGSize(width:32,height:32)).image { context in
+              UIColor.white.setFill();context.fill(CGRect(x:0,y:0,width:32,height:32))
+              context.cgContext.clear(CGRect(x:4,y:4,width:24,height:24))
+            }
+            source.diffuse.contents=texture
+          }
+          pane.geometry?.materials=[source];pane.position=SCNVector3(0,1.6,-3);root.addChildNode(pane)
+        }
+      }
+      if mode == "transparent" || mode == "cutout" {
+        do { try check(root:root,focus:focus,position:SCNVector3(0,1.6,0),ipd:0.064,fov:70,aspect:1) }
+        catch { throw self.error("\(mode) visibility control: " + error.localizedDescription) }
+        continue
       }
       var rejected = false
       do { try check(root: root, focus: focus, position: SCNVector3(0, 1.6, 0), ipd: 0.064, fov: 70, aspect: 1) }
       catch {
-        let expected = mode == "flat" ? "Foreground, middle, and far" : "Task focal point"
-        guard error.localizedDescription.contains(expected) else { throw error }
+        let expected = mode == "flat" ? ["Foreground, middle, and far", "insufficient depth separation", "visible spatial composition"] : ["Task focal point"]
+        guard expected.contains(where: { error.localizedDescription.contains($0) }) else { throw error }
         rejected = true
       }
       guard rejected else { throw error("Native visibility negative control accepted \(mode) geometry") }

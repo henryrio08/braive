@@ -8,6 +8,12 @@ import AVFoundation
   private var introVoice: AVSpeechSynthesisVoice?
   let engine = AVAudioEngine()
   var players: [String: AVAudioPlayer] = [:]
+  private var gains: [String: Float] = [:]
+  private func refreshGains() {
+    let duck = Float(schedule["duck_gain_during_speech"].number ?? 0.25)
+    for (key, player) in players { player.volume = (gains[key] ?? 0) * (narrated ? duck : 1) }
+  }
+  private var pausedPlayers = Set<String>()
   var ready = false
   var receivedAudioSeconds = 0.0
   var lastProgressAt = 0.0
@@ -16,6 +22,11 @@ import AVFoundation
   var onDisconnect: ((String) -> Void)?
   private var stopRecognition: (() -> Void)?
   private var updateRecognitionContext: (([String]) -> Void)?
+  private var discardRecognition: ((Double) -> Void)?
+  private var confirmationID: ObjectIdentifier?
+  private var confirmationFinished: (() -> Void)?
+  private var spokenText = "", confirmationText = ""
+  private var playbackEndedAt = -Double.infinity
   var onStatus: ((String) -> Void)?
   private var tapped = false
   let captureStats = CaptureStats()
@@ -28,6 +39,7 @@ import AVFoundation
   override init() {
     super.init()
     speech.delegate = self
+    promptSpeech.delegate = self
   }
   func start(api: API) async throws {
     stopCapture()
@@ -47,13 +59,17 @@ import AVFoundation
     try input.setVoiceProcessingEnabled(true)
     let format = input.outputFormat(forBus: 0)
     let recognition = LocalSpeech(onText: { [weak self] text, final, id in
-      self?.onText?(text, final, id)
+      guard let self else { return }
+      let playbackActive = self.narrated || self.promptSpeech.isSpeaking || ProcessInfo.processInfo.systemUptime - self.playbackEndedAt < 0.8
+      if playbackActive && [self.spokenText,self.confirmationText].contains(where: { SpokenEcho.matches(text,spoken:$0) }) { return }
+      self.onText?(text, final, id)
     }, onError: { [weak self] reason in
       self?.ready = false
       self?.onDisconnect?(reason)
     }, onActivity: { [weak self] speaking in self?.onActivity?(speaking) })
     stopRecognition = { recognition.stop() }
     updateRecognitionContext = { phrases in Task { await recognition.setCommandPhrases(phrases) } }
+    discardRecognition = { tail in recognition.discardPending(tail: tail) }
     let sink = try await recognition.prepare(inputFormat: format) { [weak self] message in
       self?.onStatus?(message)
     }
@@ -74,14 +90,20 @@ import AVFoundation
     if tapped { engine.inputNode.removeTap(onBus: 0); tapped = false }
     stopRecognition?(); stopRecognition = nil
     updateRecognitionContext = nil
+    discardRecognition = nil
   }
   func setCommandPhrases(_ phrases: [String]) { updateRecognitionContext?(phrases) }
-  func fitIntro(_ text: String) async -> String {
+  func fitIntro(_ text: String) async throws -> String {
     introVoice = SpeechVoice.selected
     let duration = await measure(text, voice: introVoice)
     if duration <= 8 && duration > 0 { return text }
-    let concise = "Practice your opening. To stop at any time, just say STOP!"
-    _ = await measure(concise, voice: introVoice)
+    // Keep this neutral across action and conversation experiences.
+    let concise = "Your practice is ready. To stop at any time, just say STOP!"
+    let fallbackDuration = await measure(concise, voice: introVoice)
+    guard fallbackDuration > 0 && fallbackDuration <= 8 else {
+      throw NSError(domain: "Intro", code: 1, userInfo: [NSLocalizedDescriptionKey:
+        "The selected voice cannot fit the introduction into eight seconds. Choose another voice and retry."])
+    }
     return concise
   }
   private func measure(_ text: String, voice: AVSpeechSynthesisVoice?) async -> Double {
@@ -95,7 +117,8 @@ import AVFoundation
     speech.stopSpeaking(at: .immediate)
     finished = completion
     narrated = true
-    for p in players.values { p.volume *= 0.25 }
+    spokenText = text
+    refreshGains()
     let u = SpeechVoice.utterance(text, voice: intro ? introVoice : SpeechVoice.selected)
     utteranceID = ObjectIdentifier(u)
     speech.speak(u)
@@ -105,15 +128,23 @@ import AVFoundation
   ) {
     let id = ObjectIdentifier(utterance)
     Task { @MainActor [weak self] in
+      if let self, self.confirmationID == id {
+        self.confirmationID = nil
+        self.playbackEndedAt = ProcessInfo.processInfo.systemUptime
+        self.discardRecognition?(0.35)
+        let completion = self.confirmationFinished; self.confirmationFinished = nil; completion?()
+        return
+      }
       guard let self, self.utteranceID == id else { return }
       self.speechFinished()
     }
   }
   func speechFinished() {
     narrated = false
+    playbackEndedAt = ProcessInfo.processInfo.systemUptime
     let f = finished
     finished = nil
-    for p in players.values { p.volume = min(0.2, p.volume * 4) }
+    refreshGains()
     f?()
   }
   func interruptSpeech() {
@@ -122,8 +153,12 @@ import AVFoundation
     speech.stopSpeaking(at: .immediate)
     speechFinished()
   }
-  func confirmQuit() {
-    let utterance = SpeechVoice.utterance("Would you like to end this practice? Say yes to finish, or no to continue.")
+  func confirmQuit(completion: @escaping () -> Void) {
+    promptSpeech.stopSpeaking(at: .immediate)
+    discardRecognition?(0)
+    confirmationText = "Practice paused. Would you like to end it?"
+    let utterance = SpeechVoice.utterance(confirmationText)
+    confirmationID = ObjectIdentifier(utterance); confirmationFinished = completion
     promptSpeech.speak(utterance)
   }
   func previewVoice() {
@@ -133,14 +168,18 @@ import AVFoundation
   func stopVoicePreview() { previewSpeech.stopSpeaking(at: .immediate) }
   func pause() {
     speech.pauseSpeaking(at: .immediate)
+    pausedPlayers = Set(players.filter { $0.value.isPlaying }.map(\.key))
     for p in players.values { p.pause() }
   }
   func resume() {
+    confirmationID = nil; confirmationFinished = nil
     promptSpeech.stopSpeaking(at: .immediate)
     speech.continueSpeaking()
-    for p in players.values { p.play() }
+    for key in pausedPlayers { players[key]?.play() }
+    pausedPlayers = []
   }
   func silence() {
+    confirmationID = nil; confirmationFinished = nil
     stopVoicePreview()
     utteranceID = nil
     narrated = false
@@ -149,31 +188,45 @@ import AVFoundation
     finished = nil
     for p in players.values { p.stop() }
     players = [:]
+    gains = [:]
+    pausedPlayers = []
   }
-  func play(_ name: String, loop: Bool = true, gain: Float = 0.14) {
+  func play(_ name: String, loop: Bool = true, gain: Float = 0.14, key: String? = nil, offset: Double = 0) {
     guard let url = Bundle.main.url(forResource: name, withExtension: "wav"),
       let p = try? AVAudioPlayer(contentsOf: url)
     else { return }
     p.numberOfLoops = loop ? -1 : 0
     p.volume = gain
+    if offset > 0, p.duration > 0 {
+      if !loop && offset >= p.duration { return }
+      p.currentTime = loop ? offset.truncatingRemainder(dividingBy:p.duration) : offset
+    }
     p.play()
-    players[name] = p
+    players[key ?? name]?.stop()
+    players[key ?? name] = p
+    gains[key ?? name] = gain
+    refreshGains()
   }
   func lobby() {
     silence()
     play("forest")
     play("piano", gain: 0.12)
   }
-  func apply(_ plan: JSON) {
+  func apply(_ plan: JSON, active: Double = 0) {
     for p in players.values { p.stop() }
     players = [:]
+    gains = [:]
     activeLayers = []
     schedule = plan
-    cueAssets = Dictionary(
-      uniqueKeysWithValues: plan["layers"].list.map { ($0["id"].text, $0["asset_id"].text) })
-    update(active: 0)
+    cueAssets = [:]
+    // Defensive even for old saved output: never trap on duplicate IDs.
+    for layer in plan["layers"].list {
+      guard cueAssets[layer["id"].text] == nil else { continue }
+      cueAssets[layer["id"].text] = layer["asset_id"].text
+    }
+    update(active: active)
   }
-  func cue(_ id: String) { if let asset = cueAssets[id] { play(asset, loop: false) } }
+  func cue(_ id: String) { if let asset = cueAssets[id] { play(asset, loop: false, key: "cue:" + id) } }
   func update(active: Double) {
     for l in schedule["layers"].list {
       let id = l["id"].text
@@ -182,11 +235,12 @@ import AVFoundation
       let end = l["end_active_second"].number ?? .infinity
       guard active >= start else { continue }
       if active >= end {
-        players[asset]?.stop()
+        players.removeValue(forKey: "layer:" + id)?.stop()
+        gains.removeValue(forKey: "layer:" + id)
         continue
       }
       if activeLayers.insert(id).inserted {
-        play(asset, loop: l["loop"].bool ?? true, gain: Float(l["gain"].value) * 0.3)
+        play(asset, loop: l["loop"].bool ?? true, gain: Float(l["gain"].value) * 0.3, key: "layer:" + id, offset: max(0, active - start))
       }
       var gain = l["gain"].value
       for ramp in l["ramps"].list.sorted(by: {
@@ -197,10 +251,9 @@ import AVFoundation
         let blend = min(1, (active - at) / max(0.01, ramp["fade_seconds"].value))
         gain += (ramp["gain"].value - gain) * blend
       }
-      players[asset]?.volume =
-        Float(gain) * 0.3
-        * (narrated ? Float(schedule["duck_gain_during_speech"].number ?? 0.25) : 1)
+      gains["layer:" + id] = Float(gain) * 0.3
     }
+    refreshGains()
   }
 }
 
