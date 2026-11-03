@@ -9,6 +9,7 @@ export let reservedCostUSD=0;
 export const usageLog:Array<{model:string,input_tokens:number,output_tokens:number,estimated_cost_usd:number}>=[];
 export const provenance = new Map<string, string[]>();
 export async function model(schema: string, input: unknown, instructions: string, signal: AbortSignal, wonder = false): Promise<any> {
+ signal.throwIfAborted();
  if(process.env.BRAIVE_ALLOW_META !== 'true') throw new AppError('PROVIDER_UNAVAILABLE','Meta spending is disabled. Henry must explicitly approve live use before setting BRAIVE_ALLOW_META=true.',[],503);
  if(!activeBudget()) throw new AppError('PROVIDER_UNAVAILABLE','A persistent cumulative test approval is required for billable requests.',[],503);
  if(!process.env.MODEL_API_KEY) throw new AppError('PROVIDER_UNAVAILABLE','Add MODEL_API_KEY to backend/.env and restart.',[],503);

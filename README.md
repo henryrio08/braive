@@ -104,6 +104,8 @@ Dialogue routing identifiers come from the validated request. The model supplies
 
 Reflection saves preserve words spoken in the same turn as the trailing SAVE REFLECTION command. Empty reflections prompt for content; SKIP moves on without writing a reflection file.
 
+Post-session data is saved locally as it arrives: completion/early ending, each accepted rating, reflection reference and feedback. The spreadsheet is updated by session ID, even when optional steps are declined. Unclear ratings wait for correction; SKIP stays null while zero remains a real score. Feedback advances automatically after narration; CONTINUE can move on sooner. Server provenance is optional background metadata and cannot delay saving. A local write failure offers RETRY for the same save, never a new scene. Chained repeats carry only authorized older history plus the just-completed run, with proposed adaptation changes passed onward and explained before preparation. See [post-session audit](docs/post-session-audit.md).
+
 Run the deterministic voice checks without a microphone or paid calls:
 
 ```sh

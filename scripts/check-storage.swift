@@ -41,6 +41,19 @@ import Foundation
     interrupted["outcome"] = JSON("completed")
     try recovered.save(interrupted)
     guard SessionStore(root:dir).recoverable == nil else { fatalError("Completed runs must not offer practice recovery") }
+    let fixed = Date(timeIntervalSince1970: 1793635200)
+    let topic = String(repeating: "A",count:40) + "/unsafe"
+    let first = try store.reflection("Exact first words.",topic:topic,date:fixed)
+    let second = try store.reflection("Exact second words.",topic:topic,date:fixed)
+    guard first["display_title"].text.hasSuffix(String(topic.prefix(30))),
+      first["relative_file_path"].text != second["relative_file_path"].text,
+      !first["relative_file_path"].text.contains(":"),
+      try String(contentsOf:dir.appendingPathComponent(second["relative_file_path"].text),encoding:.utf8) == "Exact second words."
+    else { fatalError("Reflection title, collision or content failure") }
+    var pending = row; pending["session_id"] = JSON(UUID().uuidString); pending["outcome"] = JSON("interrupted")
+    try recovered.save(pending)
+    guard !recovered.relevant("Public speaking").contains(where: { $0["session_id"].text == pending["session_id"].text })
+    else { fatalError("Unfinished practice leaked into relevant completed history") }
     print(
       "Storage checks passed: idempotent save, CSV escaping, reflection file, durable recovery, null versus zero ratings."
     )

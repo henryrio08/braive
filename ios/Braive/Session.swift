@@ -94,8 +94,17 @@ import SwiftUI
   }
   var feedbackTask: Task<Void, Never>?
   var feedbackNonce = UUID()
+  var pendingPostSave: (() -> Void)?
   func cancelFeedback() { feedbackTask?.cancel(); feedbackTask = nil; feedbackNonce = UUID() }
-  let world = World(), audio = Audio(), store = SessionStore()
+  let world = World(), audio = Audio()
+  let store: SessionStore = {
+    #if DEBUG
+    if ProcessInfo.processInfo.arguments.contains("--post-session-audit") {
+      return SessionStore(root: FileManager.default.temporaryDirectory.appendingPathComponent("PostSessionAudit-" + UUID().uuidString))
+    }
+    #endif
+    return SessionStore()
+  }()
   var api: API { API(base: server.trimmingCharacters(in: .whitespacesAndNewlines), token: token) }
   var plan = JSON(), scene = JSON(), audioPlan = JSON(), record = JSON(), reflection = JSON()
   var observations: [Any] = []
@@ -246,6 +255,9 @@ import SwiftUI
       try? HeadsetHUD.renderReview(copies, to: store.root.appendingPathComponent("HUDReview"))
     }
     #endif
+    #if DEBUG
+    if ProcessInfo.processInfo.arguments.contains("--post-session-audit") { runPostSessionAudit() }
+    #endif
   }
   func preview() {
     phase = .lobby
@@ -391,7 +403,7 @@ import SwiftUI
       if let answer = stopConfirmation.answer(text,at:ProcessInfo.processInfo.systemUptime) { confirmStop(end:answer == .end) }
       return
     }
-    guard pauses.isEmpty, !loading else { return }
+    guard pauses.isEmpty, !loading, !adapting else { return }
     let yes = VoiceAnswer.binary(text) == true
     let no = VoiceAnswer.binary(text) == false
     if phase == .planning {
@@ -452,13 +464,11 @@ import SwiftUI
       }
     case .active: perform(text)
     case .selfReport:
-      record["reported_difficulty"] = rating(text)
-      observe("self_report", "user_report", text)
-      go(.readiness, "How ready do you feel now, from zero to ten? You can skip.")
+      guard acceptRating(text, key: "reported_difficulty") else { return }
+      persistPostSession { [weak self] in self?.go(.readiness, "How ready do you feel now, from zero to ten? You can skip.") }
     case .readiness:
-      record["reported_readiness"] = rating(text)
-      observe("self_report", "user_report", text)
-      go(.reflectionPrompt, "Would you like to save a spoken reflection?")
+      guard acceptRating(text, key: "reported_readiness") else { return }
+      persistPostSession { [weak self] in self?.go(.reflectionPrompt, "Would you like to save a spoken reflection?") }
     case .reflectionPrompt:
       if yes {
         reflectionDraft = SpokenReflection()
@@ -477,8 +487,11 @@ import SwiftUI
           record["reflection"] = reflection
           record["reflection_id"] = reflection["id"]
           record["reflection_file"] = reflection["relative_file_path"]
-          go(.feedbackPrompt, "Would you like to hear feedback on your experience?")
-        } catch { fail(error) }
+          persistPostSession { [weak self] in self?.go(.feedbackPrompt, "Would you like to hear feedback on your experience?") }
+        } catch {
+          message = "Your reflection couldn’t be saved. Say SAVE REFLECTION to try again, or SKIP."
+          audio.say(message)
+        }
       case .empty:
         message = "Share a reflection first, then say save reflection. Or say skip to leave it."
         audio.say(message)
@@ -499,6 +512,10 @@ import SwiftUI
         go(.lobby, "When you’re ready to start, say START!")
       }
     case .error:
+      if let retry = pendingPostSave {
+        if VoiceAnswer.normalized(text) == "retry" { persistPostSession(after: retry) }
+        return
+      }
       if text.lowercased().contains("retry") {
         generate()
       } else if text.lowercased().contains("revise") {
@@ -553,18 +570,33 @@ import SwiftUI
       }
     }
   }
-  func rating(_ text: String) -> JSON {
-    if text.lowercased().contains("skip") { return JSON() }
-    let names = [
-      "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
-    ]
-    for w in text.lowercased().split(whereSeparator: { !$0.isLetter && !$0.isNumber }) {
-      if let n = Int(w), (0...10).contains(n) { return JSON(n) }
-      if let n = names.firstIndex(of: String(w)) { return JSON(n) }
+  func acceptRating(_ text: String, key: String) -> Bool {
+    switch RatingAnswer.parse(text) {
+    case .value(let value): record[key] = JSON(value)
+    case .skip: record[key] = JSON()
+    case .invalid:
+      message = "Say one number from zero to ten, or SKIP."
+      audio.say(message); return false
     }
-    return JSON()
+    observe("self_report", "user_report", text)
+    return true
+  }
+  func persistPostSession(after action: @escaping () -> Void) {
+    guard !plan["session_id"].text.isEmpty else { pendingPostSave = nil; action(); return }
+    record["ended_at"] = record["ended_at"].string == nil ? JSON(ISO8601DateFormatter().string(from: Date())) : record["ended_at"]
+    record["active_seconds"] = JSON(active); record["stop_count"] = JSON(stopCount)
+    record["early_end"] = JSON(outcome == "user_ended" && active < plan["duration_sec"].value)
+    record["outcome"] = JSON(outcome); record["observations"] = JSON(observations)
+    do { try store.save(record); pendingPostSave = nil; action() }
+    catch {
+      pendingPostSave = action
+      audio.silence(); loading = false; pendingPhase = nil; phase = .error
+      message = "Your session couldn’t be saved. Say RETRY to save it again."
+      setupNotice = error.localizedDescription; audio.say(message)
+    }
   }
   func newSession() {
+    pendingPostSave = nil
     cancelFeedback()
     sessionID = UUID().uuidString
     revision = 0
@@ -941,11 +973,9 @@ import SwiftUI
     outcome = early ? "user_ended" : "completed"
     record["checkpoint"]=JSON()
     record["outcome"]=JSON(outcome);record["active_seconds"]=JSON(active)
-    record["early_end"]=JSON(early);record["observations"]=JSON(observations)
-    if !plan["session_id"].text.isEmpty { do { try store.save(record) } catch { setupNotice=error.localizedDescription } }
     observe("active_duration", "app_event", active)
     observe("stop_count", "app_event", stopCount)
-    go(.selfReport, "How difficult did that feel, from zero to ten? You can skip.")
+    persistPostSession { [weak self] in self?.go(.selfReport, "How difficult did that feel, from zero to ten? You can skip.") }
   }
   func feedback() {
     beginTips(for: .feedback)
@@ -966,18 +996,33 @@ import SwiftUI
           "/v1/feedback", JSON(["plan": plan.raw, "observations": observations]))
         guard !Task.isCancelled, nonce == feedbackNonce, owner == sessionID,
           rev == revision, phase == .feedback else { return }
-        record["feedback"] = f
-        message =
-          "Here’s what you did well. "
-          + f["did_well"].list.map { $0["text"].text }.joined(separator: " ") + " I also noticed. "
-          + f["noticed"].list.map { $0["text"].text }.joined(separator: " ") + " "
-          + f["one_quick_fix"].text + " Say continue to save."
-        audio.say(message)
+        deliverFeedback(f, nonce: nonce)
       } catch {
         guard !Task.isCancelled, nonce == feedbackNonce, owner == sessionID,
           rev == revision, phase == .feedback else { return }
-        message = "Feedback unavailable. Say continue to save your session."
-        audio.say(message)
+        message = "Feedback is unavailable. Your practice will still be saved."
+        audio.say(message) { [weak self] in
+          guard let self, self.feedbackNonce == nonce, self.phase == .feedback else { return }
+          self.save()
+        }
+      }
+    }
+  }
+  func deliverFeedback(_ f: JSON, nonce: UUID) {
+    guard feedbackNonce == nonce, phase == .feedback else { return }
+    record["feedback"] = f
+    var parts: [String] = []
+    if !f["did_well"].list.isEmpty { parts.append("Here’s what you did well. " + f["did_well"].list.map { $0["text"].text }.joined(separator: " ")) }
+    if !f["noticed"].list.isEmpty { parts.append("I also noticed. " + f["noticed"].list.map { $0["text"].text }.joined(separator: " ")) }
+    if !f["one_quick_fix"].text.isEmpty { parts.append(f["one_quick_fix"].text) }
+    let spoken = parts.isEmpty ? "There isn’t enough recorded detail for specific feedback this time." : parts.joined(separator: " ")
+    persistPostSession { [weak self] in
+      guard let self else { return }
+      self.phase = .feedback
+      self.message = spoken
+      self.audio.say(spoken) { [weak self] in
+        guard let self, self.feedbackNonce == nonce, self.phase == .feedback else { return }
+        self.save()
       }
     }
   }
@@ -994,24 +1039,25 @@ import SwiftUI
     }
     phase = .saving
     record["render_metrics"] = world.metrics.report
-    record["ended_at"] = JSON(ISO8601DateFormatter().string(from: Date()))
     record["active_seconds"] = JSON(active)
     record["stop_count"] = JSON(stopCount)
     record["early_end"] = JSON(outcome == "user_ended" && active < plan["duration_sec"].value)
     record["outcome"] = JSON(outcome)
     record["observations"] = JSON(observations)
-    Task {
-      do {
-        record["generation_provenance"] = try await api.call("/v1/provenance/" + sessionID)
-        try store.save(record)
-        go(.repeatPrompt, "Based on your last performance, would you like to go again?")
-      } catch {
+    let owner = sessionID, endpoint = api
+    persistPostSession { [weak self] in
+      guard let self else { return }
+      self.go(.repeatPrompt, "Based on your last performance, would you like to go again?")
+      // Metadata is optional. Local records and the spreadsheet are already durable.
+      guard self.remoteConsent, self.liveEnabled else { return }
+      Task { [weak self] in
+        guard let provenance = try? await endpoint.call("/v1/provenance/" + owner, timeout: 3),
+          let self, var latest = self.store.records.first(where: { $0["session_id"].text == owner }) else { return }
+        latest["generation_provenance"] = provenance
         do {
-          try store.save(record)
-          go(
-            .repeatPrompt,
-            "Session saved locally. Based on your last performance, would you like to go again?")
-        } catch { fail(error) }
+          try self.store.save(latest)
+          if self.sessionID == owner { self.record["generation_provenance"] = provenance }
+        } catch { self.setupNotice = "Session saved; metadata update unavailable." }
       }
     }
   }
@@ -1019,6 +1065,7 @@ import SwiftUI
     guard !adapting else { return }
     beginTips(for: .repeatPrompt)
     adapting = true
+    let owner = sessionID, rev = revision
     message = "Getting your next practice ready…"
     Task {
       defer { adapting = false }
@@ -1029,6 +1076,7 @@ import SwiftUI
             "previous_plan": plan.raw, "observations": observations,
             "relevant_history": store.history(useHistory ? history : []), "user_preferences": [],
           ]))
+        guard owner == sessionID, rev == revision, repeatAfterHeadset, phase == .headset else { return }
         let previous = record
         let summary = result["spoken_summary"].text
         let f = fear
@@ -1039,13 +1087,21 @@ import SwiftUI
         fear = f
         ability = a
         intakeApproved = true // The explicit repeat-session answer authorizes the adapted rerun.
-        history = oldHistory + [previous]
+        history = PracticeHistory.chain(oldHistory, completed: previous)
         useHistory = true
-        additions = [summary]
+        additions = [summary] + result["changes"].list.map { change in
+          "Adapt \(change["dimension"].text) from \(change["before"].text) to \(change["after"].text). Reason: \(change["reason"].text)"
+        }
         adaptation = result
         audio.say(summary)
+        let child = sessionID
+        while audio.narrated {
+          try await Task.sleep(for: .milliseconds(100))
+          guard sessionID == child else { return }
+        }
         generate()
       } catch {
+        guard owner == sessionID, rev == revision else { return }
         phase = .repeatPrompt
         message = "Adaptation unavailable. Say yes to retry, or no to return."
         audio.say(message)
