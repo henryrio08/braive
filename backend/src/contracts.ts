@@ -93,6 +93,7 @@ export function sceneIssues(plan: SessionPlan, scene: SceneSpec, audio: AudioPla
    if(!step.terminal&&!transitions.includes(next!))fail(`/scenario/steps/${i}`,'progress','Every nonterminal stage must offer a way forward');
    if(planned && JSON.stringify([...step.actions.map(a=>a.id)].sort())!==JSON.stringify([...planned[i]?.action_ids??[]].sort()))fail(`/scenario/steps/${i}/actions`,'plan_match','Action IDs must match the approved stage');
    for(const action of step.actions){
+    if(scenario.dialogue_policy==='on_request'&&action.phrases.some(p=>/^(ask\s|talk\s+to\s)/i.test(p.trim())))fail(`/scenario/steps/${i}/actions`,'reserved_command','ASK name and TALK TO name are reserved for live character conversation; use another phrase for local stage actions');
     if(actionIDs.has(action.id))fail('/scenario','unique','Action IDs must be unique within their stage');actionIDs.add(action.id);
     const effects=[...action.operations,...(steps.get(action.next_step_id??'')?.start_operations??[])];
     if(plan.experience?.kind==='action' && !effects.some(o=>!['narrate','play_sound','character_action'].includes(o.type)))fail(`/scenario/steps/${i}/actions`,'task_action','Action practice must change the world or move the viewer, not just trigger speech');

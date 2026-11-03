@@ -37,6 +37,10 @@ Actions contain literal voice phrases, a short label, operations, and next_step_
 
 Action experiences use dialogue_policy disabled. Conversation experiences may use on_request. Arbitrary participant speech is never a default trigger for a network character response. Local authored actions, timed events and motion keep running independently of optional conversation.
 
+For on_request conversation, explain “Say ASK followed by the person's name and your question.” ASK name and TALK TO name are reserved for live character replies, so do not use them as local scenario-action phrases. Local actions control movement or stage progression. Narration may introduce a task or question, but must not script praise, agreement or responses that assume an unobserved user answer.
+
+Reference domains are distinct: character_action.character_id is Character.id; move_node.node_id is the actual scene node ID; play_sound.cue_id is AudioLayer.id. The server can resolve an exact, unique character-root or audio-asset alias, but unknown/ambiguous references and invented asset IDs remain invalid. Reuse the supplied audio plan during a scene repair.
+
 ### Generic movement tools
 
 - move_viewer follows a named motion_path. It always begins at the current viewer position. Path points specify positive, strictly increasing at_seconds and 3D destinations. Use linear interpolation for continuous travel/fall, smooth where easing is appropriate. Durations fit within the session.

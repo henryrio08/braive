@@ -1,5 +1,6 @@
 import {activeBudget} from './budget.js';
 import {PhoneTestWindow} from './phone-test-window.js';
+import {canonicalSceneReferences} from './scene-references.js';
 import {assertCurrentDialogue,dialogueContext} from './dialogue.js';
 import {meshCatalog,assetManifest,characterIDs} from './assets.js';
 import express from 'express';
@@ -58,8 +59,9 @@ async function generate(request:PlanRequest, job:Job, signal:AbortSignal) {
    if(plan!.characters.some(c=>!c.asset_id))throw new AppError('INVALID_MODEL_OUTPUT','Coordinator must choose the registered asset_id for every character');
    job.stage=attempt?'Repairing scene validation issues':'Authoring spatial scene and sound';
    // Audio first supplies a stable cue manifest to scene authoring.
-   audio=await model('AudioPlan',{plan,available_assets:assets},'Select only supplied audio assets. Required whoosh. Keep narrative speech audible. Match plan revision.',signal);
+   audio??=await model('AudioPlan',{plan,available_assets:assets},'Select only supplied audio assets. Required whoosh. Keep narrative speech audible. Match plan revision.',signal);
    scene=await model('SceneSpec',{plan,capabilities,audio,previous_scene:scene??previous?.scene,issues},authoring+" Use registered GLBs for characters and props; primitives for environment/task geometry. Preserve each Character.asset_id exactly and copy Character.color_hex to Material.color. Use node animation sit for seated casual_adult_02 characters; place their feet on the floor and match chair positions to their seated pose. Place normalized asset bases at floor height. No unregistered IDs. Neutral behavior uses app-owned joint motions, not invented GLB animation clips. Return compact JSON with concise descriptions. Prefer 30-60 scene nodes when sufficient for all approved participants, setting, depth and interactions; never remove task semantics to meet that guideline.",signal,true);
+   scene=canonicalSceneReferences(plan!,scene!,audio!);
    const errors=sceneIssues(plan!,scene!,audio!);
    for(const l of audio!.layers) if(!capabilities.audio_assets.includes(l.asset_id)) errors.push({path:'/layers',rule:'asset',message:'Unknown audio asset'});
    if(errors.length) throw new AppError('INVALID_MODEL_OUTPUT','Scene requires repair',errors);
@@ -68,9 +70,9 @@ async function generate(request:PlanRequest, job:Job, signal:AbortSignal) {
    job.result={plan:plan!,scene:scene!,audio:audio!};approved.set(request.session_id,job.result); job.status='succeeded'; job.stage='Ready for device validation'; return;
   } catch(e) {
    if(process.env.BRAIVE_TEST_MODE==='true' && plan && scene && audio){
-    try{writeFileSync(new URL('../data/last-rejected-scene.json',import.meta.url),JSON.stringify({plan,scene,audio,issues:e instanceof AppError?e.issues:[]},null,2),{mode:0o600});}catch{}
+    try{writeFileSync(new URL('../data/last-rejected-scene.json',import.meta.url),JSON.stringify({plan,scene,audio,issues:e instanceof AppError?e.issues:issues??[]},null,2),{mode:0o600});}catch{}
    }
-   if(e instanceof AppError && e.code==='INVALID_MODEL_OUTPUT' && attempt===0) { attempts.get(job.job_id)!.repairs++;issues=e.issues.length?e.issues:[{message:e.message}]; if(plan && planIssues(plan).length) plan=undefined; continue; } throw e;
+   if(e instanceof AppError && e.code==='INVALID_MODEL_OUTPUT' && attempt===0) { attempts.get(job.job_id)!.repairs++;issues=e.issues.length?e.issues:[{message:e.message}]; if(plan && planIssues(plan).length) {plan=undefined;audio=undefined;scene=undefined;} continue; } throw e;
   }
  }
 }
@@ -107,7 +109,7 @@ app.post('/v1/jobs/:id/validation',async(req,res,next)=>{
   res.status(202).json(job);
   try {
    const {plan,audio,scene}=job.result;
-   const repaired:SceneSpec=await model('SceneSpec',{plan,audio,previous_scene:scene,capabilities,issues:[{path:'/nodes',rule:'native_preflight',message:req.body.message}]},authoring,controller.signal,true);
+   const repaired=canonicalSceneReferences(plan,await model('SceneSpec',{plan,audio,previous_scene:scene,capabilities,issues:[{path:'/nodes',rule:'native_preflight',message:req.body.message}]},authoring,controller.signal,true),audio);
    const errors=sceneIssues(plan,repaired,audio);if(errors.length) throw new AppError('INVALID_MODEL_OUTPUT','Native repair invalid',errors);
    controller.signal.throwIfAborted();if(revisions.get(job.session_id)!==job.revision)return;
    job.result={plan,audio,scene:repaired};approved.set(job.session_id,job.result);job.status='succeeded';job.stage='Ready for device validation';

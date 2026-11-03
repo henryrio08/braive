@@ -75,3 +75,8 @@ test('commands may recur across stages while duplicate IDs within a stage are re
  plan.experience!.stages[1].action_ids.push('continue');
  assert.ok(sceneIssues(plan,scene,audio).some(i=>i.rule==='unique'));
 });
+test('live character conversation commands cannot be shadowed by local scripted actions',()=>{
+ const {plan,scene,audio}=setup();plan.experience!.kind='conversation';scene.scenario!.dialogue_policy='on_request';
+ scene.scenario!.steps[0].actions[0].phrases=['ask Maya'];
+ assert.ok(sceneIssues(plan,scene,audio).some(i=>i.rule==='reserved_command'));
+});
