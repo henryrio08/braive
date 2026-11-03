@@ -192,7 +192,7 @@ struct ContentView: View {
             Button("No") { panel = nil; send("no") }
           }
           if s.phase == .error {
-            ForEach(["Retry", "Revise", "Cancel"], id: \.self) { value in
+            ForEach(s.pendingPostSave == nil ? ["Retry", "Revise", "Cancel"] : ["Retry"], id: \.self) { value in
               Button(value) { panel = nil; send(value) }
             }
           }
