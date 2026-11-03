@@ -1,6 +1,6 @@
 # Bundled CC0 low-poly library
 
-The shared allowlist contains **351 GLBs**: all 349 originals from the supplied pack plus two clothed, rigged Quaternius adults. Their author model pages identify them as [Public Domain/CC0](https://poly.pizza/m/kZ3DmIoGip) and [CC0](https://poly.pizza/m/jpKRgGDxhk). `assets/lowpoly_cc0/LICENSE_INDEX.csv` is the license authority. The importer rejects missing/duplicate rows, non-`CC0-1.0` licenses, unsafe paths, mismatched filename IDs, nonpositive scales, malformed/truncated GLBs, and external dependencies. It never downloads, regenerates, converts, remeshes, or substitutes models. Source and runtime GLBs have identical SHA-256 hashes.
+The shared allowlist contains **355 GLBs**: all 349 supplied originals, two retained Quaternius adults, and four [Kenney Mini Characters](https://kenney.nl/assets/mini-characters) approved for new scenes. All are CC0. `assets/lowpoly_cc0/LICENSE_INDEX.csv` is the license authority; provenance records source URLs and generation eligibility. The importer rejects missing/duplicate rows, non-CC0 licenses, unsafe paths, malformed GLBs and unapproved dependencies. Source/runtime GLBs are byte-identical. The Kenney palette is a validated, hash-recorded local PNG dependency; remote, traversal and missing dependencies are rejected. No meshes, weights or skeletons are regenerated.
 
 ## Rebuild and check
 
@@ -35,13 +35,13 @@ Assets are cached as normalized templates. Instances share immutable vertex data
 
 ## Characters and color
 
-The original `character.base.neutral_humanoid_01` remains available for existing scenes and solid-color mannequin use. New plans prefer `character.base.casual_adult_01` and `character.base.casual_adult_02` for everyday people, preserving their source skin, hair, facial and wardrobe details. `Character.asset_id` is optional for stored records and preserved exactly when supplied by the coordinator. Other crowd-proxy meshes remain excluded as characters.
+New generation selects `character.base.soft_adult_01` through `soft_adult_04`: deliberately soft, stylized Kenney people with unchanged source skin, hair and wardrobe palettes. Henry approved actual native-renderer previews. They normalize to approximately 1.65m standing height. `generation_enabled` excludes the original mannequin and the rejected casual adults from new coordinator output; those files remain available for historical records. Crowd proxies are not characters.
 
-The coordinator color tints only the registered clothing material (`LightBrown` on adult 01, `Shirt` on adult 02); it does not recolor skin, eyes or hair. Supplemental material bindings and direct download URLs/hashes are recorded in `character-provenance.json`, while the CSV remains the license authority. The importer validates that each clothing material exists and excludes skin/hair/eye bindings. Every source/runtime GLB remains byte-identical; no mesh, weights or skeleton is remeshed.
+The source palette PNG is bundled beside the GLBs. The app preserves textured materials instead of replacing the complete character with a solid color. Older clothing-tint bindings remain narrow and never affect skin/hair/eyes. The importer copies all bundled author license notices and records dependency hashes. The original models and archive licensing are preserved.
 
-The clothed models register only authored idle, walk, run and appropriate gesture/sit clips. Source files contain other clips, which the app never registers or exposes as scenario tools. Animation players are copied per instance. Sitting persists through listen/speak, and movement releases that posture. Both stereo renderers use the same pause-aware scene timestamp. The original mannequin retains the app-owned subtle joint motions and gait fallback. None of this supplies lip sync or full-body tracking.
+Only appropriate idle, walk, sprint/run, gesture and sitting clips are registered. Other source clips are retained in the original GLB but never exposed as tools. Players and rigs remain independent. Sitting persists through listening/speaking; movement releases the posture. Furniture must fit the actual supported pose. The original mannequin retains app-owned motions for old records. No lip sync or full-body tracking is supplied.
 
-The source normalization scales target approximately 1.75m for the new standing models. As with the original pack, chairs and actors must be composed around the actual pose. The coordinator receives per-character node costs; the phone enforces 1,000 resolved nodes, 180,000 primitives and 24MB of geometry data. The expanded node allowance accommodates detailed skeletons rather than increasing mesh/geometry limits. An eight-person comparison uses 767 nodes, 43,065 primitives and about 2.64MB of geometry data. Sustained physical-phone performance remains to be measured.
+The phone enforces 1,000 resolved nodes, 180,000 primitives and 24MB of geometry data. Texture, resident-memory and draw-call targets require physical profiling. The native 355-asset audit passes; a passing asset audit does not prove generated scene composition or comfort.
 
 ## Authoring capabilities and gaps
 
