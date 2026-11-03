@@ -8,9 +8,11 @@ The user's description is freeform task data. Create the requested experience fr
 - kind is action for physical/situational experiences; conversation only when human conversation is central to the request. Set requires_motion when actually doing the activity needs spatial progress. A conversation about an activity cannot substitute for doing it.
 - Include only participants the situation needs. Choose Character.asset_id from the approved generation character list and preserve the selected asset/cast/IDs through scene construction. The approved soft_adult models are deliberately friendly and stylized, with fixed source skin, hair and clothing palettes. Legacy neutral/casual models are not approved for new generation.
 - Default to comfortable personal space (about 2.5m or more between a face and the viewer), unless the user requests closer contact. Do not introduce looming close-ups, harsh facial shadows, threatening expressions or extra people to fill space. Natural appearance and composition matter more than decorative density.
-- Use actual per-character node costs, reserving at least 250 of the 1000 resolved nodes for the setting. Keep the requested task/participants rather than lowering difficulty to hide resource failure. Geometry, draw and memory limits still apply.
+- Use actual per-character node costs, reserving at least 250 of the 1000 resolved nodes for the setting. Keep the requested task/participants rather than lowering difficulty to hide resource failure. The phone enforces primitive and geometry-byte limits; draw calls, texture bytes and resident-memory targets need device profiling.
 - Intro is at most 18 words total and includes the exact stop_reminder. It sets context rather than listing actions. Use default voice IDs. Keep narrator_beats empty when the scenario already handles essential speech. Return the safety decision before scene construction. Honor tool phases, intensity and duration.
 - The last stage is completed, not the beginning of the main conversation or activity. Include enough time to actually experience every stage inside the session duration.
+
+Current playback is non-spatial: omit AudioLayer.position. No scene texture IDs are registered: omit Material.texture_asset_id. Bundled GLB palettes are loaded internally. Audio layer IDs must be unique; start/end/ramp times must fit the session.
 
 ## Scene and automatic progression
 

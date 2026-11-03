@@ -31,7 +31,7 @@ struct ContentView: View {
     GeometryReader { geo in
       ZStack {
         StereoWorld(world: s.world).ignoresSafeArea().blur(
-          radius: s.phase == .setup ? 9 : s.phase == .reveal ? max(0, (1 - s.reveal) * 7) : 0)
+          radius: s.phase == .setup ? 9 : s.phase == .reveal ? max(0, (1 - s.revealBlurProgress) * 7) : 0)
         if s.phase == .setup {
           LinearGradient(colors: [ink.opacity(0.98), ink.opacity(0.8), ink.opacity(0.5)],
             startPoint: .leading, endPoint: .trailing).ignoresSafeArea()
@@ -40,7 +40,7 @@ struct ContentView: View {
           if [.intro, .planning, .error].contains(s.phase) || s.loading {
             Color.black.opacity(s.phase == .intro ? 1 : 0.82).ignoresSafeArea()
           }
-          if s.phase == .reveal { Color.black.opacity(max(0, 1 - s.reveal)).ignoresSafeArea() }
+          if s.phase == .reveal { Color.black.opacity(max(0, 1 - s.revealFadeProgress)).ignoresSafeArea() }
           HStack(spacing: 0) {
             eyeHUD.frame(width: geo.size.width / 2)
             eyeHUD.frame(width: geo.size.width / 2)

@@ -19,6 +19,11 @@ enum SpokenEcho {
   }
 }
 
+/// A terminal stage may still be arriving at its destination.
+func scenarioCanFinish(terminalAt: Double?, active: Double, motionPending: Bool) -> Bool {
+  terminalAt.map { active - $0 >= 3 } == true && !motionPending
+}
+
 /// Activity and final transcription both matter: silence alone isn't a completed user turn.
 struct SpeechFloor {
   private var speaking = false

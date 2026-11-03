@@ -50,10 +50,11 @@ import UIKit
       // First pass: a red focus mask against black occluders, with real depth testing.
       root.enumerateChildNodes { n, _ in
         guard let g = n.geometry else { return }
-        let m = SCNMaterial()
-        m.lightingModel = .constant
-        m.diffuse.contents = isFocus(n, focus) ? UIColor.red : UIColor.black
-        g.materials = [m]
+        g.materials = g.materials.map { source in
+          let m = maskMaterial(source)
+          m.diffuse.contents = isFocus(n, focus) ? UIColor.red : UIColor.black
+          return m
+        }
       }
       let focusPixels = try pixels(
         renderer.snapshot(
@@ -68,14 +69,15 @@ import UIKit
       // A large floor/water plane spans several depths even when its origin is far away.
       root.enumerateChildNodes { n, _ in
         guard let g = n.geometry else { return }
-        let m = SCNMaterial()
-        m.lightingModel = .constant
+        g.materials = g.materials.map { source in
+        let m = maskMaterial(source)
         m.shaderModifiers = [.fragment: """
           float distanceFromEye = max(0.0, -_surface.position.z);
           _output.color = float4(distanceFromEye <= \(near) ? float3(1.0, 0.0, 0.0)
             : distanceFromEye >= \(far) ? float3(0.0, 0.0, 1.0) : float3(0.0, 1.0, 0.0), 1.0);
           """]
-        g.materials = [m]
+        return m
+        }
       }
       let mask = try pixels(
         renderer.snapshot(
@@ -86,6 +88,18 @@ import UIKit
         mask.strideCount({ r, g, b in b > 180 && r < 40 && g < 40 }) > 40
       else { throw error("Foreground, middle, and far geometry must be visible in both eyes") }
     }
+  }
+  private static func maskMaterial(_ source: SCNMaterial) -> SCNMaterial {
+    let m = SCNMaterial()
+    m.lightingModel = .constant
+    m.transparency = source.transparency
+    m.transparencyMode = source.transparencyMode
+    m.transparent.contents = source.transparent.contents
+    m.isDoubleSided = source.isDoubleSided
+    m.cullMode = source.cullMode
+    m.readsFromDepthBuffer = source.readsFromDepthBuffer
+    m.writesToDepthBuffer = source.writesToDepthBuffer
+    return m
   }
   static func isFocus(_ node: SCNNode, _ targets: [SCNNode]) -> Bool {
     var cursor: SCNNode? = node

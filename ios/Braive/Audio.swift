@@ -8,6 +8,7 @@ import AVFoundation
   private var introVoice: AVSpeechSynthesisVoice?
   let engine = AVAudioEngine()
   var players: [String: AVAudioPlayer] = [:]
+  private var pausedPlayers = Set<String>()
   var ready = false
   var receivedAudioSeconds = 0.0
   var lastProgressAt = 0.0
@@ -87,12 +88,17 @@ import AVFoundation
     discardRecognition = nil
   }
   func setCommandPhrases(_ phrases: [String]) { updateRecognitionContext?(phrases) }
-  func fitIntro(_ text: String) async -> String {
+  func fitIntro(_ text: String) async throws -> String {
     introVoice = SpeechVoice.selected
     let duration = await measure(text, voice: introVoice)
     if duration <= 8 && duration > 0 { return text }
-    let concise = "Practice your opening. To stop at any time, just say STOP!"
-    _ = await measure(concise, voice: introVoice)
+    // Keep this neutral across action and conversation experiences.
+    let concise = "Your practice is ready. To stop at any time, just say STOP!"
+    let fallbackDuration = await measure(concise, voice: introVoice)
+    guard fallbackDuration > 0 && fallbackDuration <= 8 else {
+      throw NSError(domain: "Intro", code: 1, userInfo: [NSLocalizedDescriptionKey:
+        "The selected voice cannot fit the introduction into eight seconds. Choose another voice and retry."])
+    }
     return concise
   }
   private func measure(_ text: String, voice: AVSpeechSynthesisVoice?) async -> Double {
@@ -157,13 +163,15 @@ import AVFoundation
   func stopVoicePreview() { previewSpeech.stopSpeaking(at: .immediate) }
   func pause() {
     speech.pauseSpeaking(at: .immediate)
+    pausedPlayers = Set(players.filter { $0.value.isPlaying }.map(\.key))
     for p in players.values { p.pause() }
   }
   func resume() {
     confirmationID = nil; confirmationFinished = nil
     promptSpeech.stopSpeaking(at: .immediate)
     speech.continueSpeaking()
-    for p in players.values { p.play() }
+    for key in pausedPlayers { players[key]?.play() }
+    pausedPlayers = []
   }
   func silence() {
     confirmationID = nil; confirmationFinished = nil
@@ -175,15 +183,17 @@ import AVFoundation
     finished = nil
     for p in players.values { p.stop() }
     players = [:]
+    pausedPlayers = []
   }
-  func play(_ name: String, loop: Bool = true, gain: Float = 0.14) {
+  func play(_ name: String, loop: Bool = true, gain: Float = 0.14, key: String? = nil) {
     guard let url = Bundle.main.url(forResource: name, withExtension: "wav"),
       let p = try? AVAudioPlayer(contentsOf: url)
     else { return }
     p.numberOfLoops = loop ? -1 : 0
     p.volume = gain
     p.play()
-    players[name] = p
+    players[key ?? name]?.stop()
+    players[key ?? name] = p
   }
   func lobby() {
     silence()
@@ -195,11 +205,15 @@ import AVFoundation
     players = [:]
     activeLayers = []
     schedule = plan
-    cueAssets = Dictionary(
-      uniqueKeysWithValues: plan["layers"].list.map { ($0["id"].text, $0["asset_id"].text) })
+    cueAssets = [:]
+    // Defensive even for old saved output: never trap on duplicate IDs.
+    for layer in plan["layers"].list {
+      guard cueAssets[layer["id"].text] == nil else { continue }
+      cueAssets[layer["id"].text] = layer["asset_id"].text
+    }
     update(active: 0)
   }
-  func cue(_ id: String) { if let asset = cueAssets[id] { play(asset, loop: false) } }
+  func cue(_ id: String) { if let asset = cueAssets[id] { play(asset, loop: false, key: "cue:" + id) } }
   func update(active: Double) {
     for l in schedule["layers"].list {
       let id = l["id"].text
@@ -208,11 +222,11 @@ import AVFoundation
       let end = l["end_active_second"].number ?? .infinity
       guard active >= start else { continue }
       if active >= end {
-        players[asset]?.stop()
+        players.removeValue(forKey: "layer:" + id)?.stop()
         continue
       }
       if activeLayers.insert(id).inserted {
-        play(asset, loop: l["loop"].bool ?? true, gain: Float(l["gain"].value) * 0.3)
+        play(asset, loop: l["loop"].bool ?? true, gain: Float(l["gain"].value) * 0.3, key: "layer:" + id)
       }
       var gain = l["gain"].value
       for ramp in l["ramps"].list.sorted(by: {
@@ -223,7 +237,7 @@ import AVFoundation
         let blend = min(1, (active - at) / max(0.01, ramp["fade_seconds"].value))
         gain += (ramp["gain"].value - gain) * blend
       }
-      players[asset]?.volume =
+      players["layer:" + id]?.volume =
         Float(gain) * 0.3
         * (narrated ? Float(schedule["duck_gain_during_speech"].number ?? 0.25) : 1)
     }

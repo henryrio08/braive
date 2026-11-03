@@ -56,6 +56,9 @@ import Foundation
     queue.enqueue("Thanks for explaining.", at: 160)
     queue.markSpoken("Thanks for explaining!", at: 160)
     check(queue.take(at: 161) == nil, "A reply and its matching narrate operation speak once")
+    check(!scenarioCanFinish(terminalAt: 0, active: 4, motionPending: true), "Terminal travel cannot be cut off by the three-second grace period")
+    check(!scenarioCanFinish(terminalAt: nil, active: 20, motionPending: false), "An ordinary stage is not completed by quiet alone")
+    check(scenarioCanFinish(terminalAt: 0, active: 10, motionPending: false), "Terminal arrival can finish after movement ends")
     print("Speech coordination checks passed: \(count). No microphone or provider calls.")
   }
 }
