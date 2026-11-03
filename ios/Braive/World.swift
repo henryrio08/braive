@@ -27,6 +27,7 @@ extension UIColor {
     characters: [String: String] = [:]
   var onPortrait: ((Bool) -> Void)?
   private var pose = HeadPose()
+  private var landscapeBasis: LandscapeBasis = .right
   private var motionPaths: [String: ViewerPath] = [:]
   private var viewerMotion: ViewerMotion?
   private var viewpointFade: (destination: SIMD3<Float>, startedAt: Double)?
@@ -83,11 +84,18 @@ extension UIColor {
   }
   func track(_ data: CMDeviceMotion) {
     let q = data.attitude.quaternion
-    // Landscape-right phone basis to camera basis. Optical comfort must be calibrated on device.
+    // Match the actual rendered landscape side. A fixed right-side basis reverses
+    // pitch and yaw when the phone is placed in the viewer the opposite way.
+    if let windowScene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene })
+      .first(where: { $0.activationState == .foregroundActive }) {
+      switch windowScene.interfaceOrientation {
+      case .landscapeLeft: landscapeBasis = .left
+      case .landscapeRight: landscapeBasis = .right
+      default: break
+      }
+    }
     let phone = simd_quatf(ix: Float(q.x), iy: Float(q.y), iz: Float(q.z), r: Float(q.w))
-    let correction = simd_quatf(angle: -.pi / 2, axis: SIMD3<Float>(0, 0, 1))
-    let oriented = phone * correction
-    head.simdOrientation = pose.update(oriented)
+    head.simdOrientation = pose.update(landscapeBasis.cameraOrientation(phone))
     let g = data.gravity
     if abs(g.y) > 0.78 { onPortrait?(true) } else if abs(g.x) > 0.65 { onPortrait?(false) }
   }
