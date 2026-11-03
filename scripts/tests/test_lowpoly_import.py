@@ -1,4 +1,4 @@
-import csv, importlib.util, shutil, tempfile, unittest
+import csv, importlib.util, shutil, tempfile, unittest, json, struct
 from pathlib import Path
 SPEC=importlib.util.spec_from_file_location('lowpoly',Path(__file__).resolve().parents[1]/'import-lowpoly-pack.py')
 module=importlib.util.module_from_spec(SPEC);SPEC.loader.exec_module(module)
@@ -27,4 +27,15 @@ class ImportTests(unittest.TestCase):
  def test_truncated_glb_rejected(self):
   p=self.root/self.row['file_path'];p.write_bytes(p.read_bytes()[:-4])
   with self.assertRaisesRegex(ValueError,'header'):module.inventory(self.root)
+ def test_local_palette_must_exist_and_is_preserved(self):
+  source=module.ROOT/'assets/lowpoly_cc0/character/base';path=self.root/'person.glb';shutil.copyfile(source/'character.base.soft_adult_01.glb',path)
+  with self.assertRaisesRegex(ValueError,'bundled texture'):module.inspect_glb(path)
+  (self.root/'Textures').mkdir();shutil.copyfile(source/'Textures/colormap.png',self.root/'Textures/colormap.png')
+  data,digest=module.inspect_glb(path);self.assertEqual(data['images'][0]['uri'],'Textures/colormap.png')
+ def test_texture_dependencies_cannot_escape_or_load_remote_content(self):
+  source=module.ROOT/'assets/lowpoly_cc0/character/base/character.base.soft_adult_01.glb';data=source.read_bytes();length=struct.unpack_from('<I',data,12)[0];original=json.loads(data[20:20+length]);tail=data[20+length:]
+  for uri in ['../palette.png','https://example.com/palette.png','/tmp/palette.png']:
+   changed=json.loads(json.dumps(original));changed['images'][0]['uri']=uri;chunk=json.dumps(changed).encode();chunk+=b' '*((-len(chunk))%4)
+   path=self.root/'unsafe.glb';path.write_bytes(struct.pack('<4sII',b'glTF',2,20+len(chunk)+len(tail))+struct.pack('<II',len(chunk),0x4e4f534a)+chunk+tail)
+   with self.assertRaisesRegex(ValueError,'Unsafe texture'):module.inspect_glb(path)
 if __name__=='__main__':unittest.main()

@@ -62,8 +62,10 @@ struct ScenarioDefinition: Decodable {
     let id: String, prompt: String, terminal: Bool
     let start_operations: [JSON], actions: [Action]
     let completion: Completion?
+    let conversation_target: String?
   }
   let objective: String, initial_step_id: String, dialogue_policy: String, steps: [Step]
+  let progression: String?
 }
 struct ScenarioUpdate {
   let prompt: String, operations: [JSON], stepID: String
@@ -75,11 +77,17 @@ struct ScenarioRuntime {
   private(set) var index = 0
   private var enteredAt = 0.0
   var step: ScenarioDefinition.Step { definition.steps[index] }
+  var isGuided: Bool { definition.progression == "guided" }
+  var conversationTarget: String? { isGuided && definition.dialogue_policy == "natural" ? step.conversation_target : nil }
   init(_ definition: ScenarioDefinition) throws {
     guard !definition.steps.isEmpty, definition.steps.first?.id == definition.initial_step_id,
       Set(definition.steps.map(\.id)).count == definition.steps.count else { throw CocoaError(.coderInvalidValue) }
     for (i, step) in definition.steps.enumerated() {
       guard step.terminal == (i == definition.steps.count - 1) else { throw CocoaError(.coderInvalidValue) }
+      if definition.progression == "guided" {
+        guard step.actions.isEmpty, step.terminal || step.completion != nil,
+          !step.terminal || (step.completion == nil && step.conversation_target == nil) else { throw CocoaError(.coderInvalidValue) }
+      }
       guard Set(step.actions.map(\.id)).count == step.actions.count else { throw CocoaError(.coderInvalidValue) }
       let destinations = step.actions.compactMap(\.next_step_id) + [step.completion?.next_step_id].compactMap { $0 }
       guard destinations.allSatisfy({ $0 == definition.steps.dropFirst(i + 1).first?.id }) else { throw CocoaError(.coderInvalidValue) }
@@ -91,6 +99,7 @@ struct ScenarioRuntime {
     return update()
   }
   mutating func hear(_ text: String, at time: Double) -> ScenarioUpdate? {
+    guard !isGuided else { return nil }
     let words = VoiceAnswer.normalized(text)
     let padded = " " + words + " "
     guard !["don't", "do not", "not ready", "not yet", "wait", "cancel"].contains(where: { padded.contains(" " + $0 + " ") }) else { return nil }

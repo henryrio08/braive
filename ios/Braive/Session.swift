@@ -52,6 +52,7 @@ import SwiftUI
   var turnTask: Task<Void, Never>?
   var turnNonce = UUID()
   var speechFloor = SpeechFloor()
+  var stopConfirmation = StopConfirmation()
   var narration = NarrationQueue()
   var outcome = "completed"
   var generationDeadline = 0.0
@@ -239,8 +240,15 @@ import SwiftUI
     guard canStop else { return }
     guard !pauses.contains("user_stop") else { return }
     stopCount += 1
+    stopConfirmation.begin()
     pause("user_stop", enabled: true)
-    audio.confirmQuit()
+    audio.confirmQuit { self.stopConfirmation.arm(at: ProcessInfo.processInfo.systemUptime + 0.35) }
+  }
+  func confirmStop(end: Bool) {
+    guard pauses.contains("user_stop") else { return }
+    stopConfirmation.begin()
+    if end { pauses.remove("user_stop"); finish(early:true) }
+    else { pause("user_stop",enabled:false) }
   }
   func go(_ next: Phase, _ text: String) {
     transitionID = UUID()
@@ -272,17 +280,12 @@ import SwiftUI
     guard final else { return }
     guard seen.insert(id).inserted else { return }
     if pauses.contains("user_stop") {
-      if words.contains("yes") {
-        pauses.remove("user_stop")
-        finish(early: true)
-      } else if words.contains("no") {
-        pause("user_stop", enabled: false)
-      }
+      if let answer = stopConfirmation.answer(text,at:ProcessInfo.processInfo.systemUptime) { confirmStop(end:answer == .end) }
       return
     }
     guard pauses.isEmpty, !loading else { return }
-    let yes = words.contains("yes")
-    let no = words.contains("no")
+    let yes = VoiceAnswer.binary(text) == true
+    let no = VoiceAnswer.binary(text) == false
     if phase == .planning {
       if builder {
         collectAnswer(text)
@@ -668,7 +671,8 @@ import SwiftUI
     } else if phase == .active {
       active = world.activeElapsed
       let completedMotion = world.updateMotion()
-      if let update = scenario?.tick(at: active, completedMotions: completedMotion) { applyScenario(update) }
+      let canAdvance = scenario?.step.conversation_target == nil || (turnTask == nil && !audio.narrated && speechFloor.available(now:now))
+      if canAdvance, let update = scenario?.tick(at: active, completedMotions: completedMotion) { applyScenario(update) }
       audio.update(active: active)
       remaining = max(0, plan["duration_sec"].value - active)
       for (i, e) in scene["events"].list.enumerated()
@@ -704,6 +708,12 @@ import SwiftUI
   }
   func perform(_ text: String) {
     observe("speech_excerpt", "transcript", text)
+    if scenario?.isGuided == true {
+      guard !VoiceAnswer.needsTime(text), let target = scenario?.conversationTarget,
+        let character = plan["characters"].list.first(where: { $0["id"].text == target }) else { return }
+      dialogue(text,character:character)
+      return
+    }
     if let update = scenario?.hear(text, at: active) { applyScenario(update); return }
     if scenario == nil {
       for choice in scene["interactions"].list.flatMap({ $0["choices"].list }) {

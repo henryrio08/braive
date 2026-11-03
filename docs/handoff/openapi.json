@@ -2986,6 +2986,10 @@
             },
             "maxItems": 12,
             "minItems": 1
+          },
+          "progression": {
+            "type": "string",
+            "const": "guided"
           }
         },
         "required": [
@@ -3160,7 +3164,7 @@
           },
           "prompt": {
             "type": "string",
-            "minLength": 1,
+            "minLength": 0,
             "maxLength": 500
           },
           "terminal": {
@@ -3184,6 +3188,12 @@
           },
           "completion": {
             "$ref": "#/components/schemas/ScenarioCompletion"
+          },
+          "conversation_target": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80,
+            "description": "Approved Character.id receiving natural user speech during this step only; omit for quiet experience stages."
           }
         },
         "required": [
@@ -3212,7 +3222,8 @@
             "type": "string",
             "enum": [
               "disabled",
-              "on_request"
+              "on_request",
+              "natural"
             ]
           },
           "steps": {
@@ -3222,6 +3233,10 @@
             },
             "maxItems": 12,
             "minItems": 1
+          },
+          "progression": {
+            "type": "string",
+            "const": "guided"
           }
         },
         "required": [

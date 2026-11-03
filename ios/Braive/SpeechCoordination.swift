@@ -1,5 +1,24 @@
 import Foundation
 
+struct StopConfirmation {
+  enum Answer { case end, resume }
+  private var armedAt = Double.infinity
+  mutating func begin() { armedAt = .infinity }
+  mutating func arm(at time: Double) { armedAt = time }
+  mutating func answer(_ text: String, at time: Double) -> Answer? {
+    guard time >= armedAt, let yes = VoiceAnswer.binary(text) else { return nil }
+    armedAt = .infinity
+    return yes ? .end : .resume
+  }
+}
+enum SpokenEcho {
+  static func matches(_ text: String, spoken: String) -> Bool {
+    let key = VoiceAnswer.normalized(text)
+    return key.count >= 12 && key.split(separator:" ").count >= 3
+      && VoiceAnswer.normalized(spoken).contains(key)
+  }
+}
+
 /// Activity and final transcription both matter: silence alone isn't a completed user turn.
 struct SpeechFloor {
   private var speaking = false

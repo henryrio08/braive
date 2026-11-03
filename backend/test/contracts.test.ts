@@ -48,15 +48,15 @@ test('characters require registered skinned bases and preserve coordinator appea
  s.nodes[0].animation='sit';assert.ok(sceneIssues(p,s,audio).some(i=>i.rule==='supported_pose'));
  p.characters[0].asset_id='character.base.casual_adult_02';s.nodes[0].geometry={kind:'asset',asset_id:p.characters[0].asset_id};assert.deepEqual(sceneIssues(p,s,audio),[]);
 });
-test('351 licensed IDs and byte-identical backend/iOS manifests',async()=>{
- const {readFileSync}=await import('node:fs');assert.equal(assetManifest.length,351);assert.ok(assetManifest.every(a=>a.license==='CC0-1.0'));
+test('355 licensed IDs and byte-identical backend/iOS manifests',async()=>{
+ const {readFileSync}=await import('node:fs');assert.equal(assetManifest.length,355);assert.ok(assetManifest.every(a=>a.license==='CC0-1.0'));
  assert.equal(readFileSync(new URL('../assets/asset_manifest.json',import.meta.url),'utf8'),readFileSync(new URL('../../ios/Braive/Resources/asset_manifest.json',import.meta.url),'utf8'));
 });
 test('compact generation catalog preserves every licensed asset and its complexity',async()=>{
  const {meshCatalog}=await import('../src/assets.js');
  const entries=Object.values(meshCatalog).flat();
- assert.equal(entries.length,351);
- assert.equal(new Set(entries.map(([id])=>id)).size,351);
+ assert.equal(entries.length,355);
+ assert.equal(new Set(entries.map(([id])=>id)).size,355);
  for(const asset of assetManifest)assert.deepEqual(entries.find(([id])=>id===asset.id),[asset.id,asset.approx_tris]);
 });
 test('coordinator budgets real skeleton node costs before scene construction',()=>{

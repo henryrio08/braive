@@ -16,5 +16,11 @@ export function canonicalSceneReferences(plan:SessionPlan,source:SceneSpec,audio
    if(matches.length===1)op.cue_id=matches[0].id;
   }
  }
+ for(const step of scene.scenario?.steps??[]){
+  if(step.conversation_target&&!characterIDs.has(step.conversation_target)){
+   const matches=plan.characters.filter(c=>c.scene_node_id===step.conversation_target);
+   if(matches.length===1)step.conversation_target=matches[0].id;
+  }
+ }
  return scene;
 }

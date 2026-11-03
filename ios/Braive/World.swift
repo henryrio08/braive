@@ -55,7 +55,7 @@ extension UIColor {
       eye.camera?.zNear = 0.05
       eye.camera?.zFar = 150
       eye.camera?.wantsHDR = true
-      eye.camera?.screenSpaceAmbientOcclusionIntensity = 0.3
+      eye.camera?.screenSpaceAmbientOcclusionIntensity = 0.12
       eye.camera?.screenSpaceAmbientOcclusionRadius = 0.25
       eye.position.x = x
       head.addChildNode(eye)
@@ -410,11 +410,11 @@ extension UIColor {
     let light = SCNNode(); light.light = SCNLight(); light.light?.type = .ambient; light.light?.intensity = 500; scene.rootNode.addChildNode(light)
     let sun = SCNNode(); sun.light = SCNLight(); sun.light?.type = .directional; sun.light?.intensity = 850
     sun.eulerAngles = SCNVector3(-0.8,-0.55,0); sun.light?.castsShadow = true; sun.light?.shadowMapSize = CGSize(width:1024,height:1024); sun.light?.shadowSampleCount = 4; sun.light?.shadowColor = UIColor.black.withAlphaComponent(0.28); scene.rootNode.addChildNode(sun)
-    let ids = ["character.base.neutral_humanoid_01","character.base.casual_adult_01","character.base.casual_adult_02"]
+    let ids = try AssetLibrary.entries.filter { $0.id.hasPrefix("character.base.") && $0.generation_enabled != false }.map(\.id)
     var people: [SCNNode] = []
     for (i,id) in ids.enumerated() {
       let person = try AssetLibrary.make(id, colorHex: i == 2 ? "#7b9385" : "#c98b69")
-      person.position = SCNVector3(Float(i-1)*1.4,0,-4); person.eulerAngles.y = .pi
+      person.position = SCNVector3((Float(i)-Float(ids.count-1)/2)*1.35,0,-4); person.eulerAngles.y = .pi
       scene.rootNode.addChildNode(person); AssetLibrary.animate(person,behavior:"idle"); people.append(person)
     }
     let renderer = SCNRenderer(device:MTLCreateSystemDefaultDevice(),options:nil); renderer.scene = scene; renderer.pointOfView = left
@@ -427,7 +427,7 @@ extension UIColor {
     AssetLibrary.animate(people[2],behavior:"sit"); try capture("seated",at:2.2)
     AssetLibrary.animate(people[2],behavior:"speak"); try capture("seated-speaking",at:2.8)
     AssetLibrary.animate(people[1],behavior:"walk"); try capture("walking",at:3.1)
-    try JSONEncoder().encode(JSON(["status":"passed","asset_count":351,"registered_characters":ids])).write(to:folder.appendingPathComponent("result.json"))
+    try JSONEncoder().encode(JSON(["status":"passed","asset_count":try AssetLibrary.entries.count,"registered_characters":ids])).write(to:folder.appendingPathComponent("result.json"))
   }
   /// Explicit offline review of a previously generated scene; never a normal-practice fallback.
   func renderScenarioReview(_ spec: JSON, to folder: URL) throws {

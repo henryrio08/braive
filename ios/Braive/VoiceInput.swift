@@ -11,6 +11,10 @@ struct SpeechTurnBuffer {
   private var speaking = false
   private var quietSince = 0.0
   var text: String { [stable, draft].filter { !$0.isEmpty }.joined(separator: " ") }
+  mutating func discard(through time: Double) {
+    consumedThrough = max(consumedThrough,time); stableEnd = consumedThrough
+    stable = ""; draft = ""; id = UUID().uuidString; speaking = false
+  }
 
   mutating func receive(_ text: String, final: Bool, start: Double, end: Double, now: Double) -> Bool {
     guard end > consumedThrough + 0.02, start >= consumedThrough - 0.02 else { return false }
@@ -61,6 +65,12 @@ struct VoiceAnswer {
   }
   static func confirmsPractice(_ text: String) -> Bool {
     ["begin practice", "begin practice please"].contains(normalized(text))
+  }
+  static func binary(_ text: String) -> Bool? {
+    let value = normalized(text)
+    if ["yes","yes please","yes i would","yes i do","sure"].contains(value) { return true }
+    if ["no","no thanks","no thank you","not now"].contains(value) { return false }
+    return nil
   }
   static func confirmsHeadset(_ text: String) -> Bool {
     ["yes", "yes please", "yes it is", "ready", "i'm ready", "i am ready", "yes i'm ready",

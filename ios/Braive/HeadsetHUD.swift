@@ -67,7 +67,7 @@ struct HeadsetHUD: View {
   private func prompt(showDetail: Bool) -> some View {
     VStack(spacing: 10) {
       if preparing { ProgressView().tint(accent) }
-      Text(copy.title).font(.system(size: 23, weight: .medium, design: .serif))
+      if !copy.title.isEmpty { Text(copy.title).font(.system(size: 23, weight: .medium, design: .serif)) }
       if showDetail && !copy.detail.isEmpty {
         Text(copy.detail).font(.system(size: 15)).foregroundStyle(.white.opacity(0.85))
       }
@@ -112,7 +112,7 @@ struct HeadsetHUD: View {
     case .planning: return HeadsetCopy(title: "Shaping your practice…", detail: "You’ll hear when it’s ready.", command: "Say HEY BUILDER to add details", hint: "STOP to pause")
     case .intro: return HeadsetCopy(title: "Listen. Picture yourself here.", hint: "STOP to pause")
     case .reveal: return HeadsetCopy(title: "Take a look around.", hint: "STOP to pause")
-    case .active: return HeadsetCopy(title: "Your next step", detail: HeadsetCopy.excerpt(message), command: "Say HELP to hear your options", hint: "STOP to pause")
+    case .active: return HeadsetCopy(title: "", hint: "STOP to pause")
     case .selfReport: return HeadsetCopy(title: "How difficult did it feel?", command: "Say a number from 0 to 10", hint: "Or say SKIP")
     case .readiness: return HeadsetCopy(title: "How ready do you feel now?", command: "Say a number from 0 to 10", hint: "Or say SKIP")
     case .reflectionPrompt: return HeadsetCopy(title: "Keep a spoken reflection?", command: "Say YES or NO")

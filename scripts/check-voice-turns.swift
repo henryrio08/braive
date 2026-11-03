@@ -25,6 +25,10 @@ import Foundation
     check(next?.id != first?.id && next?.text == "That's all", "Next utterance has its own ID")
     _ = turn.receive("yes", final: true, start: 12, end: 13, now: 13)
     check(turn.take(now: 13.8)?.text == "yes", "Brief commands stay responsive")
+    turn.discard(through:20.35)
+    check(!turn.receive("no",final:true,start:19,end:20.4,now:21),"Delayed recognition from confirmation playback is discarded by audio time")
+    check(turn.receive("No",final:true,start:20.8,end:21.2,now:21.3),"A new post-prompt answer is accepted")
+    check(turn.take(now:22)?.text == "No","Fresh user confirmation survives echo discard")
 
     var answer = VoiceAnswer()
     check(answer.receive("One second.") == .waiting && answer.text.isEmpty, "Thinking is not an answer")

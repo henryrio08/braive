@@ -16,6 +16,11 @@ import AVFoundation
   var onDisconnect: ((String) -> Void)?
   private var stopRecognition: (() -> Void)?
   private var updateRecognitionContext: (([String]) -> Void)?
+  private var discardRecognition: ((Double) -> Void)?
+  private var confirmationID: ObjectIdentifier?
+  private var confirmationFinished: (() -> Void)?
+  private var spokenText = "", confirmationText = ""
+  private var playbackEndedAt = -Double.infinity
   var onStatus: ((String) -> Void)?
   private var tapped = false
   let captureStats = CaptureStats()
@@ -28,6 +33,7 @@ import AVFoundation
   override init() {
     super.init()
     speech.delegate = self
+    promptSpeech.delegate = self
   }
   func start(api: API) async throws {
     stopCapture()
@@ -47,13 +53,17 @@ import AVFoundation
     try input.setVoiceProcessingEnabled(true)
     let format = input.outputFormat(forBus: 0)
     let recognition = LocalSpeech(onText: { [weak self] text, final, id in
-      self?.onText?(text, final, id)
+      guard let self else { return }
+      let playbackActive = self.narrated || self.promptSpeech.isSpeaking || ProcessInfo.processInfo.systemUptime - self.playbackEndedAt < 0.8
+      if playbackActive && [self.spokenText,self.confirmationText].contains(where: { SpokenEcho.matches(text,spoken:$0) }) { return }
+      self.onText?(text, final, id)
     }, onError: { [weak self] reason in
       self?.ready = false
       self?.onDisconnect?(reason)
     }, onActivity: { [weak self] speaking in self?.onActivity?(speaking) })
     stopRecognition = { recognition.stop() }
     updateRecognitionContext = { phrases in Task { await recognition.setCommandPhrases(phrases) } }
+    discardRecognition = { tail in recognition.discardPending(tail: tail) }
     let sink = try await recognition.prepare(inputFormat: format) { [weak self] message in
       self?.onStatus?(message)
     }
@@ -74,6 +84,7 @@ import AVFoundation
     if tapped { engine.inputNode.removeTap(onBus: 0); tapped = false }
     stopRecognition?(); stopRecognition = nil
     updateRecognitionContext = nil
+    discardRecognition = nil
   }
   func setCommandPhrases(_ phrases: [String]) { updateRecognitionContext?(phrases) }
   func fitIntro(_ text: String) async -> String {
@@ -95,6 +106,7 @@ import AVFoundation
     speech.stopSpeaking(at: .immediate)
     finished = completion
     narrated = true
+    spokenText = text
     for p in players.values { p.volume *= 0.25 }
     let u = SpeechVoice.utterance(text, voice: intro ? introVoice : SpeechVoice.selected)
     utteranceID = ObjectIdentifier(u)
@@ -105,12 +117,20 @@ import AVFoundation
   ) {
     let id = ObjectIdentifier(utterance)
     Task { @MainActor [weak self] in
+      if let self, self.confirmationID == id {
+        self.confirmationID = nil
+        self.playbackEndedAt = ProcessInfo.processInfo.systemUptime
+        self.discardRecognition?(0.35)
+        let completion = self.confirmationFinished; self.confirmationFinished = nil; completion?()
+        return
+      }
       guard let self, self.utteranceID == id else { return }
       self.speechFinished()
     }
   }
   func speechFinished() {
     narrated = false
+    playbackEndedAt = ProcessInfo.processInfo.systemUptime
     let f = finished
     finished = nil
     for p in players.values { p.volume = min(0.2, p.volume * 4) }
@@ -122,8 +142,12 @@ import AVFoundation
     speech.stopSpeaking(at: .immediate)
     speechFinished()
   }
-  func confirmQuit() {
-    let utterance = SpeechVoice.utterance("Would you like to end this practice? Say yes to finish, or no to continue.")
+  func confirmQuit(completion: @escaping () -> Void) {
+    promptSpeech.stopSpeaking(at: .immediate)
+    discardRecognition?(0)
+    confirmationText = "Practice paused. Would you like to end it?"
+    let utterance = SpeechVoice.utterance(confirmationText)
+    confirmationID = ObjectIdentifier(utterance); confirmationFinished = completion
     promptSpeech.speak(utterance)
   }
   func previewVoice() {
@@ -136,11 +160,13 @@ import AVFoundation
     for p in players.values { p.pause() }
   }
   func resume() {
+    confirmationID = nil; confirmationFinished = nil
     promptSpeech.stopSpeaking(at: .immediate)
     speech.continueSpeaking()
     for p in players.values { p.play() }
   }
   func silence() {
+    confirmationID = nil; confirmationFinished = nil
     stopVoicePreview()
     utteranceID = nil
     narrated = false

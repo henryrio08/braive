@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import Ajv from 'ajv';
-import {assetIDs,characterIDs,assetManifest} from './assets.js';
+import {assetIDs,characterIDs,generationCharacterIDs,assetManifest} from './assets.js';
 import addFormats from 'ajv-formats';
 import type { ValidationIssue, SceneSpec, SessionPlan, AudioPlan, WorldOperation } from '../../docs/handoff/contracts.js';
 export const document = JSON.parse(readFileSync(new URL('../../docs/handoff/openapi.json', import.meta.url), 'utf8'));
@@ -19,7 +19,7 @@ export function sceneIssues(plan: SessionPlan, scene: SceneSpec, audio: AudioPla
  const fail = (path: string, rule: string, message: string) => issues.push({path,rule,message});
  for (const [key, output] of Object.entries({scene,audio})) if(output.session_id !== plan.session_id || output.revision !== plan.revision) fail(`/${key}/revision`,'revision','Must match approved plan');
  const nodes = new Map(scene.nodes.map(n => [n.id,n]));
- const supportsSit=(id:string)=>assetManifest.find(a=>a.id===id)?.animation_clips?.some(n=>n.toLowerCase().endsWith('_sitting'))===true;
+ const supportsSit=(id:string)=>assetManifest.find(a=>a.id===id)?.animation_clips?.some(n=>n.toLowerCase().endsWith('_sitting')||n.toLowerCase()==='sit')===true;
  const attached=new Set(scene.viewer_attached_node_ids??[]);
  const carried=(id:string)=>{const seen=new Set<string>();let current:string|null=id;while(current&&!seen.has(current)){if(attached.has(current))return true;seen.add(current);current=nodes.get(current)?.parent_id??null;}return false;};
  for(const id of attached){
@@ -81,6 +81,10 @@ export function sceneIssues(plan: SessionPlan, scene: SceneSpec, audio: AudioPla
  if(plan.experience)for(const prop of plan.props??[])if(!scene.nodes.some(n=>n.prop_name===prop))fail('/nodes','prop_match','Scene must realize approved prop: '+prop);
  if(scene.scenario){
   const scenario=scene.scenario,steps=new Map(scenario.steps.map(s=>[s.id,s]));
+  const guided=plan.experience?.progression==='guided';
+  if(guided&&scenario.progression!=='guided')fail('/scenario','progression','The approved experience progresses automatically');
+  if(guided&&plan.experience?.kind==='conversation'&&(scenario.dialogue_policy!=='natural'||!scenario.steps.some(s=>s.conversation_target)))fail('/scenario','conversation','A conversation experience needs a natural speaking window; no ASK commands');
+  if(guided&&scenario.dialogue_policy==='on_request')fail('/scenario','guided','Guided practice does not use ASK/TALK TO commands');
   if(steps.size!==scenario.steps.length||!steps.has(scenario.initial_step_id))fail('/scenario','reference','Unique scenario steps and a valid initial step required');
   const planned=plan.experience?.stages;
   if(planned && (scenario.initial_step_id!==planned[0].id || JSON.stringify(scenario.steps.map(s=>s.id))!==JSON.stringify(planned.map(s=>s.id))))fail('/scenario/steps','plan_match','Scenario must realize the approved stages in order');
@@ -88,6 +92,14 @@ export function sceneIssues(plan: SessionPlan, scene: SceneSpec, audio: AudioPla
    const actionIDs=new Set<string>();
    const next=scenario.steps[i+1]?.id;
    if(step.terminal!==(i===scenario.steps.length-1))fail(`/scenario/steps/${i}`,'terminal','Only the final approved stage is terminal');
+   if(guided){
+    if(step.actions.length)fail(`/scenario/steps/${i}/actions`,'guided','Guided experiences do not require local voice actions');
+    if(!step.terminal&&!step.completion)fail(`/scenario/steps/${i}`,'guided','Each experience stage must advance automatically');
+    if(step.terminal&&(step.completion||step.conversation_target))fail(`/scenario/steps/${i}`,'terminal','The final step marks a completed experience, not an interactive stage');
+   }
+   if(step.conversation_target&&!chars.has(step.conversation_target))fail(`/scenario/steps/${i}`,'reference','Conversation target must be an approved character');
+   if(step.conversation_target&&scenario.dialogue_policy!=='natural')fail(`/scenario/steps/${i}`,'conversation','A natural speaking window requires natural dialogue policy');
+   if(guided&&step.conversation_target&&step.completion?.trigger!=='after_seconds')fail(`/scenario/steps/${i}`,'conversation','A natural speaking window advances on time after the conversation yields');
    const transitions=[...step.actions.map(a=>a.next_step_id),step.completion?.next_step_id].filter((x):x is string=>!!x);
    if(transitions.some(id=>!steps.has(id)||id!==next))fail(`/scenario/steps/${i}`,'sequence','Transitions must advance to the next approved stage');
    if(!step.terminal&&!transitions.includes(next!))fail(`/scenario/steps/${i}`,'progress','Every nonterminal stage must offer a way forward');
@@ -101,6 +113,7 @@ export function sceneIssues(plan: SessionPlan, scene: SceneSpec, audio: AudioPla
    const completion=step.completion;
    if(completion?.trigger==='after_seconds' && !(completion.after_seconds!>0&&completion.after_seconds!<=plan.duration_sec))fail('/scenario','clock','Timed stage requires a valid duration');
    if(completion?.trigger==='motion_complete' && (!paths.has(completion.motion_path_id??'') || !ops.some(o=>(o.type==='move_viewer'||o.type==='move_node')&&o.path_id===completion.motion_path_id)))fail('/scenario','motion','Motion completion must reference an executed path');
+   if(guided&&completion?.trigger==='motion_complete'&&!step.start_operations.some(o=>(o.type==='move_viewer'||o.type==='move_node')&&o.path_id===completion.motion_path_id))fail('/scenario','guided','An automatic movement stage must start its own completion path');
   }
   if(plan.experience?.requires_motion && !ops.some(o=>o.type==='move_viewer'))fail('/scenario','motion','The requested activity requires actual viewer motion');
   if(plan.experience?.requires_motion){
@@ -109,6 +122,10 @@ export function sceneIssues(plan: SessionPlan, scene: SceneSpec, audio: AudioPla
    if(!moving)fail('/motion_paths','motion','A stationary path cannot satisfy a movement experience');
   }
   if(plan.experience?.kind==='action' && scenario.dialogue_policy!=='disabled')fail('/scenario/dialogue_policy','task_focus','Action experiences run locally; optional conversation is reserved for conversation experiences');
+  if(guided){
+   const duration=scenario.steps.reduce((sum,s)=>sum+(s.completion?.trigger==='after_seconds'?s.completion.after_seconds??0:paths.get(s.completion?.motion_path_id??'')?.points.at(-1)?.at_seconds??0),0);
+   if(duration>plan.duration_sec-3)fail('/scenario','clock','The full automatic experience must reach its completed goal within the session duration');
+  }
  }
  return issues;
 }
@@ -132,6 +149,8 @@ export function planIssues(plan: SessionPlan): ValidationIssue[] {
   const stages=plan.experience.stages;
   if(!stages.length||new Set(stages.map(s=>s.id)).size!==stages.length)fail('/experience/stages','unique','Unique executable stages required');
   if(plan.experience.kind==='action'&&plan.interaction_mode==='dialogue')fail('/experience','task_focus','An action experience cannot be replaced by a conversation');
+  if(plan.experience.progression==='guided'&&stages.some(s=>s.action_ids.length))fail('/experience/stages','guided','The participant experiences movement and events automatically; no command checklist');
+  if(plan.experience.progression==='guided'&&plan.characters.some(c=>!generationCharacterIDs.has(c.asset_id??'')))fail('/characters','appearance','Use a currently approved comfortable character style');
  }
  return issues;
 }
@@ -157,5 +176,9 @@ export function outputSchema(name: string): any {
  const required=name==='SessionPlan'?['experience']:name==='SceneSpec'?['scenario','motion_paths','view_distance_meters','viewer_attached_node_ids']:[];
  if(required.length)root.required=[...new Set([...root.required,...required])];
  if(name==='SessionPlan'&&defs.Character)defs.Character.required=[...new Set([...defs.Character.required,'asset_id'])];
+ if(name==='SessionPlan'&&defs.Character)defs.Character.properties.asset_id.enum=[...generationCharacterIDs];
+ if(name==='SessionPlan'&&defs.ExperiencePlan)defs.ExperiencePlan.required=[...new Set([...defs.ExperiencePlan.required,'progression'])];
+ if(name==='SceneSpec')root.required=[...new Set([...root.required,'scenario'])];
+ if(name==='SceneSpec'&&defs.ScenarioSpec)defs.ScenarioSpec.required=[...new Set([...defs.ScenarioSpec.required,'progression'])];
  return {...root,$defs:defs};
 }

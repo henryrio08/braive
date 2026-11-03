@@ -18,6 +18,7 @@ struct AssetEntry: Decodable {
   let license: String
   let normalization: Normalization
   let material_tint_names: [String]?
+  let generation_enabled: Bool?
 }
 
 /// Only byte-preserved, CC0 manifest assets can enter the renderer. No procedural object fallback.
@@ -119,9 +120,9 @@ struct AssetEntry: Decodable {
         switch name {
         case "idle", "idle_neutral", "standing": role = "idle"
         case "walk": role = "walk"
-        case "run": role = "run"
-        case "sitting": role = "sit"
-        case "wave", "interact": role = "gesture"
+        case "run", "sprint": role = "run"
+        case "sitting", "sit": role = "sit"
+        case "wave", "interact", "emote-yes": role = "gesture"
         default: role = nil
         }
         if let role, registered[role] == nil || name == "idle_neutral" || name == "wave" {
@@ -183,8 +184,8 @@ struct AssetEntry: Decodable {
   static func recolor(_ node: SCNNode, hex: String?) {
     let id = instanceIDs.object(forKey: node) as String? ?? ""
     let tintNames = (try? entries.first(where: { $0.id == id })?.material_tint_names) ?? []
-    if id != "character.base.neutral_humanoid_01", !tintNames.isEmpty {
-      guard let hex else { return }
+    if id != "character.base.neutral_humanoid_01" {
+      guard !tintNames.isEmpty, let hex else { return }
       node.enumerateChildNodes { n, _ in
         for material in n.geometry?.materials ?? [] where tintNames.contains(material.name ?? "") {
           material.diffuse.contents = UIColor(hex: hex)
@@ -358,7 +359,7 @@ struct AssetEntry: Decodable {
             }
           }
         }
-        guard colorsValid && tintedCount > 0 else {
+        guard colorsValid && (tintedCount > 0 || (entry.id != "character.base.neutral_humanoid_01" && tinted.isEmpty)) else {
           throw ScenePreflight.error("Neutral diffuse recoloring leaked between instances")
         }
         if entry.id != "character.base.neutral_humanoid_01" {
@@ -367,6 +368,15 @@ struct AssetEntry: Decodable {
               let q = other.animationPlayer(forKey: "braive_clip_" + role), p !== q else {
               throw ScenePreflight.error("Character clip missing or shared: " + entry.id)
             }
+          }
+          if tinted.isEmpty {
+            var textured = false
+            node.enumerateChildNodes { n,_ in
+              for material in n.geometry?.materials ?? [] {
+                if let value = material.diffuse.contents, !(value is UIColor) { textured = true }
+              }
+            }
+            guard textured else { throw ScenePreflight.error("Character palette texture is missing: " + entry.id) }
           }
         }
         for behavior in ["idle", "listen", "speak", "gesture"] { animate(node, behavior: behavior) }

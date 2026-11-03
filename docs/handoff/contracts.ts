@@ -82,7 +82,7 @@ export type EnvironmentSpec = SceneSpec;
 
 export type SessionFeedback = FeedbackResult;
 
-export type ExperiencePlan = { "kind": "action" | "conversation"; "objective": string; "requires_motion": boolean; "stages": Array<{ "id": string; "goal": string; "action_ids": Array<string> }> };
+export type ExperiencePlan = { "progression"?: "guided"; "kind": "action" | "conversation"; "objective": string; "requires_motion": boolean; "stages": Array<{ "id": string; "goal": string; "action_ids": Array<string> }> };
 
 export type MotionPath = { "id": string; "purpose": "walk" | "run" | "swim" | "climb" | "fall" | "glide" | "ride" | "other"; "interpolation": "linear" | "smooth"; "coordinate_space"?: "world" | "relative"; "points": Array<{ "at_seconds": number; "position": Array<number> }> };
 
@@ -90,6 +90,6 @@ export type ScenarioAction = { "id": string; "label": string; "phrases": Array<s
 
 export type ScenarioCompletion = { "trigger": "after_seconds" | "motion_complete"; "after_seconds"?: number; "motion_path_id"?: string; "next_step_id": string };
 
-export type ScenarioStep = { "id": string; "prompt": string; "terminal": boolean; "start_operations": Array<WorldOperation>; "actions": Array<ScenarioAction>; "completion"?: ScenarioCompletion };
+export type ScenarioStep = { "conversation_target"?: string; "id": string; "prompt": string; "terminal": boolean; "start_operations": Array<WorldOperation>; "actions": Array<ScenarioAction>; "completion"?: ScenarioCompletion };
 
-export type ScenarioSpec = { "objective": string; "initial_step_id": string; "dialogue_policy": "disabled" | "on_request"; "steps": Array<ScenarioStep> };
+export type ScenarioSpec = { "progression"?: "guided"; "objective": string; "initial_step_id": string; "dialogue_policy": "disabled" | "on_request" | "natural"; "steps": Array<ScenarioStep> };

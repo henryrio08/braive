@@ -159,8 +159,8 @@ struct ContentView: View {
             Button(s.connecting ? "Reconnecting…" : "Reconnect voice") { s.reconnect() }.disabled(s.connecting)
           }
           if s.pauses.contains("user_stop") {
-            Button("Continue practice") { panel = nil; send("no") }
-            Button("End practice") { panel = nil; send("yes") }
+            Button("Continue practice") { panel = nil; s.pause("phone_controls",enabled:false); s.confirmStop(end:false) }
+            Button("End practice") { panel = nil; s.pause("phone_controls",enabled:false); s.confirmStop(end:true) }
           } else if s.canStop {
             Button("Pause practice") { panel = nil; s.stop() }
           }

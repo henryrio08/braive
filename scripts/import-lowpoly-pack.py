@@ -21,7 +21,11 @@ def inspect_glb(path):
     for b in gltf.get('buffers', []):
         if b.get('uri') or b['byteLength'] > len(binary): raise ValueError(f'External or truncated buffer: {path}')
     for image in gltf.get('images', []):
-        if 'uri' in image and not image['uri'].startswith('data:'): raise ValueError(f'External image: {path}')
+        if 'uri' in image and not image['uri'].startswith('data:'):
+            rel=PurePosixPath(image['uri'])
+            if rel.is_absolute() or '..' in rel.parts or '\\' in image['uri'] or ':' in image['uri'] or rel.suffix.lower()!='.png': raise ValueError(f'Unsafe texture dependency: {path}')
+            texture=path.parent/str(rel)
+            if not texture.is_file() or texture.is_symlink() or not texture.resolve().is_relative_to(path.parent.resolve()) or texture.stat().st_size>2_000_000 or not texture.read_bytes().startswith(b'\x89PNG\r\n\x1a\n'): raise ValueError(f'Invalid bundled texture: {path}')
     views = gltf.get('bufferViews', [])
     for v in views:
         if v.get('buffer', 0) != 0 or v.get('byteOffset', 0) + v['byteLength'] > len(binary): raise ValueError(f'Invalid buffer view: {path}')
@@ -68,6 +72,13 @@ def inventory(source):
             if not isinstance(tint_names,list) or any(n not in names or any(p in n.lower() for p in ['skin','hair','eye']) for n in tint_names): raise ValueError('Invalid clothing tint binding: '+expected)
             manifest[-1]['material_tint_names']=tint_names
         if r['category']=='character' and r['subcategory']=='base': manifest[-1]['resolved_node_count']=len(gltf.get('nodes',[]))+3
+        if 'generation_enabled' in supplements.get(expected,{}):manifest[-1]['generation_enabled']=supplements[expected]['generation_enabled']
+        dependencies=[]
+        for image in gltf.get('images',[]):
+            uri=image.get('uri','')
+            if uri and not uri.startswith('data:'):
+                texture=path.parent/uri;dependencies.append({'relative_path':str(rel.parent/PurePosixPath(uri)),'sha256':hashlib.sha256(texture.read_bytes()).hexdigest()})
+        if dependencies:manifest[-1]['bundled_textures']=dependencies
     found={p.relative_to(source).as_posix() for p in source.rglob('*.glb')}
     if found!=set(indexed): raise ValueError('CSV/GLB mismatch; unindexed='+str(sorted(found-set(indexed)))+' missing='+str(sorted(set(indexed)-found)))
     bases=[r for r in manifest if r['id'].startswith('character.base.')]
@@ -89,7 +100,10 @@ def main():
             if old.relative_to(destination).as_posix() not in expected:old.unlink()
     for a in assets:
         rel=a['relative_path'][len('LowPoly/'):];out=destination/rel;out.parent.mkdir(parents=True,exist_ok=True);shutil.copyfile(args.source/rel,out)
+        for texture in a.get('bundled_textures',[]):
+            rel=texture['relative_path'];out=destination/rel;out.parent.mkdir(parents=True,exist_ok=True);shutil.copyfile(args.source/rel,out)
     shutil.copyfile(args.source/'LICENSE_INDEX.csv',destination/'LICENSE_INDEX.csv')
+    for notice in args.source.glob('*LICENSE*.txt'):shutil.copyfile(notice,destination/notice.name)
     for gap in empty:(destination/Path(*gap.split('.'))).mkdir(parents=True,exist_ok=True)
     encoded=json.dumps(assets,indent=2)+'\n'
     for output in [args.source/'asset_manifest.json',runtime/'asset_manifest.json',ROOT/'backend/assets/asset_manifest.json']:
