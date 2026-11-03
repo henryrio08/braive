@@ -25,6 +25,7 @@ import SwiftUI
   @Published var voiceListening = false
   @Published var setupNotice = ""
   @Published var scenarioActions: [String] = []
+  @Published var characterReplyPending = false
   var scenario: ScenarioRuntime?
   var scenarioCompletedAt: Double?
   let world = World(), audio = Audio(), store = SessionStore()
@@ -139,6 +140,15 @@ import SwiftUI
       forName: AVAudioSession.interruptionNotification, object: nil, queue: .main
     ) { [weak self] n in Task { @MainActor in self?.pause("audio_interruption", enabled: true) } }
     #if DEBUG
+    if ProcessInfo.processInfo.arguments.contains("--character-review") {
+      preview(); audio.silence()
+      do { try world.renderCharacterReview(to: store.root.appendingPathComponent("CharacterReview")) }
+      catch {
+        let folder = store.root.appendingPathComponent("CharacterReview")
+        try? FileManager.default.createDirectory(at:folder,withIntermediateDirectories:true)
+        try? JSONEncoder().encode(JSON(["status":"failed","error":error.localizedDescription])).write(to:folder.appendingPathComponent("result.json"))
+      }
+    }
     if ProcessInfo.processInfo.arguments.contains("--hud-layout-review") {
       let savedPhase = phase, savedMessage = message
       var copies: [(String, HeadsetCopy)] = []
@@ -454,7 +464,7 @@ import SwiftUI
     turns = []
     scenario = nil; scenarioActions = []; scenarioCompletedAt = nil
     audio.setCommandPhrases([])
-    turnTask?.cancel(); turnTask = nil; turnNonce = UUID()
+    turnTask?.cancel(); turnTask = nil; turnNonce = UUID(); characterReplyPending = false
     speechFloor = SpeechFloor()
     narration = NarrationQueue()
     active = 0
@@ -682,7 +692,7 @@ import SwiftUI
     world.operation(op, speak: { narration.enqueue($0, at: active) }, sound: { audio.cue($0) })
   }
   func applyScenario(_ update: ScenarioUpdate) {
-    turnTask?.cancel(); turnTask = nil; turnNonce = UUID()
+    turnTask?.cancel(); turnTask = nil; turnNonce = UUID(); characterReplyPending = false
     narration.clearPending()
     message = update.prompt
     scenarioActions = scenario?.step.actions.map(\.label) ?? []
@@ -705,7 +715,7 @@ import SwiftUI
     }
     let words = VoiceAnswer.normalized(text)
     if ["help", "what next", "what do i do", "repeat instructions"].contains(words) {
-      turnTask?.cancel(); turnTask = nil; turnNonce = UUID()
+      turnTask?.cancel(); turnTask = nil; turnNonce = UUID(); characterReplyPending = false
       narration.enqueue(scenario?.step.prompt ?? plan["task_instruction"].text, at: active); return
     }
     // Network conversation is an explicit optional action, never the fallback for arbitrary speech.
@@ -725,7 +735,8 @@ import SwiftUI
     let turn = UUID().uuidString
     world.animate(character["id"].text, "listen")
     turnTask = Task {
-      defer { if nonce == turnNonce { turnTask = nil } }
+      characterReplyPending = true
+      defer { if nonce == turnNonce { turnTask = nil; characterReplyPending = false } }
       do {
         let req = JSON([
           "schema_version": "1", "session_id": sessionID, "revision": rev, "turn_id": turn,
@@ -772,6 +783,7 @@ import SwiftUI
     turnTask?.cancel()
     turnTask = nil
     turnNonce = UUID()
+    characterReplyPending = false
     narration.clearPending()
     transitionID = UUID()
     loading = false

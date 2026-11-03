@@ -15,6 +15,7 @@ files=[];sources=[];resources=[]
 for path in sorted(app.rglob('*')):
  if not path.is_file():continue
  relative=path.relative_to(app)
+ if any(part.endswith('.xcassets') for part in relative.parts):continue
  if relative.parts[:2]==('Resources','LowPoly'):continue
  if 'Review' in relative.parts and '--include-review' not in sys.argv:continue
  kind='sourcecode.swift' if path.suffix=='.swift' else 'text.plist.xml' if path.suffix=='.plist' else 'sourcecode.metal' if path.suffix=='.metal' else 'text.json' if path.suffix=='.json' else 'file' if path.suffix=='.glb' else 'text' if path.suffix=='.txt' else 'audio.wav'
@@ -22,6 +23,10 @@ for path in sorted(app.rglob('*')):
  if path.suffix in ['.swift','.metal','.wav','.json','.glb','.txt']:
   build=add('build'+str(relative),f'isa = PBXBuildFile; fileRef = {ref};');(sources if path.suffix in ['.swift','.metal'] else resources).append(build)
 # A blue folder resource preserves category/subcategory paths at runtime.
+for catalog in sorted(app.glob('*.xcassets')):
+ if not (catalog/'Contents.json').exists():continue
+ ref=add(str(catalog.name),f'isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Braive/{catalog.name}"; sourceTree = "<group>";')
+ files.append(ref);resources.append(add('build'+catalog.name,f'isa = PBXBuildFile; fileRef = {ref};'))
 lowpoly=add('lowpolyfolder','isa = PBXFileReference; lastKnownFileType = folder; path = Braive/Resources/LowPoly; sourceTree = "<group>";')
 files.append(lowpoly);resources.append(add('lowpolybuild',f'isa = PBXBuildFile; fileRef = {lowpoly};'))
 package=add('gltfpackage','isa = XCRemoteSwiftPackageReference; repositoryURL = "https://github.com/warrenm/GLTFKit2.git"; requirement = { kind = exactVersion; version = 0.5.15; };')
@@ -36,6 +41,7 @@ for level in ['project','target']:
  for config in ['Debug','Release']:
   settings='SDKROOT = iphoneos; IPHONEOS_DEPLOYMENT_TARGET = 18.0; SWIFT_VERSION = 5.0; CLANG_ENABLE_MODULES = YES; '
   if level=='target':settings+=team_setting+f'PRODUCT_BUNDLE_IDENTIFIER = {bundle}; PRODUCT_NAME = Braive; INFOPLIST_FILE = Braive/Info.plist; CODE_SIGN_STYLE = Automatic; TARGETED_DEVICE_FAMILY = 1; SWIFT_STRICT_CONCURRENCY = minimal; ENABLE_DEBUG_DYLIB = NO; LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks"; SUPPORTED_PLATFORMS = "iphoneos iphonesimulator"; '
+  if level=='target' and (app/'Assets.xcassets/AppIcon.appiconset/Contents.json').exists():settings+='ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon; '
   if config=='Debug':settings+='SWIFT_OPTIMIZATION_LEVEL = "-Onone"; DEBUG_INFORMATION_FORMAT = dwarf; SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG; '
   else:settings+='SWIFT_OPTIMIZATION_LEVEL = "-O"; '
   configs.append(add(level+config,f'isa = XCBuildConfiguration; buildSettings = {{ {settings} }}; name = {config};'))

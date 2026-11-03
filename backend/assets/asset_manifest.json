@@ -3632,6 +3632,119 @@
     "animation_clips": []
   },
   {
+    "id": "character.base.casual_adult_01",
+    "relative_path": "LowPoly/character/base/character.base.casual_adult_01.glb",
+    "category": "character",
+    "subcategory": "base",
+    "tags": [
+      "character",
+      "base",
+      "casual",
+      "adult",
+      "hoodie",
+      "hair",
+      "face",
+      "rigged",
+      "animated"
+    ],
+    "suggested_scale_m": 0.941884885982501,
+    "y_up": true,
+    "character_rigged": true,
+    "license": "CC0-1.0",
+    "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "source_url": "https://poly.pizza/m/kZ3DmIoGip",
+    "author": "Quaternius",
+    "approx_tris": 5776,
+    "sha256": "fea7e71271203e7073f1a073fa1208de7402df276f87f80e149bf7589b5d46b4",
+    "normalization": {
+      "axis_rotation_x_radians": 0,
+      "forward_rotation_y_radians": 3.141592653589793,
+      "source_forward_assumption": "+Z",
+      "semantic_front_verified": false,
+      "placement": "center_xz_min_y_after_scale_and_rotation"
+    },
+    "animation_clips": [
+      "CharacterArmature|Death",
+      "CharacterArmature|Gun_Shoot",
+      "CharacterArmature|HitRecieve",
+      "CharacterArmature|HitRecieve_2",
+      "CharacterArmature|Idle",
+      "CharacterArmature|Idle_Gun",
+      "CharacterArmature|Idle_Gun_Pointing",
+      "CharacterArmature|Idle_Gun_Shoot",
+      "CharacterArmature|Idle_Neutral",
+      "CharacterArmature|Idle_Sword",
+      "CharacterArmature|Interact",
+      "CharacterArmature|Kick_Left",
+      "CharacterArmature|Kick_Right",
+      "CharacterArmature|Punch_Left",
+      "CharacterArmature|Punch_Right",
+      "CharacterArmature|Roll",
+      "CharacterArmature|Run",
+      "CharacterArmature|Run_Back",
+      "CharacterArmature|Run_Left",
+      "CharacterArmature|Run_Right",
+      "CharacterArmature|Run_Shoot",
+      "CharacterArmature|Sword_Slash",
+      "CharacterArmature|Walk",
+      "CharacterArmature|Wave"
+    ],
+    "material_tint_names": [
+      "LightBrown"
+    ],
+    "resolved_node_count": 88
+  },
+  {
+    "id": "character.base.casual_adult_02",
+    "relative_path": "LowPoly/character/base/character.base.casual_adult_02.glb",
+    "category": "character",
+    "subcategory": "base",
+    "tags": [
+      "character",
+      "base",
+      "casual",
+      "adult",
+      "woman",
+      "hair",
+      "face",
+      "rigged",
+      "animated"
+    ],
+    "suggested_scale_m": 0.37591854203227465,
+    "y_up": true,
+    "character_rigged": true,
+    "license": "CC0-1.0",
+    "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "source_url": "https://poly.pizza/m/jpKRgGDxhk",
+    "author": "Quaternius",
+    "approx_tris": 2776,
+    "sha256": "99c4df0aaabd19022809facc68f5fb5f564d35df3a9893c273a31fdaacf68e96",
+    "normalization": {
+      "axis_rotation_x_radians": 0,
+      "forward_rotation_y_radians": 3.141592653589793,
+      "source_forward_assumption": "+Z",
+      "semantic_front_verified": false,
+      "placement": "center_xz_min_y_after_scale_and_rotation"
+    },
+    "animation_clips": [
+      "HumanArmature|Female_Clapping",
+      "HumanArmature|Female_Death",
+      "HumanArmature|Female_Idle",
+      "HumanArmature|Female_Jump",
+      "HumanArmature|Female_Punch",
+      "HumanArmature|Female_Run",
+      "HumanArmature|Female_RunningJump",
+      "HumanArmature|Female_Sitting",
+      "HumanArmature|Female_Standing",
+      "HumanArmature|Female_SwordSlash",
+      "HumanArmature|Female_Walk"
+    ],
+    "material_tint_names": [
+      "Shirt"
+    ],
+    "resolved_node_count": 48
+  },
+  {
     "id": "character.base.neutral_humanoid_01",
     "relative_path": "LowPoly/character/base/character.base.neutral_humanoid_01.glb",
     "category": "character",
@@ -3659,7 +3772,8 @@
       "semantic_front_verified": false,
       "placement": "center_xz_min_y_after_scale_and_rotation"
     },
-    "animation_clips": []
+    "animation_clips": [],
+    "resolved_node_count": 20
   },
   {
     "id": "character.crowd_proxy.blockout_figurine_01",

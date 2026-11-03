@@ -1,0 +1,3 @@
+# Keep the supplied license index's CRLF format without false whitespace errors.
+assets/lowpoly_cc0/LICENSE_INDEX.csv whitespace=cr-at-eol
+ios/Braive/Resources/LowPoly/LICENSE_INDEX.csv whitespace=cr-at-eol

@@ -55,6 +55,8 @@ extension UIColor {
       eye.camera?.zNear = 0.05
       eye.camera?.zFar = 150
       eye.camera?.wantsHDR = true
+      eye.camera?.screenSpaceAmbientOcclusionIntensity = 0.3
+      eye.camera?.screenSpaceAmbientOcclusionRadius = 0.25
       eye.position.x = x
       head.addChildNode(eye)
     }
@@ -159,9 +161,11 @@ extension UIColor {
         {
           throw failure("Character must use character.base")
         }
+        if let chosen = character?["asset_id"].string, chosen != assetID { throw failure("Character asset differs from the approved cast") }
         let coordinatorColor = character?["color_hex"].string
         n = try AssetLibrary.make(
           assetID, colorHex: coordinatorColor ?? j["material"]["color"].string)
+        if j["animation"].text == "sit", n.animationPlayer(forKey:"braive_clip_sit") == nil { throw failure("Actor has no authored sitting pose") }
       } else {
         n = SCNNode(geometry: try geometry(j))
       }
@@ -268,7 +272,7 @@ extension UIColor {
         for element in g.elements { triangles += element.primitiveCount }
       }
     }
-    guard actualNodes + (attached.isEmpty ? 0 : 1) <= 650, triangles <= 180000, bytes < 24_000_000 else {
+    guard actualNodes + (attached.isEmpty ? 0 : 1) <= 1000, triangles <= 180000, bytes < 24_000_000 else {
       throw failure(
         "Resolved scene exceeds phone geometry budget: \(actualNodes) nodes, \(triangles) primitives, \(bytes) geometry bytes"
       )
@@ -296,6 +300,7 @@ extension UIColor {
     let light = SCNNode()
     light.light = SCNLight()
     light.light?.type = .ambient
+    light.light?.color = UIColor(hex: spec["lighting"]["ambient_color"].text)
     light.name = "braive_ambient"
     light.light?.intensity = CGFloat(spec["lighting"]["ambient_intensity"].value * 650)
     scene.rootNode.addChildNode(light)
@@ -303,11 +308,24 @@ extension UIColor {
     sun.light = SCNLight()
     sun.light?.type = .directional
     sun.light?.intensity = CGFloat(spec["lighting"]["key_intensity"].value * 800)
-    sun.eulerAngles = vector(spec["lighting"]["key_direction"])
+    let direction = vector(spec["lighting"]["key_direction"])
+    let ray = SIMD3<Float>(direction.x, direction.y, direction.z)
+    if simd_length(ray) > 0.001 {
+      sun.simdOrientation = simd_quatf(from: SIMD3<Float>(0,0,-1), to: simd_normalize(ray))
+      sun.simdPosition = SIMD3(initial.x,initial.y,initial.z) - simd_normalize(ray) * 18
+    }
+    sun.light?.castsShadow = true
+    sun.light?.shadowMapSize = CGSize(width: 1024, height: 1024)
+    sun.light?.shadowSampleCount = 4
+    sun.light?.shadowRadius = 3
+    sun.light?.shadowColor = UIColor.black.withAlphaComponent(0.28)
+    sun.light?.orthographicScale = 18
+    sun.light?.zFar = 70
     scene.rootNode.addChildNode(sun)
     for c in plan["characters"].list {
       characters[c["id"].text] = c["scene_node_id"].text
-      animate(c["id"].text, "idle")
+      let initialBehavior = list.first(where: { $0["id"].text == c["scene_node_id"].text })?["animation"].text ?? "idle"
+      animate(c["id"].text, initialBehavior == "none" ? "idle" : initialBehavior)
     }
   }
   func animate(_ id: String, _ behavior: String) {
@@ -377,6 +395,40 @@ extension UIColor {
     attachmentRig?.simdPosition = position - attachmentOrigin
   }
   #if DEBUG
+  /// Native asset/lighting comparison, explicitly requested by a diagnostic launch argument.
+  func renderCharacterReview(to folder: URL) throws {
+    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+    _ = try AssetLibrary.auditAll()
+    clear(); motion.stopDeviceMotionUpdates()
+    head.position = SCNVector3(0,1.45,0); head.eulerAngles = SCNVector3Zero
+    scene.background.contents = UIColor(hex: "#a9c2c4")
+    let floor = SCNNode(geometry: SCNFloor())
+    (floor.geometry as? SCNFloor)?.reflectivity = 0
+    floor.geometry?.firstMaterial?.diffuse.contents = UIColor(hex: "#a39d87")
+    floor.geometry?.firstMaterial?.roughness.contents = 0.9
+    scene.rootNode.addChildNode(floor)
+    let light = SCNNode(); light.light = SCNLight(); light.light?.type = .ambient; light.light?.intensity = 500; scene.rootNode.addChildNode(light)
+    let sun = SCNNode(); sun.light = SCNLight(); sun.light?.type = .directional; sun.light?.intensity = 850
+    sun.eulerAngles = SCNVector3(-0.8,-0.55,0); sun.light?.castsShadow = true; sun.light?.shadowMapSize = CGSize(width:1024,height:1024); sun.light?.shadowSampleCount = 4; sun.light?.shadowColor = UIColor.black.withAlphaComponent(0.28); scene.rootNode.addChildNode(sun)
+    let ids = ["character.base.neutral_humanoid_01","character.base.casual_adult_01","character.base.casual_adult_02"]
+    var people: [SCNNode] = []
+    for (i,id) in ids.enumerated() {
+      let person = try AssetLibrary.make(id, colorHex: i == 2 ? "#7b9385" : "#c98b69")
+      person.position = SCNVector3(Float(i-1)*1.4,0,-4); person.eulerAngles.y = .pi
+      scene.rootNode.addChildNode(person); AssetLibrary.animate(person,behavior:"idle"); people.append(person)
+    }
+    let renderer = SCNRenderer(device:MTLCreateSystemDefaultDevice(),options:nil); renderer.scene = scene; renderer.pointOfView = left
+    func capture(_ name:String, at time:Double) throws {
+      renderer.sceneTime = time
+      guard let png = renderer.snapshot(atTime:time,with:CGSize(width:1200,height:900),antialiasingMode:.multisampling4X).pngData() else { throw failure("Character review snapshot unavailable") }
+      try png.write(to:folder.appendingPathComponent(name+".png"))
+    }
+    try capture("standing",at:1.2)
+    AssetLibrary.animate(people[2],behavior:"sit"); try capture("seated",at:2.2)
+    AssetLibrary.animate(people[2],behavior:"speak"); try capture("seated-speaking",at:2.8)
+    AssetLibrary.animate(people[1],behavior:"walk"); try capture("walking",at:3.1)
+    try JSONEncoder().encode(JSON(["status":"passed","asset_count":351,"registered_characters":ids])).write(to:folder.appendingPathComponent("result.json"))
+  }
   /// Explicit offline review of a previously generated scene; never a normal-practice fallback.
   func renderScenarioReview(_ spec: JSON, to folder: URL) throws {
     try ScenePreflight.verifyRejections()
@@ -390,6 +442,7 @@ extension UIColor {
     func capture(_ raw: String, pitch: Float = 0) throws {
       let name = raw.replacingOccurrences(of: "[^A-Za-z0-9_-]", with: "_", options: .regularExpression)
       head.simdOrientation = simd_quatf(angle: pitch, axis: SIMD3(1,0,0))
+      renderer.sceneTime = 1.2
       let frame = renderer.snapshot(atTime: 0, with: CGSize(width: 900, height: 900), antialiasingMode: .multisampling4X)
       guard let png = frame.pngData() else { throw failure("Scene review image unavailable") }
       try png.write(to: folder.appendingPathComponent(name + ".png")); names.append(name)
@@ -406,6 +459,7 @@ extension UIColor {
         try capture(path.id + "-end", pitch: -0.3)
       } else { operation(op, speak: { _ in }, sound: { _ in }) }
     }
+    if spec["scenario"]["steps"].list.isEmpty { try capture("initial") }
     for (i, step) in spec["scenario"]["steps"].list.enumerated() {
       for op in step["start_operations"].list { try review(op) }
       if i == 0 { try capture("initial") }

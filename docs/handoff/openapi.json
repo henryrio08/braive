@@ -588,6 +588,10 @@
             "type": "string",
             "pattern": "^#[0-9A-Fa-f]{6}$",
             "description": "Coordinator-chosen solid diffuse color; Wonder copies into the character node Material.color."
+          },
+          "asset_id": {
+            "type": "string",
+            "description": "Registered rigged character.base asset chosen by the coordinator; preserve it in the scene."
           }
         },
         "required": [
@@ -1313,7 +1317,11 @@
               "idle",
               "listen",
               "speak",
-              "gesture"
+              "gesture",
+              "walk",
+              "run",
+              "swim",
+              "sit"
             ]
           },
           "description": {
@@ -1403,7 +1411,8 @@
                   "gesture",
                   "walk",
                   "run",
-                  "swim"
+                  "swim",
+                  "sit"
                 ]
               }
             },

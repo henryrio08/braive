@@ -1,0 +1,26 @@
+[
+  {
+    "asset_id": "character.base.casual_adult_01",
+    "source_url": "https://poly.pizza/m/kZ3DmIoGip",
+    "download_url": "https://static.poly.pizza/90a9e2d4-053f-42f1-99a2-8f5e1180ea7f.glb",
+    "author": "Quaternius",
+    "license": "CC0-1.0",
+    "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "sha256": "fea7e71271203e7073f1a073fa1208de7402df276f87f80e149bf7589b5d46b4",
+    "material_tint_names": [
+      "LightBrown"
+    ]
+  },
+  {
+    "asset_id": "character.base.casual_adult_02",
+    "source_url": "https://poly.pizza/m/jpKRgGDxhk",
+    "download_url": "https://static.poly.pizza/51d5abdd-bb87-4b8d-9967-21738ffb8437.glb",
+    "author": "Quaternius",
+    "license": "CC0-1.0",
+    "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "sha256": "99c4df0aaabd19022809facc68f5fb5f564d35df3a9893c273a31fdaacf68e96",
+    "material_tint_names": [
+      "Shirt"
+    ]
+  }
+]

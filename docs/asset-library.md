@@ -1,10 +1,10 @@
 # Bundled CC0 low-poly library
 
-The shared allowlist contains **349 original GLBs** from the supplied pack. `assets/lowpoly_cc0/LICENSE_INDEX.csv` is the license authority. The importer rejects missing/duplicate rows, non-`CC0-1.0` licenses, unsafe paths, mismatched filename IDs, nonpositive scales, malformed/truncated GLBs, and external dependencies. It never downloads, regenerates, converts, remeshes, or substitutes models. Source and runtime GLBs have identical SHA-256 hashes.
+The shared allowlist contains **351 GLBs**: all 349 originals from the supplied pack plus two clothed, rigged Quaternius adults. Their author model pages identify them as [Public Domain/CC0](https://poly.pizza/m/kZ3DmIoGip) and [CC0](https://poly.pizza/m/jpKRgGDxhk). `assets/lowpoly_cc0/LICENSE_INDEX.csv` is the license authority. The importer rejects missing/duplicate rows, non-`CC0-1.0` licenses, unsafe paths, mismatched filename IDs, nonpositive scales, malformed/truncated GLBs, and external dependencies. It never downloads, regenerates, converts, remeshes, or substitutes models. Source and runtime GLBs have identical SHA-256 hashes.
 
 ## Rebuild and check
 
-The pack is extracted under `assets/lowpoly_cc0/`, preserving category/subcategory directories. Both the source and bundle copies are committed (each copy is approximately 8.5 MB; Git deduplicates their identical contents). No Git LFS installation or private download is required after cloning.
+The pack is extracted under `assets/lowpoly_cc0/`, preserving category/subcategory directories. Both the source and bundle copies are committed (each copy is approximately 10.5 MB; Git deduplicates their identical contents). No Git LFS installation or private download is required after cloning.
 
 ```sh
 python3 scripts/import-lowpoly-pack.py --dry-run
@@ -35,9 +35,13 @@ Assets are cached as normalized templates. Instances share immutable vertex data
 
 ## Characters and color
 
-All app characters use `character.base.neutral_humanoid_01`. Other `character.crowd_proxy` meshes remain importable inventory objects but are rejected as character nodes. The coordinator chooses optional `Character.color_hex`; Wonder copies it into the existing character node's `Material.color`. The backend checks that match, and iOS applies a single solid diffuse UIColor to the neutral figure. If neither field supplies a valid hex, iOS chooses a random solid color. No wardrobe textures are generated or required. Other GLBs retain their source materials and textures.
+The original `character.base.neutral_humanoid_01` remains available for existing scenes and solid-color mannequin use. New plans prefer `character.base.casual_adult_01` and `character.base.casual_adult_02` for everyday people, preserving their source skin, hair, facial and wardrobe details. `Character.asset_id` is optional for stored records and preserved exactly when supplied by the coordinator. Other crowd-proxy meshes remain excluded as characters.
 
-The neutral asset has a skeleton and **no authored animation clips**, in its original T pose. `idle`, `listen`, `speak`, and `gesture` prefer a matching supplied clip; for this known base they use small app-owned chest/head/elbow joint motions around the original pose. They do not fabricate GLB clips, replace the skeleton, alter vertex/weight data, or claim a seated or lip-synced animation. An absent/unrecognized rig binding safely no-ops. Dialogue and TTS remain app services. Future authored, appropriately licensed clips can bind to the preserved rig.
+The coordinator color tints only the registered clothing material (`LightBrown` on adult 01, `Shirt` on adult 02); it does not recolor skin, eyes or hair. Supplemental material bindings and direct download URLs/hashes are recorded in `character-provenance.json`, while the CSV remains the license authority. The importer validates that each clothing material exists and excludes skin/hair/eye bindings. Every source/runtime GLB remains byte-identical; no mesh, weights or skeleton is remeshed.
+
+The clothed models register only authored idle, walk, run and appropriate gesture/sit clips. Source files contain other clips, which the app never registers or exposes as scenario tools. Animation players are copied per instance. Sitting persists through listen/speak, and movement releases that posture. Both stereo renderers use the same pause-aware scene timestamp. The original mannequin retains the app-owned subtle joint motions and gait fallback. None of this supplies lip sync or full-body tracking.
+
+The source normalization scales target approximately 1.75m for the new standing models. As with the original pack, chairs and actors must be composed around the actual pose. The coordinator receives per-character node costs; the phone enforces 1,000 resolved nodes, 180,000 primitives and 24MB of geometry data. The expanded node allowance accommodates detailed skeletons rather than increasing mesh/geometry limits. An eight-person comparison uses 767 nodes, 43,065 primitives and about 2.64MB of geometry data. Sustained physical-phone performance remains to be measured.
 
 ## Authoring capabilities and gaps
 

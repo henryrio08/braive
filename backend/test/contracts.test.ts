@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { sceneIssues, validate, AppError, outputSchema } from '../src/contracts.js';
+import { sceneIssues, planIssues, validate, AppError, outputSchema } from '../src/contracts.js';
 import {assetManifest} from '../src/assets.js';
 import { model } from '../src/meta.js';
 import type { SessionPlan, SceneSpec, AudioPlan } from '../../docs/handoff/contracts.js';
@@ -31,25 +31,37 @@ test('provider prompts include only reachable schema definitions',()=>{
  assert.equal(audio.$defs.SceneSpec,undefined);
  assert.ok(JSON.stringify(audio).length<6000);
  assert.ok(!JSON.stringify(audio).includes('#/components/'));
+ assert.ok(outputSchema('SessionPlan').$defs.Character.required.includes('asset_id'));
 });
 
 
 test('unknown mesh IDs are rejected by shared manifest',()=>{const s=scene();s.nodes[0].geometry={kind:'asset',asset_id:'furniture.podium.invented'};assert.ok(sceneIssues(plan,s,audio).some(i=>i.rule==='asset'));});
-test('characters require the single neutral skinned base and preserve coordinator color',()=>{
+test('characters require registered skinned bases and preserve coordinator appearance',()=>{
  const s=scene();s.nodes[0].role='character';const p={...plan,characters:[{id:'speaker',scene_node_id:'lectern',color_hex:'#33AABB'}]} as unknown as SessionPlan;
  assert.ok(sceneIssues(p,s,audio).some(i=>i.rule==='neutral_character'));
  s.nodes[0].geometry={kind:'asset',asset_id:'character.base.neutral_humanoid_01'};
  assert.ok(sceneIssues(p,s,audio).some(i=>i.rule==='character_color'));
  s.nodes[0].material.color='#33AABB';s.nodes[0].role='task_focus';assert.deepEqual(sceneIssues(p,s,audio),[]);
+ p.characters[0].asset_id='character.base.casual_adult_01';
+ assert.ok(sceneIssues(p,s,audio).some(i=>i.rule==='character_asset'));
+ s.nodes[0].geometry={kind:'asset',asset_id:p.characters[0].asset_id};assert.deepEqual(sceneIssues(p,s,audio),[]);
+ s.nodes[0].animation='sit';assert.ok(sceneIssues(p,s,audio).some(i=>i.rule==='supported_pose'));
+ p.characters[0].asset_id='character.base.casual_adult_02';s.nodes[0].geometry={kind:'asset',asset_id:p.characters[0].asset_id};assert.deepEqual(sceneIssues(p,s,audio),[]);
 });
-test('349 licensed IDs and byte-identical backend/iOS manifests',async()=>{
- const {readFileSync}=await import('node:fs');assert.equal(assetManifest.length,349);assert.ok(assetManifest.every(a=>a.license==='CC0-1.0'));
+test('351 licensed IDs and byte-identical backend/iOS manifests',async()=>{
+ const {readFileSync}=await import('node:fs');assert.equal(assetManifest.length,351);assert.ok(assetManifest.every(a=>a.license==='CC0-1.0'));
  assert.equal(readFileSync(new URL('../assets/asset_manifest.json',import.meta.url),'utf8'),readFileSync(new URL('../../ios/Braive/Resources/asset_manifest.json',import.meta.url),'utf8'));
 });
 test('compact generation catalog preserves every licensed asset and its complexity',async()=>{
  const {meshCatalog}=await import('../src/assets.js');
  const entries=Object.values(meshCatalog).flat();
- assert.equal(entries.length,349);
- assert.equal(new Set(entries.map(([id])=>id)).size,349);
+ assert.equal(entries.length,351);
+ assert.equal(new Set(entries.map(([id])=>id)).size,351);
  for(const asset of assetManifest)assert.deepEqual(entries.find(([id])=>id===asset.id),[asset.id,asset.approx_tris]);
+});
+test('coordinator budgets real skeleton node costs before scene construction',()=>{
+ const p={...plan,narrator_intro_8s:'To stop at any time, just say STOP!',stop_reminder:'To stop at any time, just say STOP!',narrator_beats:[],tool_calls:[],
+  characters:Array.from({length:12},(_,i)=>({id:'person_'+i,asset_id:'character.base.casual_adult_01',voice_id:'default'}))} as unknown as SessionPlan;
+ assert.ok(planIssues(p).some(i=>i.rule==='budget'));
+ p.characters=p.characters.slice(0,8);assert.deepEqual(planIssues(p),[]);
 });

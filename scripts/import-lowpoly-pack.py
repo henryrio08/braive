@@ -39,6 +39,8 @@ def inspect_glb(path):
 
 def inventory(source):
     with (source/'LICENSE_INDEX.csv').open(encoding='utf-8-sig', newline='') as f: rows=list(csv.DictReader(f))
+    supplements_path=source/'character-provenance.json'
+    supplements={a['asset_id']:a for a in json.loads(supplements_path.read_text())} if supplements_path.exists() else {}
     indexed={}; ids=set(); manifest=[]
     for r in rows:
         rel=PurePosixPath(r['file_path'])
@@ -60,10 +62,16 @@ def inventory(source):
         if not path.is_file() or path.is_symlink() or not path.resolve().is_relative_to(source.resolve()): raise ValueError('Missing or unsafe GLB: '+str(rel))
         gltf,digest=inspect_glb(path)
         manifest.append(dict(id=expected,relative_path='LowPoly/'+str(rel),category=r['category'],subcategory=r['subcategory'],tags=r['tags'].split(';'),suggested_scale_m=scale,y_up=r['y_up']=='true',character_rigged=bool(gltf.get('skins')),license='CC0-1.0',license_url=r['license_url'],source_url=r['source_pack_or_url'],author=r['author'],approx_tris=int(r['approx_tris']),sha256=digest,normalization={'axis_rotation_x_radians':0 if r['y_up']=='true' else -math.pi/2,'forward_rotation_y_radians':math.pi,'source_forward_assumption':'+Z','semantic_front_verified':False,'placement':'center_xz_min_y_after_scale_and_rotation'},animation_clips=[a.get('name',f'clip_{i}') for i,a in enumerate(gltf.get('animations',[]))]))
+        tint_names=supplements.get(expected,{}).get('material_tint_names',[])
+        if tint_names:
+            names={m.get('name') for m in gltf.get('materials',[])}
+            if not isinstance(tint_names,list) or any(n not in names or any(p in n.lower() for p in ['skin','hair','eye']) for n in tint_names): raise ValueError('Invalid clothing tint binding: '+expected)
+            manifest[-1]['material_tint_names']=tint_names
+        if r['category']=='character' and r['subcategory']=='base': manifest[-1]['resolved_node_count']=len(gltf.get('nodes',[]))+3
     found={p.relative_to(source).as_posix() for p in source.rglob('*.glb')}
     if found!=set(indexed): raise ValueError('CSV/GLB mismatch; unindexed='+str(sorted(found-set(indexed)))+' missing='+str(sorted(set(indexed)-found)))
     bases=[r for r in manifest if r['id'].startswith('character.base.')]
-    if len(bases)!=1 or not bases[0]['character_rigged']: raise ValueError('Require exactly one skinned neutral character.base')
+    if not any(r['id']=='character.base.neutral_humanoid_01' for r in bases) or not all(r['character_rigged'] for r in bases): raise ValueError('Require the original neutral base and skinned registered character bases')
     return sorted(manifest,key=lambda r:r['id'])
 
 def main():

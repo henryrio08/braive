@@ -22,7 +22,7 @@ Only actions belonging to the current stage execute. A command for a later stage
 
 ## Coherence and limits
 
-Coordinator cast, scene-node IDs, colors, approved props, stage IDs and stage action IDs must match. Licensed GLBs remain intact. Missing props can use AI-authored procedural assemblies bound to an approved prop name. This does not permit invented asset IDs or replacement character meshes.
+Coordinator cast, scene-node IDs, colors, approved props, stage IDs and stage action IDs must match. Licensed GLBs remain intact. The coordinator can select a registered clothed adult asset; skin/hair are preserved while clothing receives the approved tint. A supported sit pose persists through dialogue. Missing props can use AI-authored procedural assemblies bound to an approved prop name. This does not permit invented asset IDs or replacement character meshes.
 
 The backend validates graph references, stage order, path timing, meaningful actions, actual requested movement and resource bounds. Native preflight builds the real geometry offscreen and checks task visibility and visible surface depth in both eyes. Its depth pass measures each surface fragment rather than treating a large plane as entirely located at its center. A validation failure remains a failure; one shared repair and the original 120-second generation deadline still apply.
 

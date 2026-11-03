@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import Ajv from 'ajv';
-import {assetIDs,characterIDs} from './assets.js';
+import {assetIDs,characterIDs,assetManifest} from './assets.js';
 import addFormats from 'ajv-formats';
 import type { ValidationIssue, SceneSpec, SessionPlan, AudioPlan, WorldOperation } from '../../docs/handoff/contracts.js';
 export const document = JSON.parse(readFileSync(new URL('../../docs/handoff/openapi.json', import.meta.url), 'utf8'));
@@ -19,6 +19,7 @@ export function sceneIssues(plan: SessionPlan, scene: SceneSpec, audio: AudioPla
  const fail = (path: string, rule: string, message: string) => issues.push({path,rule,message});
  for (const [key, output] of Object.entries({scene,audio})) if(output.session_id !== plan.session_id || output.revision !== plan.revision) fail(`/${key}/revision`,'revision','Must match approved plan');
  const nodes = new Map(scene.nodes.map(n => [n.id,n]));
+ const supportsSit=(id:string)=>assetManifest.find(a=>a.id===id)?.animation_clips?.some(n=>n.toLowerCase().endsWith('_sitting'))===true;
  const attached=new Set(scene.viewer_attached_node_ids??[]);
  const carried=(id:string)=>{const seen=new Set<string>();let current:string|null=id;while(current&&!seen.has(current)){if(attached.has(current))return true;seen.add(current);current=nodes.get(current)?.parent_id??null;}return false;};
  for(const id of attached){
@@ -37,7 +38,8 @@ export function sceneIssues(plan: SessionPlan, scene: SceneSpec, audio: AudioPla
   const approvedProp=!!n.prop_name&&!!plan.props?.includes(n.prop_name);
   if(n.prop_name&&!approvedProp)fail(`/nodes/${i}/prop_name`,'prop_match','Scene prop name must match an approved plan prop');
   if(g.kind!=='asset' && n.role!=='environment' && !(plan.experience&&(n.role==='task_focus'||n.role==='prop'&&(approvedProp||carried(n.id))))) fail(`/nodes/${i}/geometry`,'architecture_only','Use GLBs or coherent procedural assemblies bound to an approved plan prop; characters require the registered rig');
-  if(n.role==='character' && (g.kind!=='asset' || !characterIDs.has(g.asset_id))) fail(`/nodes/${i}/geometry`,'neutral_character','Characters must use the sole character.base asset');
+  if(n.role==='character' && (g.kind!=='asset' || !characterIDs.has(g.asset_id))) fail(`/nodes/${i}/geometry`,'neutral_character','Characters must use a registered rigged character.base asset');
+  if(n.animation==='sit'&&(g.kind!=='asset'||!supportsSit(g.asset_id)))fail(`/nodes/${i}/animation`,'supported_pose','A seated actor requires a registered authored sitting pose');
   if(g.kind==='asset' && !assetIDs.has(g.asset_id)) fail(`/nodes/${i}/geometry`,'asset','Use only registered individual object assets.');
   if(g.kind==='box' && g.size.some(v=>v<=0) || g.kind==='sphere' && g.radius<=0 || g.kind==='cylinder' && (g.radius<=0 || g.height<=0) || g.kind==='plane' && (g.width<=0 || g.height<=0)) fail(`/nodes/${i}/geometry`,'size','Positive geometry dimensions required');
  }
@@ -48,7 +50,7 @@ export function sceneIssues(plan: SessionPlan, scene: SceneSpec, audio: AudioPla
  const characterRoots=new Set(plan.characters.map(c=>c.scene_node_id));
  for(const n of scene.nodes)if((n.role==='character'||(n.geometry.kind==='asset'&&characterIDs.has(n.geometry.asset_id)))&&!characterRoots.has(n.id))fail('/nodes','unplanned_character','Every visible character must belong to the approved cast');
  if(chars.size!==plan.characters.length) fail('/characters','unique','Duplicate characters');
- for(const c of plan.characters) {const n=nodes.get(c.scene_node_id);if(!n) fail('/nodes','character','Character root missing: '+c.scene_node_id);else {if(n.geometry.kind!=='asset' || !characterIDs.has(n.geometry.asset_id)) fail('/nodes','neutral_character','Every Character must resolve to character.base');if(c.color_hex && n.material.color.toLowerCase()!==c.color_hex.toLowerCase())fail('/nodes','character_color','Wonder must preserve coordinator color_hex in Material.color');}}
+ for(const c of plan.characters) {const n=nodes.get(c.scene_node_id);if(!n) fail('/nodes','character','Character root missing: '+c.scene_node_id);else {if(n.geometry.kind!=='asset' || !characterIDs.has(n.geometry.asset_id)) fail('/nodes','neutral_character','Every Character must resolve to a registered rigged character.base');if(c.asset_id&&(n.geometry.kind!=='asset'||n.geometry.asset_id!==c.asset_id))fail('/nodes','character_asset','Scene must preserve the coordinator-selected character asset');if(c.color_hex && n.material.color.toLowerCase()!==c.color_hex.toLowerCase())fail('/nodes','character_color','Wonder must preserve coordinator color_hex in Material.color');}}
  if(['dialogue','mixed'].includes(plan.interaction_mode) && !chars.size) fail('/characters','interaction','Dialogue requires characters');
  if(!scene.scenario && ['navigation','mixed'].includes(plan.interaction_mode) && !scene.interactions.some(i=>i.choices.some(c=>c.operations.some(o=>o.type==='viewpoint_transition')))) fail('/interactions','navigation','Need operational routes');
  if(!scene.scenario && plan.interaction_mode==='solo' && !scene.events.length && !scene.interactions.some(i=>i.choices.length)) fail('/interactions','solo','Need task events or inspection choices');
@@ -66,6 +68,10 @@ export function sceneIssues(plan: SessionPlan, scene: SceneSpec, audio: AudioPla
   if('node_id' in o && !nodes.has(o.node_id)) fail('/operations','reference','Unknown node');
   if(o.type==='viewpoint_transition' && !views.has(o.destination_id)) fail('/operations','reference','Unknown destination');
   if(o.type==='character_action' && !chars.has(o.character_id)) fail('/operations','reference','Unknown character');
+  if(o.type==='character_action' && o.behavior==='sit'){
+   const c=plan.characters.find(c=>c.id===o.character_id), n=c&&nodes.get(c.scene_node_id);
+   if(!n||n.geometry.kind!=='asset'||!supportsSit(n.geometry.asset_id))fail('/operations','supported_pose','This actor has no authored sitting pose');
+  }
   if(o.type==='play_sound' && !cues.has(o.cue_id)) fail('/operations','reference','Unknown cue');
   if((o.type==='move_viewer'||o.type==='move_node') && !paths.has(o.path_id)) fail('/operations','reference','Unknown motion path');
   if(o.type==='move_node'&&carried(o.node_id))fail('/operations','motion','A viewer-carried assembly cannot also have independent world motion');
@@ -118,6 +124,9 @@ export function planIssues(plan: SessionPlan): ValidationIssue[] {
   if(t.tool==='plan_audio' && t.arguments.duration_sec!==plan.duration_sec) fail(`/tool_calls/${i}/arguments/duration_sec`,'duration','Audio duration differs from plan');
  }
  if(plan.characters.some(c=>c.voice_id!=='default')) fail('/characters','voice','Only app-selected default voice is registered');
+ if(plan.characters.some(c=>c.asset_id&&!characterIDs.has(c.asset_id)))fail('/characters','character_asset','Choose a registered rigged character.base asset');
+ const castNodes=plan.characters.reduce((n,c)=>n+(assetManifest.find(a=>a.id===c.asset_id)?.resolved_node_count??0),0);
+ if(castNodes>750)fail('/characters','budget','The selected cast leaves too little of the 1000 resolved-node budget for its setting. Preserve participants and requested appearance; choose suitable registered assets within the budget.');
  if(plan.experience){
   const stages=plan.experience.stages;
   if(!stages.length||new Set(stages.map(s=>s.id)).size!==stages.length)fail('/experience/stages','unique','Unique executable stages required');
@@ -146,5 +155,6 @@ export function outputSchema(name: string): any {
  // Additive wire fields keep old saved records readable; newly authored outputs must realize them.
  const required=name==='SessionPlan'?['experience']:name==='SceneSpec'?['scenario','motion_paths','view_distance_meters','viewer_attached_node_ids']:[];
  if(required.length)root.required=[...new Set([...root.required,...required])];
+ if(name==='SessionPlan'&&defs.Character)defs.Character.required=[...new Set([...defs.Character.required,'asset_id'])];
  return {...root,$defs:defs};
 }

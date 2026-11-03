@@ -56,14 +56,14 @@ struct ContentView: View {
         if s.phase == .setup {
         VStack {
           HStack {
-            Text("braive").font(.system(size: 22, weight: .semibold, design: .serif)).tracking(-0.5)
+            HStack(spacing: 9) {
+              if UIImage(named: "BrandMark") != nil { Image("BrandMark").resizable().scaledToFit().frame(width: 30,height:30).clipShape(RoundedRectangle(cornerRadius:7)) }
+              Text("braive").font(.system(size: 22, weight: .semibold, design: .serif)).tracking(-0.5)
+            }
             Spacer()
             Button { panel = .settings } label: {
               Image(systemName: "slider.horizontal.3").frame(width: 36, height: 36)
             }.accessibilityLabel("Settings")
-            if s.phase != .setup {
-              Button("End practice") { s.finish(early: true) }.font(.caption)
-            }
           }.foregroundStyle(.white.opacity(0.8)).padding(.horizontal, 28).padding(.top, 8)
           Spacer()
         }.allowsHitTesting(s.pauses.isEmpty)
@@ -96,7 +96,7 @@ struct ContentView: View {
         Text("Practice before\nit counts.")
           .font(.system(size: 43, weight: .regular, design: .serif)).tracking(-1.5)
           .fixedSize(horizontal: false, vertical: true)
-        Text("The presentation. The interview.\nThe conversation you keep putting off.")
+        Text("Try something unfamiliar.\nFind your footing. Go again.")
           .font(.system(size: 15)).foregroundStyle(.white.opacity(0.7)).lineSpacing(4)
         HStack(spacing: 8) {
           Image(systemName: "waveform").foregroundStyle(accent)
@@ -104,7 +104,7 @@ struct ContentView: View {
         }.font(.system(size: 12)).padding(.top, 4)
       }.frame(maxWidth: .infinity, alignment: .leading)
       VStack(alignment: .leading, spacing: 14) {
-        Text("A little preparation.\nA more confident next step.")
+        Text("Your voice.\nYour next challenge.")
           .font(.system(size: 20, weight: .medium, design: .serif))
         Text("Describe the moment you want to practice. Speech stays on this iPhone; your words shape the experience.")
           .font(.system(size: 13)).foregroundStyle(.white.opacity(0.65)).fixedSize(horizontal: false, vertical: true)
@@ -134,7 +134,7 @@ struct ContentView: View {
   }
   var eyeHUD: some View {
     HeadsetHUD(copy: s.headsetCopy,
-      status: s.voiceListening ? "Listening" : s.connecting ? "Getting ready" : "Voice unavailable",
+      status: s.voiceListening ? (s.characterReplyPending ? "Reply on its way" : "Listening") : s.connecting ? "Getting ready" : "Voice unavailable",
       remaining: s.phase == .active && !s.loading ? s.remaining : nil,
       preparing: s.loading || (s.phase == .planning && !s.builder))
   }
@@ -245,6 +245,14 @@ struct ContentView: View {
         Section("Your sessions") {
           ShareLink("Export session history", item: s.store.root.appendingPathComponent("SESSIONS.csv"))
           Button("Delete history and reflections", role: .destructive) { confirmDelete = true }
+        }
+        Section("Voice controls") {
+          Text("Finish a setup answer with THAT’S ALL. Say HELP during practice to hear your next options. STOP pauses practice; NO resumes from your place.")
+            .font(.footnote).foregroundStyle(.secondary)
+        }
+        Section("About Braive") {
+          Text("Version \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "") (\(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? ""))")
+            .font(.footnote).foregroundStyle(.secondary)
         }
         Section {
           DisclosureGroup("Connection setup") {
