@@ -3,19 +3,24 @@ import SceneKit
 /// Geometric segment probes against the loaded meshes, never their whole asset
 /// bounding boxes (a room's bounds are not a solid box).
 @MainActor enum RouteAudit {
+  private static let collisionRoles = NSMapTable<SCNNode, NSString>(keyOptions: .weakMemory, valueOptions: .strongMemory)
+  static func setCollisionRole(_ role: String, for node: SCNNode) {
+    collisionRoles.setObject(role as NSString, forKey: node)
+  }
   static func check(root: SCNNode, points: [SCNVector3], walking: Bool,
     ignored: [SCNNode] = [], radius: Float = 0.25, eyeHeight: Float = 1.6) throws {
     guard points.count > 1 else { return }
     func ignoredHit(_ node: SCNNode) -> Bool {
       var cursor: SCNNode? = node
       while let n = cursor {
-        if ignored.contains(where: { $0 === n }) || n.userData?["collision_role"] as? String == "none" { return true }
+        let role = collisionRoles.object(forKey: n) as String?
+        if ignored.contains(where: { $0 === n }) || role == "none" { return true }
         cursor = n.parent
       }
       return false
     }
     func hits(_ a: SCNVector3, _ b: SCNVector3) -> [SCNHitTestResult] {
-      root.hitTestWithSegment(from:a,to:b,options:[.backFaceCulling:false,.ignoreHiddenNodes:true])
+      root.hitTestWithSegment(from:a,to:b,options:[SCNHitTestOption.backFaceCulling.rawValue:false,SCNHitTestOption.ignoreHiddenNodes.rawValue:true])
         .filter { !ignoredHit($0.node) }
     }
     for i in 1..<points.count {
@@ -48,7 +53,7 @@ import SceneKit
   static func support(root: SCNNode, node: SCNNode, support: SCNNode, contact: SCNVector3? = nil) throws {
     let bounds=node.boundingBox
     let foot=node.convertPosition(contact ?? SCNVector3((bounds.min.x+bounds.max.x)/2,bounds.min.y,(bounds.min.z+bounds.max.z)/2),to:root)
-    let hits=root.hitTestWithSegment(from:SCNVector3(foot.x,foot.y+0.2,foot.z),to:SCNVector3(foot.x,foot.y-0.25,foot.z),options:[.backFaceCulling:false]).filter { hit in
+    let hits=root.hitTestWithSegment(from:SCNVector3(foot.x,foot.y+0.2,foot.z),to:SCNVector3(foot.x,foot.y-0.25,foot.z),options:[SCNHitTestOption.backFaceCulling.rawValue:false]).filter { hit in
       var cursor:SCNNode?=hit.node
       while let n=cursor { if n === support { return true };cursor=n.parent }
       return false

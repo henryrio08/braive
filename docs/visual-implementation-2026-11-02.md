@@ -1,6 +1,6 @@
 # Construction and visual implementation
 
-This development implementation builds on partner branch `codex/bundled-lowpoly-library` through `89fc366`, plus the integrated runtime follow-up `5cb7522`. Version 0.4 (4) identifies the new source. It is not an installed or GPU-verified phone build.
+This development implementation builds on partner branch `codex/bundled-lowpoly-library` through `72b973c`, including its contextual loading tips and native collision API fix, plus the integrated runtime follow-up `5cb7522`. Version 0.4 (4) identifies the new source. It is not an installed or GPU-verified phone build.
 
 ## Product behavior preserved and clarified
 
@@ -9,6 +9,8 @@ The participant supplies fears, current ability and boundaries at intake. The co
 Henry chose to retain the partner's silent-action rule: any needed character dialogue classifies the entire experience as conversation, including mixed walking/conversation situations. This classification still requires physical movement when the task needs it. Speaking windows remain natural, timed and limited to an approved character. New provider schemas enforce empty stage actions and interaction choices; historical command graphs remain readable in saved records.
 
 The partner's automatic progression, completed final stage, latched motion completion, quiet-gap handling, STOP confirmation protection, source character models/palettes and local transcription remain. No voice-to-navigation fallback, topic-specific scene template or preset practice fallback is introduced. One repair remains shared with native validation inside the original 120-second generation deadline.
+
+The partner's tagged loading tips appear at launch and outside active practice; they rotate silently and do not navigate the scene. The merged route audit uses the partner's native-compatible collision-role map and hit-test keys together with explicit support contacts. The regenerated Xcode project includes both tips and visual sources.
 
 ## Implemented construction subset
 

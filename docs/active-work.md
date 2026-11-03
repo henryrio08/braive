@@ -1,5 +1,7 @@
 # Current coordination — November 2, 2026
 
+The partner's `72b973c` contextual loading tips and native RouteAudit compatibility fix are integrated into BraveWork. See [loading-tips.md](loading-tips.md). The partner's tip build and layout review passed on its source; device verification of the merged visual source remains pending. Scene generation, visual construction and model prompts stay with BraveWork.
+
 Runtime handoff: the automatic-flow, pause-confirmation and approved soft-character changes are finished and pushed. Henry has assigned further scene generation and visual work to the Codex working on BraveWork. See [guided-runtime-handoff.md](guided-runtime-handoff.md) for exact evidence, limitations and installation status. Do not continue overlapping scene/visual work from this chat.
 
 `codex/braive-work` has integrated `89fc366` and pushed the audit follow-up as `5cb7522`: stage/motion-owner validation, native route/stage checks, fade/material semantics, telemetry, typed dispatch, and checkpoint recovery. It now owns construction and visual implementation: measured bounds, spatial relations/routes, procedural sky, gentle context-adjustable shaders and updated authoring schemas. See [implementation evidence](visual-implementation-2026-11-02.md) and the [runtime follow-up](runtime-followup-2026-11-02.md) for verification limits. This Windows checkout has its own user-approved $50 cap; do not infer that it shares the Mac ledger file.

@@ -53,7 +53,17 @@ struct ContentView: View {
             pauseHUD.frame(width: geo.size.width / 2)
           }
         }
-        if s.phase == .setup {
+        if s.launching {
+          ZStack {
+            ink.ignoresSafeArea()
+            VStack(spacing: 18) {
+              Text("braive").font(.system(size: 36, weight: .regular, design: .serif))
+              ProgressView().tint(accent)
+              Text(s.loadingTip).font(.system(size: 17)).multilineTextAlignment(.center)
+            }.foregroundStyle(.white).padding(30)
+          }.accessibilityLabel("Getting Braive ready. " + s.loadingTip)
+        }
+        if s.phase == .setup && !s.launching {
         VStack {
           HStack {
             HStack(spacing: 9) {
@@ -79,6 +89,7 @@ struct ContentView: View {
     }
     .onAppear {
       UIApplication.shared.isIdleTimerDisabled = true
+      if s.launching { s.audio.play("whoosh", loop: false, gain: 0.15) }
       applyViewer()
     }
     .onChange(of: panel) { _, value in
