@@ -1,4 +1,6 @@
-# Current coordination — November 2, 2026
+# Current coordination — November 3, 2026
+
+After a real generation exceeded the former two-minute ceiling, the phone and backend now allow ten minutes for the whole generation/readiness attempt, including the one shared repair and native loading. The authoring prompt targets a complete ordinary scene in a few minutes through concise, coherent construction rather than sacrificing task fidelity or visual checks. This is a target until measured on Henry's device. Henry's separate branch owns UI and repeat-transcription confirmation changes; do not overwrite those while merging.
 
 November 3: Henry requested removal of readback/BEGIN PRACTICE and an orientation-independent black view until headset readiness. That change is on `codex/streamlined-intake`, to be pushed to main before phone installation. Timing work belongs to the other agent; its latest published change must be included in the combined phone build, without revising that logic here.
 
