@@ -12,7 +12,7 @@ export type ToolCall = ({ "tool": "compose_scene"; "execute_when": "setup" | "af
 
 export type NarratorBeat = { "at_active_second": number; "text": string };
 
-export type SessionPlan = { "schema_version": "1"; "session_id": string; "revision": number; "topic": string; "task_instruction": string; "setting_brief": string; "props": Array<string>; "intensity": Intensity; "intro_target_seconds": 8; "narrator_beats": Array<NarratorBeat>; "characters": Array<Character>; "interaction_mode": "solo" | "dialogue" | "navigation" | "mixed"; "tool_calls": Array<ToolCall>; "adaptation_rationale"?: string; "intensity_1_10": number; "topic_short": string; "duration_sec": number; "narrator_intro_8s": string; "stop_reminder": "To stop at any time, just say STOP!"; "audio_brief": string; "safety": SafetyDecision; "experience"?: ExperiencePlan };
+export type SessionPlan = { construction_brief?: ConstructionBrief; "schema_version": "1"; "session_id": string; "revision": number; "topic": string; "task_instruction": string; "setting_brief": string; "props": Array<string>; "intensity": Intensity; "intro_target_seconds": 8; "narrator_beats": Array<NarratorBeat>; "characters": Array<Character>; "interaction_mode": "solo" | "dialogue" | "navigation" | "mixed"; "tool_calls": Array<ToolCall>; "adaptation_rationale"?: string; "intensity_1_10": number; "topic_short": string; "duration_sec": number; "narrator_intro_8s": string; "stop_reminder": "To stop at any time, just say STOP!"; "audio_brief": string; "safety": SafetyDecision; "experience"?: ExperiencePlan };
 
 export type Asset = { "id": string; "kind": "mesh" | "texture" | "audio"; "description": string; "origin": "bundled" | "generated"; "bounds_meters"?: Array<number> };
 
@@ -20,17 +20,17 @@ export type SceneRequest = { "plan": SessionPlan; "capabilities_version": string
 
 export type Geometry = ({ "kind": "box"; "size": Array<number> }) | ({ "kind": "plane"; "width": number; "height": number }) | ({ "kind": "sphere"; "radius": number }) | ({ "kind": "cylinder"; "radius": number; "height": number }) | ({ "kind": "asset"; "asset_id": string });
 
-export type Material = { "color": string; "roughness": number; "texture_asset_id"?: string; "opacity"?: number; "double_sided"?: boolean };
+export type Material = { surface?: SurfaceProfile; "color": string; "roughness": number; "texture_asset_id"?: string; "opacity"?: number; "double_sided"?: boolean };
 
-export type SceneNode = { collision_role?: "solid" | "none"; support_node_id?: string | null; "id": string; "parent_id": string | null; "role": "environment" | "prop" | "character" | "task_focus"; "geometry": Geometry; "position": Array<number>; "rotation_radians": Array<number>; "scale": Array<number>; "material": Material; "animation": "none" | "idle" | "listen" | "speak" | "gesture" | "walk" | "run" | "swim" | "sit"; "description": string; "prop_name"?: string };
+export type SceneNode = { collision_role?: "solid" | "none"; support_node_id?: string | null; support_contact?: [number,number,number]; "id": string; "parent_id": string | null; "role": "environment" | "prop" | "character" | "task_focus"; "geometry": Geometry; "position": Array<number>; "rotation_radians": Array<number>; "scale": Array<number>; "material": Material; "animation": "none" | "idle" | "listen" | "speak" | "gesture" | "walk" | "run" | "swim" | "sit"; "description": string; "prop_name"?: string };
 
-export type WorldOperation = ({ "type": "set_visible"; "node_id": string; "visible": boolean }) | ({ "type": "set_material"; "node_id": string; "material": Material }) | ({ "type": "character_action"; "character_id": string; "behavior": "idle" | "listen" | "speak" | "gesture" | "walk" | "run" | "swim" | "sit" }) | ({ "type": "viewpoint_transition"; "destination_id": string; "transition": "fade" }) | ({ "type": "narrate"; "text": string }) | ({ "type": "play_sound"; "cue_id": string }) | ({ "type": "move_viewer"; "path_id": string }) | ({ "type": "move_node"; "node_id": string; "path_id": string; "face_motion": boolean }) | ({ "type": "set_environment"; "background_color": string; "fog_density": number; "ambient_intensity"?: number });
+export type WorldOperation = ({ "type": "set_visible"; "node_id": string; "visible": boolean }) | ({ "type": "set_material"; "node_id": string; "material": Material }) | ({ "type": "character_action"; "character_id": string; "behavior": "idle" | "listen" | "speak" | "gesture" | "walk" | "run" | "swim" | "sit" }) | ({ "type": "viewpoint_transition"; "destination_id": string; "transition": "fade" }) | ({ "type": "narrate"; "text": string }) | ({ "type": "play_sound"; "cue_id": string }) | ({ "type": "move_viewer"; "path_id": string }) | ({ "type": "move_node"; "node_id": string; "path_id": string; "face_motion": boolean }) | ({ "type": "set_environment"; environment?: VisualEnvironment; "background_color": string; "fog_density": number; "ambient_intensity"?: number });
 
 export type Choice = { "id": string; "label": string; "intent_examples": Array<string>; "operations": Array<WorldOperation> };
 
 export type Interaction = { "id": string; "prompt": string; "trigger": "user_request" | "scene_start" | "scheduled" | "choice_completed"; "at_active_second"?: number; "choices": Array<Choice> };
 
-export type SceneSpec = { "schema_version": "1"; "session_id": string; "revision": number; "description": string; "nodes": Array<SceneNode>; "viewpoints": Array<{ "id": string; "position": Array<number>; "description": string }>; "initial_viewpoint_id": string; "lighting": { "ambient_color": string; "ambient_intensity": number; "key_direction": Array<number>; "key_intensity": number }; "atmosphere": { "background_color": string; "fog_density": number }; "interactions": Array<Interaction>; "events": Array<{ "at_active_second": number; "operation": WorldOperation }>; "stereo": StereoSpec; "reveal": RevealSpec; "scenario"?: ScenarioSpec; "motion_paths"?: Array<MotionPath>; "view_distance_meters"?: number; "viewer_attached_node_ids"?: Array<string> };
+export type SceneSpec = { construction_plan?: ConstructionPlan; construction_report?: {compiler_version:"1";resolved_relation_ids:string[];warnings:ValidationIssue[]}; environment?: VisualEnvironment; "schema_version": "1"; "session_id": string; "revision": number; "description": string; "nodes": Array<SceneNode>; "viewpoints": Array<{ "id": string; "position": Array<number>; "description": string }>; "initial_viewpoint_id": string; "lighting": { "ambient_color": string; "ambient_intensity": number; "key_direction": Array<number>; "key_intensity": number }; "atmosphere": { "background_color": string; "fog_density": number }; "interactions": Array<Interaction>; "events": Array<{ "at_active_second": number; "operation": WorldOperation }>; "stereo": StereoSpec; "reveal": RevealSpec; "scenario"?: ScenarioSpec; "motion_paths"?: Array<MotionPath>; "view_distance_meters"?: number; "viewer_attached_node_ids"?: Array<string> };
 
 export type AudioRequest = { "plan": SessionPlan; "available_assets": Array<Asset> };
 
@@ -84,7 +84,7 @@ export type SessionFeedback = FeedbackResult;
 
 export type ExperiencePlan = { "progression"?: "guided"; "kind": "action" | "conversation"; "objective": string; "requires_motion": boolean; "stages": Array<{ "id": string; "goal": string; "action_ids": Array<string> }> };
 
-export type MotionPath = { "id": string; "purpose": "walk" | "run" | "swim" | "climb" | "fall" | "glide" | "ride" | "other"; "interpolation": "linear" | "smooth"; "coordinate_space"?: "world" | "relative"; "points": Array<{ "at_seconds": number; "position": Array<number> }> };
+export type MotionPath = { clearance_radius_meters?: number; eye_height_meters?: number; start_position?: number[]; "id": string; "purpose": "walk" | "run" | "swim" | "climb" | "fall" | "glide" | "ride" | "other"; "interpolation": "linear" | "smooth"; "coordinate_space"?: "world" | "relative"; "points": Array<{ "at_seconds": number; "position": Array<number> }> };
 
 export type ScenarioAction = { "id": string; "label": string; "phrases": Array<string>; "operations": Array<WorldOperation>; "next_step_id": string | null };
 
@@ -93,3 +93,19 @@ export type ScenarioCompletion = { "trigger": "after_seconds" | "motion_complete
 export type ScenarioStep = { conversation_target?: string; announce_on_entry?: boolean; review_viewpoint_id?: string; focus_node_ids?: string[]; "id": string; "prompt": string; "terminal": boolean; "start_operations": Array<WorldOperation>; "actions": Array<ScenarioAction>; "completion"?: ScenarioCompletion };
 
 export type ScenarioSpec = { "progression"?: "guided"; "objective": string; "initial_step_id": string; "dialogue_policy": "disabled" | "on_request" | "natural"; "steps": Array<ScenarioStep> };
+
+export type MediumBehavior = {substance:'air'|'water'|'mixed';motion:'still'|'suggested_by_visuals'|'authored_viewer_path';visibility:'clear'|'foggy';participant_motion:'none'|'swim'|'fall'|'glide';unsupported_dynamics:string[]};
+export type MediumRegion = {id:string;zone_id:string;medium:'air'|'water';surface_node_id?:string;flow_visual:'none'|'ripples'|'foliage_flutter';viewer_path_ids:string[]};
+export type ConstructionBrief = { spatial_intent: string; must_preserve: string[]; expected_outcomes: string[]; medium_behavior?:MediumBehavior };
+export type SurfaceProfile = { profile: 'matte'|'ground'|'water'|'glass'|'foliage'; scale: number; strength: number; speed: number };
+export type VisualEnvironment = { style?:{light_bands:number;strength:number}; mode:'interior'|'outdoor'|'underwater'; sky:{kind:'solid'|'procedural';horizon_color:string;zenith_color:string;ground_color:string;sun_color:string;sun_size_degrees:number;haze:number;cloud_coverage:number}; fog:{color:string;start_meters:number;end_meters:number}; lighting_environment_intensity:number };
+export type ConstructionPlan = {
+ version:'1';seed:number;
+ requirements:Array<{requirement_id:string;node_ids:string[];stage_ids:string[];path_ids:string[]}>;
+ zones:Array<{id:string;center:[number,number,number];size:[number,number,number];kind:'interior'|'outdoor'|'enclosure'}>;
+ assemblies:Array<{id:string;root_node_id:string;member_node_ids:string[];zone_id:string;requirement_ids:string[]}>;
+ anchors:Array<{id:string;node_id:string;kind:'support'|'seat'|'attachment'|'entry'|'exit';position:[number,number,number];footprint:[number,number]}>;
+ relations:Array<{id:string;kind:'on'|'inside'|'faces'|'attached_to'|'near'|'clear_of';subject_id:string;target_id:string;anchor_id?:string;subject_anchor_id?:string;offset:[number,number,number];clearance:number;tolerance:number;required:boolean}>;
+ routes:Array<{path_id:string;from_anchor_id?:string;to_anchor_id?:string;stage_ids:string[];requirement_ids:string[];clearance_radius_meters:number;eye_height_meters:number}>;
+ medium_regions?:MediumRegion[];
+};

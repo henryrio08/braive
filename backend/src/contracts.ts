@@ -11,9 +11,12 @@ ajv.addSchema({ $id: 'braive', components: document.components });
 export class AppError extends Error {
  constructor(public code: string, message: string, public issues: ValidationIssue[] = [], public status = 400) { super(message); }
 }
+function schemaIssues(errors:any[]):ValidationIssue[]{
+ return errors.map(e=>({path:e.instancePath,rule:e.keyword,message:e.message+(e.params&&Object.keys(e.params).length?' '+JSON.stringify(e.params):'')}));
+}
 export function validate(name: string, value: unknown) {
  const check = ajv.getSchema(`braive#/components/schemas/${name}`) ?? ajv.compile({ $ref: `braive#/components/schemas/${name}` });
- if (!check(value)) throw new AppError('INVALID_MODEL_OUTPUT', `Invalid ${name}`, check.errors.map((e: any) => ({ path: e.instancePath, rule: e.keyword, message: e.message }))); 
+ if (!check(value)) throw new AppError('INVALID_MODEL_OUTPUT', `Invalid ${name}`, schemaIssues(check.errors));
 }
 const providerChecks=new Map<string,any>();
 /** Saved records retain additive legacy schemas; new model output must implement
@@ -21,7 +24,7 @@ const providerChecks=new Map<string,any>();
 export function validateProviderOutput(name:string,value:unknown) {
  let check=providerChecks.get(name);
  if(!check){check=ajv.compile(outputSchema(name));providerChecks.set(name,check);}
- if(!check(value))throw new AppError('INVALID_MODEL_OUTPUT',`New ${name} is missing required capabilities`,check.errors.map((e:any)=>({path:e.instancePath,rule:e.keyword,message:e.message})));
+ if(!check(value))throw new AppError('INVALID_MODEL_OUTPUT',`New ${name} is missing required capabilities`,schemaIssues(check.errors));
 }
 export function sceneIssues(plan: SessionPlan, scene: SceneSpec, audio: AudioPlan): ValidationIssue[] {
  const issues: ValidationIssue[] = [];
@@ -52,6 +55,8 @@ export function sceneIssues(plan: SessionPlan, scene: SceneSpec, audio: AudioPla
   while(p && nodes.has(p)) { if(seen.has(p)) { fail(`/nodes/${i}`,'cycle','Cyclic hierarchy'); break; } seen.add(p); p=nodes.get(p)!.parent_id; }
   if(![...n.position,...n.rotation_radians,...n.scale].every(Number.isFinite) || n.scale.some(v=>v<=0)) fail(`/nodes/${i}`,'transform','Positive finite transforms required');
   const g=n.geometry;
+  if(n.material.surface&&((g.kind==='asset'&&characterIDs.has(g.asset_id))||n.role==='character'))fail(`/nodes/${i}/material/surface`,'palette','Approved character materials cannot receive environmental surface profiles');
+  if(n.material.surface?.profile==='water'&&n.collision_role!=='none')fail(`/nodes/${i}/collision_role`,'medium','Visual water surfaces must not be solid route obstacles; support needs separate real geometry');
   if(n.support_node_id && (!nodes.has(n.support_node_id)||n.support_node_id===n.id))fail(`/nodes/${i}/support_node_id`,'reference','Support must name another loaded node');
   if(n.material.texture_asset_id)fail(`/nodes/${i}/material/texture_asset_id`,'capability','No texture assets are registered by this renderer');
   const approvedProp=!!n.prop_name&&!!plan.props?.includes(n.prop_name);
@@ -77,6 +82,8 @@ export function sceneIssues(plan: SessionPlan, scene: SceneSpec, audio: AudioPla
  const choices=new Set<string>();
  for(const [i,interaction] of scene.interactions.entries()) for(const c of interaction.choices) { if(choices.has(c.id)) fail(`/interactions/${i}`,'unique','Duplicate choice ID'); choices.add(c.id); }
  const ops:WorldOperation[]=[...scene.events.map(e=>e.operation),...scene.interactions.flatMap(i=>i.choices.flatMap(c=>c.operations)),...(scene.scenario?.steps.flatMap(s=>[...s.start_operations,...s.actions.flatMap(a=>a.operations)])??[])];
+ const environments=[scene.environment,...ops.filter(o=>o.type==='set_environment').map(o=>'environment' in o?o.environment:undefined)].filter(e=>!!e);
+ for(const e of environments)if(e!.fog.end_meters<=e!.fog.start_meters||e!.fog.end_meters>(scene.view_distance_meters??150))fail('/environment/fog','range','Explicit fog must end after its start and within camera visibility');
  const paths=new Map((scene.motion_paths??[]).map(p=>[p.id,p]));
  if(paths.size!==(scene.motion_paths??[]).length)fail('/motion_paths','unique','Duplicate motion path IDs');
  for(const [i,p] of (scene.motion_paths??[]).entries()){
@@ -85,6 +92,10 @@ export function sceneIssues(plan: SessionPlan, scene: SceneSpec, audio: AudioPla
  }
  for(const o of ops) {
   if('node_id' in o && !nodes.has(o.node_id)) fail('/operations','reference','Unknown node');
+  if(o.type==='set_material'&&o.material.surface){
+   const n=nodes.get(o.node_id);
+   if(n&&(n.role==='character'||n.geometry.kind==='asset'&&characterIDs.has(n.geometry.asset_id)))fail('/operations/material/surface','palette','Approved character materials cannot receive environmental surface profiles');
+  }
   if(o.type==='viewpoint_transition' && !views.has(o.destination_id)) fail('/operations','reference','Unknown destination');
   if(o.type==='character_action' && !chars.has(o.character_id)) fail('/operations','reference','Unknown character');
   if(o.type==='character_action' && o.behavior==='sit'){
@@ -202,14 +213,32 @@ export function outputSchema(name: string): any {
  }
  const root=rewrite(document.components.schemas[name]);
  // Additive wire fields keep old saved records readable; newly authored outputs must realize them.
- const required=name==='SessionPlan'?['experience']:name==='SceneSpec'?['scenario','motion_paths','view_distance_meters','viewer_attached_node_ids']:[];
+ const required=name==='SessionPlan'?['experience','construction_brief']:name==='SceneSpec'?['scenario','motion_paths','view_distance_meters','viewer_attached_node_ids','construction_plan','environment']:[];
  if(required.length)root.required=[...new Set([...root.required,...required])];
  if(name==='SessionPlan'&&defs.Character)defs.Character.required=[...new Set([...defs.Character.required,'asset_id'])];
  if(name==='SessionPlan'&&defs.Character)defs.Character.properties.asset_id.enum=[...generationCharacterIDs];
  if(name==='SessionPlan'&&defs.ExperiencePlan)defs.ExperiencePlan.required=[...new Set([...defs.ExperiencePlan.required,'progression'])];
+ if(name==='SessionPlan'&&defs.ConstructionBrief)defs.ConstructionBrief.required=[...new Set([...defs.ConstructionBrief.required,'medium_behavior'])];
+ if(name==='SessionPlan'&&defs.ExperiencePlan)defs.ExperiencePlan.properties.stages.items.properties.action_ids={type:'array',maxItems:0,items:{type:'string'}};
  if(name==='SceneSpec')root.required=[...new Set([...root.required,'scenario'])];
+ if(name==='SceneSpec'&&defs.ConstructionPlan)defs.ConstructionPlan.required=[...new Set([...defs.ConstructionPlan.required,'medium_regions'])];
  if(name==='SceneSpec'&&defs.ScenarioSpec)defs.ScenarioSpec.required=[...new Set([...defs.ScenarioSpec.required,'progression'])];
  if(name==='SceneSpec'&&defs.ScenarioStep)defs.ScenarioStep.required=[...new Set([...defs.ScenarioStep.required,'review_viewpoint_id','focus_node_ids','announce_on_entry'])];
+ if(name==='SceneSpec'&&defs.ScenarioStep)defs.ScenarioStep.properties.actions={type:'array',maxItems:0};
+ if(name==='SceneSpec')root.properties.interactions={type:'array',maxItems:0};
  if(name==='SceneSpec'&&defs.SceneNode)defs.SceneNode.required=[...new Set([...defs.SceneNode.required,'collision_role','support_node_id'])];
- return {...root,$defs:defs};
+ if(name==='SceneSpec')delete root.properties.construction_report; // Compiler-owned output only.
+ // Drop definitions that became unreachable after restricting newly authored
+ // guided output. Legacy action/choice graphs remain in the saved wire schema.
+ const reachable=new Set<string>();
+ function visit(value:any):void {
+  if(!value||typeof value!=='object')return;
+  if(value.$ref?.startsWith('#/$defs/')){
+   const id=value.$ref.slice('#/$defs/'.length);
+   if(!reachable.has(id)){reachable.add(id);visit(defs[id]);}
+  }
+  for(const [key,child] of Object.entries(value))if(key!=='$ref')visit(child);
+ }
+ visit(root);
+ return {...root,$defs:Object.fromEntries([...reachable].map(id=>[id,defs[id]]))};
 }

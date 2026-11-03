@@ -2,6 +2,9 @@
 """Validate the CC0 source pack and copy unchanged GLBs into the runtime bundle."""
 import argparse, collections, csv, hashlib, json, math, re, shutil, struct
 from pathlib import Path, PurePosixPath
+import sys
+sys.path.insert(0,str(Path(__file__).resolve().parent))
+from asset_bounds import normalized_bounds
 
 ROOT = Path(__file__).resolve().parents[1]
 GAPS = ['furniture.podium', 'interior_prop.whiteboard', 'confined.elevator_car', 'confined.elevator_panel', 'confined.vent']
@@ -66,6 +69,7 @@ def inventory(source):
         if not path.is_file() or path.is_symlink() or not path.resolve().is_relative_to(source.resolve()): raise ValueError('Missing or unsafe GLB: '+str(rel))
         gltf,digest=inspect_glb(path)
         manifest.append(dict(id=expected,relative_path='LowPoly/'+str(rel),category=r['category'],subcategory=r['subcategory'],tags=r['tags'].split(';'),suggested_scale_m=scale,y_up=r['y_up']=='true',character_rigged=bool(gltf.get('skins')),license='CC0-1.0',license_url=r['license_url'],source_url=r['source_pack_or_url'],author=r['author'],approx_tris=int(r['approx_tris']),sha256=digest,normalization={'axis_rotation_x_radians':0 if r['y_up']=='true' else -math.pi/2,'forward_rotation_y_radians':math.pi,'source_forward_assumption':'+Z','semantic_front_verified':False,'placement':'center_xz_min_y_after_scale_and_rotation'},animation_clips=[a.get('name',f'clip_{i}') for i,a in enumerate(gltf.get('animations',[]))]))
+        manifest[-1]['bounds_meters']=normalized_bounds(gltf,scale,r['y_up']=='true')
         tint_names=supplements.get(expected,{}).get('material_tint_names',[])
         if tint_names:
             names={m.get('name') for m in gltf.get('materials',[])}

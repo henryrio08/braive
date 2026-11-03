@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 export interface AssetEntry {
- id:string;relative_path:string;category:string;subcategory:string;tags:string[];suggested_scale_m:number;y_up:boolean;character_rigged:boolean;license:string;license_url:string;approx_tris:number;material_tint_names?:string[];animation_clips?:string[];resolved_node_count?:number;generation_enabled?:boolean;
+ id:string;relative_path:string;category:string;subcategory:string;tags:string[];suggested_scale_m:number;y_up:boolean;character_rigged:boolean;license:string;license_url:string;approx_tris:number;material_tint_names?:string[];animation_clips?:string[];resolved_node_count?:number;generation_enabled?:boolean;bounds_meters?:{min:[number,number,number];max:[number,number,number];basis:string};
 }
 export const assetManifest:AssetEntry[]=JSON.parse(readFileSync(new URL('../assets/asset_manifest.json',import.meta.url),'utf8'));
 if(new Set(assetManifest.map(a=>a.id)).size!==assetManifest.length || assetManifest.some(a=>a.license!=='CC0-1.0'))throw Error('Invalid shared CC0 manifest');

@@ -1,10 +1,12 @@
 # Spatial construction and visual design proposal
 
-Status: design only, November 2, 2026. No skybox, new surface shader or construction compiler is implemented by this document. Coordinate this work with the partner's automatic-experience changes before changing the live scenario contract.
+Status: implementation reference, November 2, 2026. The development branch now implements construction version 1, procedural sky and bounded surface profiles on top of the partner's automatic-experience runtime. See [implementation evidence and remaining gates](visual-implementation-2026-11-02.md). Native GPU/device acceptance is still required; this design document is not evidence of that acceptance.
 
 ## Desired experience
 
-The participant describes a situation and their boundaries. The world should establish that situation, progress naturally, and respond to meaningful decisions. Instruction is available on demand and at genuine decision points. Looking around never initiates travel. STOP remains an immediate local control over movement, narration and visual animation.
+The participant describes their fear, current ability and boundaries during intake. The world establishes what happens around and to them through sights, sounds, movement and events. They experience the scene without narrating actions, navigating by voice or answering repeated navigation questions. Speech belongs only where it is reasonable in the situation. Looking around never initiates travel. STOP remains an immediate local control over movement, narration and visual animation.
+
+Action experiences remain silent between characters and participant. If any character dialogue is needed, classify the whole experience as conversation, even alongside walking or another physical activity. Conversation classification does not replace the requested movement. Routine stages remain unannounced; the brief contextual introduction and local STOP controls remain available.
 
 Construction must preserve task identity: a skydive has an exit and descent; an interview has supported seated participants and usable sightlines; a trail has navigable connected routes. A polished backdrop cannot stand in for those properties.
 
@@ -51,6 +53,8 @@ Allow alternatives where the task calls for a decision. The construction depende
 
 ## Sky and environment
 
+Fluid and gas conditions are explicit planning data. The coordinator identifies air, water or mixed conditions, whether motion is still, visually suggested or an authored viewer path, visibility, participant motion and any dynamics the app cannot produce. Medium regions bind water visuals and actual swim paths to zones. Water sheets are non-solid; separate pool boundaries and floor geometry supply support. Fog currently affects the scene globally. Water ripples, foliage flutter and fog cannot stand in for buoyancy, currents, splashes, smoke transport, pressure or moving gas volumes. Future physical fluid/gas work needs separately bounded simulation, audio and native performance evidence; a claim in prose does not enable it.
+
 First implementation: app-owned procedural sky with horizon/zenith colors, sun direction, haze and bounded cloud coverage. Consider licensed cubemaps/panoramas afterward, using registered IDs and source provenance. Avoid adding a generated image request to the critical path.
 
 Sky remains effectively distant and consistent between eyes. Ground, walls, nearby landscape and task objects provide real stereo depth. Enclosed interiors must not gain an outdoor vista just to pass a generic depth test.
@@ -65,13 +69,13 @@ Models select an app-owned profile ID and bounded scalar/color parameters. Initi
 | --- | --- | --- |
 | matte | base color, roughness | Existing low-cost surface |
 | ground | palette, variation scale/strength | Subtle deterministic world-space variation |
-| water | color, opacity, wave scale/speed | Bounded surface movement and highlights |
+| water | color, opacity, wave scale/speed | Subtle normal/color ripples; stable geometry |
 | glass | tint, opacity, roughness | Consistent transparent surface/depth behavior |
-| foliage | palette, sway amount/speed | Modest anchored motion, preserving silhouettes |
+| foliage | palette, light variation/speed | Subtle light flutter; stable silhouettes/collision |
 
 Final parameter ranges depend on device measurements. Shader source and profile definitions live in app code. Use a shared active-time uniform for both eyes; STOP and other pauses freeze surface motion. Imported character skin, hair and authored materials remain intact unless a supported override explicitly targets a registered clothing material.
 
-Start with one surface profile, measure it, then add the next. Extra full-screen effects, bloom and multiple render passes are not assumed affordable. Lens correction remains independent of scene appearance.
+The current development implementation supplies a shared gentle luminance-banding shader and all five bounded profiles for native review. Shared style parameters adapt its strength to the setting; approved character materials remain protected. Physical-device measurements must establish which settings are acceptable before release. Extra full-screen effects, bloom and multiple render passes are not assumed affordable. Lens correction remains independent of scene appearance.
 
 ## Validation and repair
 

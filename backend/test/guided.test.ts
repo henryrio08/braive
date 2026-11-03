@@ -9,6 +9,16 @@ function setup(){
 test('a guided experience moves, opens natural conversation and completes without commands',()=>{
  const x=setup();validate('ScenarioSpec',x.scene.scenario);assert.deepEqual(sceneIssues(x.plan,x.scene,x.audio),[]);
 });
+
+test('action experiences stay silent; dialogue during movement belongs to conversation',()=>{
+ const x=setup();x.plan.experience!.kind='action';
+ assert.ok(sceneIssues(x.plan,x.scene,x.audio).some(i=>i.rule==='task_focus'));
+ x.scene.scenario!.dialogue_policy='disabled';
+ for(const step of x.scene.scenario!.steps){delete step.conversation_target;step.prompt='';step.announce_on_entry=false;}
+ assert.deepEqual(sceneIssues(x.plan,x.scene,x.audio),[]);
+ x.plan.experience!.kind='conversation';
+ assert.ok(sceneIssues(x.plan,x.scene,x.audio).some(i=>i.rule==='conversation'));
+});
 test('guided generation rejects command checklists and stages that cannot advance by themselves',()=>{
  const x=setup();x.scene.scenario!.steps[0].actions.push({id:'walk',label:'Walk',phrases:['walk forward'],operations:[],next_step_id:null});
  delete x.scene.scenario!.steps[0].completion;

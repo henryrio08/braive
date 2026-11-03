@@ -37,7 +37,31 @@ test('new output enforces review and collision metadata while saved schemas stay
  const generated=outputSchema('SceneSpec');
  assert.ok(generated.$defs.ScenarioStep.required.includes('review_viewpoint_id'));
  assert.ok(generated.$defs.SceneNode.required.includes('collision_role'));
+ assert.ok(generated.required.includes('construction_plan')&&generated.required.includes('environment'));
+ assert.ok(outputSchema('SessionPlan').required.includes('construction_brief'));
+ assert.equal(generated.properties.construction_report,undefined);
  assert.throws(()=>validateProviderOutput('SceneSpec',{}),AppError);
+});
+
+test('environment changes validate explicit fog in every operation location',()=>{
+ const s=scene();s.view_distance_meters=50;
+ const environment={mode:'interior',sky:{kind:'solid',horizon_color:'#aabbcc',zenith_color:'#aabbcc',ground_color:'#aabbcc',sun_color:'#ffffff',sun_size_degrees:2,haze:0,cloud_coverage:0},fog:{color:'#aabbcc',start_meters:10,end_meters:60},lighting_environment_intensity:0} as const;
+ const op={type:'set_environment',background_color:'#aabbcc',fog_density:0,environment} as const;
+ s.events=[{at_active_second:1,operation:op}];
+ assert.ok(sceneIssues(plan,s,audio).some(i=>i.path==='/environment/fog'));
+ s.events=[];s.interactions=[{id:'change',prompt:'',trigger:'user_request',choices:[{id:'change',label:'Change',intent_examples:[],operations:[op]}]}];
+ assert.ok(sceneIssues(plan,s,audio).some(i=>i.path==='/environment/fog'));
+ (environment.fog as {end_meters:number}).end_meters=40;
+ assert.ok(!sceneIssues(plan,s,audio).some(i=>i.path==='/environment/fog'));
+});
+
+test('environmental surface profiles cannot overwrite approved character materials',()=>{
+ const s=scene();s.nodes[0].geometry={kind:'asset',asset_id:'character.base.soft_adult_01'};s.nodes[0].role='character';
+ const surface={profile:'water',scale:1,strength:0.03,speed:0.3} as const;
+ s.events=[{at_active_second:1,operation:{type:'set_material',node_id:'lectern',material:{color:'#ffffff',roughness:0.5,surface}}}];
+ assert.ok(sceneIssues(plan,s,audio).some(i=>i.path==='/operations/material/surface'));
+ s.nodes[0].material.surface=surface;
+ assert.ok(sceneIssues(plan,s,audio).some(i=>i.path.includes('/nodes/')&&i.rule==='palette'));
 });
 
 

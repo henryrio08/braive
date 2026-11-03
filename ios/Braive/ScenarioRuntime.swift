@@ -19,6 +19,9 @@ struct ViewerPath: Decodable {
   struct Point: Decodable { let at_seconds: Double; let position: [Float] }
   let id: String, purpose: String, interpolation: String
   let coordinate_space: String?
+  let clearance_radius_meters: Float?
+  let eye_height_meters: Float?
+  let start_position: [Float]?
   let points: [Point]
 }
 struct ViewerMotion {

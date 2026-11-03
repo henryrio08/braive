@@ -45,9 +45,9 @@ import SceneKit
       }
     }
   }
-  static func support(root: SCNNode, node: SCNNode, support: SCNNode) throws {
+  static func support(root: SCNNode, node: SCNNode, support: SCNNode, contact: SCNVector3? = nil) throws {
     let bounds=node.boundingBox
-    let foot=node.convertPosition(SCNVector3((bounds.min.x+bounds.max.x)/2,bounds.min.y,(bounds.min.z+bounds.max.z)/2),to:root)
+    let foot=node.convertPosition(contact ?? SCNVector3((bounds.min.x+bounds.max.x)/2,bounds.min.y,(bounds.min.z+bounds.max.z)/2),to:root)
     let hits=root.hitTestWithSegment(from:SCNVector3(foot.x,foot.y+0.2,foot.z),to:SCNVector3(foot.x,foot.y-0.25,foot.z),options:[.backFaceCulling:false]).filter { hit in
       var cursor:SCNNode?=hit.node
       while let n=cursor { if n === support { return true };cursor=n.parent }

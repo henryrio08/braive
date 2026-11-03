@@ -53,7 +53,9 @@ import UIKit
         g.materials = g.materials.map { source in
           let m = maskMaterial(source)
           let rgb = isFocus(n, focus) ? "float3(1,0,0)" : "float3(0,0,0)"
-          m.shaderModifiers = [.fragment: "_output.color.rgb = " + rgb + ";"]
+          var modifiers=m.shaderModifiers ?? [:]
+          modifiers[.fragment]="_output.color.rgb = " + rgb + ";"
+          m.shaderModifiers=modifiers
           return m
         }
       }
@@ -72,11 +74,13 @@ import UIKit
         guard let g = n.geometry else { return }
         g.materials = g.materials.map { source in
         let m = maskMaterial(source)
-        m.shaderModifiers = [.fragment: """
+        var modifiers=m.shaderModifiers ?? [:]
+        modifiers[.fragment] = """
           float distanceFromEye = max(0.0, -_surface.position.z);
           _output.color.rgb = distanceFromEye <= \(near) ? float3(1.0, 0.0, 0.0)
             : distanceFromEye >= \(far) ? float3(0.0, 0.0, 1.0) : float3(0.0, 1.0, 0.0);
-          """]
+          """
+        m.shaderModifiers=modifiers
         return m
         }
       }

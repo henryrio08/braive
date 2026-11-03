@@ -1,8 +1,10 @@
 # Braive
 
-Native, voice-first iPhone VR situational practice, with a Meta-powered backend running on your Mac. The approved specification is in [docs/handoff/development-plan.md](docs/handoff/development-plan.md). Public speaking is the first demo subject; practice input remains freeform.
+Native iPhone VR situational practice with voice intake and a Meta-powered backend. The approved specification is in [docs/handoff/development-plan.md](docs/handoff/development-plan.md). Public speaking is the first demo subject; practice input remains freeform. Fears, ability and boundaries shape automatically unfolding experiences; the participant does not navigate by voice.
 
 ## Current state
+
+The visual development branch builds on the integrated partner runtime through `89fc366` and runtime follow-up `5cb7522`. It adds measured bounds for all 355 assets, deterministic spatial construction, procedural sky, explicit fog and a gentle context-adjustable low-poly shader with matte/ground/water/glass/foliage profiles. Character palettes remain protected, and moving surfaces share the pause-aware clock. Air/water conditions and unsupported fluid dynamics are described explicitly; ripples and fog are visual effects, not physical simulation. Coordinator instructions emphasize sights, sounds and events happening to the participant, with quiet routine stages. Action experiences have no character dialogue; any required dialogue uses conversation classification while retaining necessary physical movement. See [implementation evidence and remaining device checks](docs/visual-implementation-2026-11-02.md).
 
 The earlier core practice loop passed on the physical phone on November 2, 2026: complete voice intake through pauses, centered reveal/countdown, STOP/NO resumption, speech waiting, relevant character replies, a nonempty saved reflection, grounded feedback, and a centered adapted repeat. Fresh and adapted library generations took 48.835 and 62.149 seconds. These are historical checks of the earlier interaction engine, not verification of every subsequent change.
 
@@ -12,7 +14,7 @@ Henry approved four softer Kenney Mini Characters after actual native-renderer p
 
 The partner's `codex/braive-work` audit fixes are integrated, including audio layer identity/timing, terminal movement completion, initial-state preflight, stale feedback cancellation, declared reveal durations and scene/audio persistence. The combined simulator build, 51 backend tests, seven importer checks, 46 scenario/movement checks, 36 voice-input checks and 29 speech-coordination checks pass. See [scenario engine](docs/scenario-engine.md) and [verification evidence](docs/verification-2026-11-02.md). Physical viewer optics, sustained performance and final video capture remain outstanding.
 
-The selected lowercase-b/forward-arrow logo is the app icon and welcome mark. Optional dialogue uses compact context and a small output schema; an earlier synthetic backend reply took 3.718 seconds, while physical response latency remains variable. The next phone build is version 0.3 (3).
+The selected lowercase-b/forward-arrow logo is the app icon and welcome mark. Optional dialogue uses compact context and a small output schema; an earlier synthetic backend reply took 3.718 seconds, while physical response latency remains variable. The visual source is version 0.4 (4); the partner's signed 0.3 (3) and the newer visual source have not been installed on the phone.
 
 **Speech now stays on the iPhone.** At Henry’s request, the normal app uses Apple’s SpeechAnalyzer / SpeechTranscriber (iOS 26+) with voice-processed AVAudioEngine input and native speech detection. It does not open the Meta transcription relay. First use may install Apple’s on-device English speech assets. No silent cloud transcription fallback is configured. Meta receives the transcribed practice details/answers needed for coordination and dialogue, after consent.
 
@@ -117,7 +119,7 @@ xcrun swiftc -module-cache-path /tmp/braive-swift-module-cache ios/Braive/JSON.s
 
 - SwiftUI shell; SceneKit scene graph; Metal eye textures and lens correction; Core Motion rotational tracking; AVFoundation voice processing, TTS, and audio mixing.
 - Spark coordinates, reasons about dialogue, generates feedback, and proposes adaptation. Wonder authors the declarative scene. Spark selects bundled audio, as permitted by the handoff's Glimmer fallback. SAM/Image/Glimmer are optional and are not active dependencies.
-- Apple SpeechAnalyzer / SpeechTranscriber handles on-device, long-form recognition and SpeechDetector supplies speech boundaries. The original Meta relay remains a disabled optional backend route; the app does not use it. The Meta API key stays on the Mac.
+- Apple SpeechAnalyzer / SpeechTranscriber handles on-device, long-form recognition and SpeechDetector supplies speech boundaries. The original Meta relay remains a disabled optional backend route; the app does not use it. The Meta API key stays on the backend computer.
 - The project OpenAPI supplies schema validation. The server adds graph/reference/tool-phase/evidence checks. The phone builds scenes offscreen and checks both-eye focal/depth visibility before commit.
 - Model output cannot execute code or load arbitrary URLs. Invalid scenes get at most one repair shared with native preflight, within the original two-minute generation deadline. No preset practice-room fallback.
 

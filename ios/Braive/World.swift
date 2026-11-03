@@ -13,6 +13,10 @@ extension UIColor {
 }
 @MainActor final class World: ObservableObject {
   private(set) var metrics = RenderMetrics()
+  private var surfaceMaterials:[SCNMaterial]=[]
+  private var appearanceSunDirection=SCNVector3(0,-1,0)
+  private var appearanceSeed=0
+  private var appearanceStyle:JSON?
   var renderTime = 0.0
   var onRuntimeIssue: ((String) -> Void)?
   private var executionBlocked = false
@@ -91,6 +95,8 @@ extension UIColor {
     head.simdOrientation = pose.recenter()
   }
   func clear() {
+    surfaceMaterials=[]
+    appearanceStyle=nil
     executionBlocked=false
     motionPaths = [:]; viewerMotion = nil; viewpointFade = nil
     nodeMotions = [:]
@@ -108,6 +114,9 @@ extension UIColor {
     m.transparency = CGFloat(value["opacity"].number ?? 1)
     m.isDoubleSided = value["double_sided"].bool ?? false
     m.lightingModel = .physicallyBased
+    if value["surface"]["profile"].text == "water" { m.transparency=CGFloat(value["opacity"].number ?? 0.72);m.isDoubleSided=true }
+    if value["surface"]["profile"].text == "glass" { m.transparency=CGFloat(value["opacity"].number ?? 0.25);m.isDoubleSided=true }
+    SceneAppearance.applySurface(value["surface"],to:m)
     return m
   }
   func applyMaterial(_ value: JSON, to node: SCNNode, tint: Bool = true) {
@@ -120,6 +129,9 @@ extension UIColor {
         if let roughness=value["roughness"].number { m.roughness.contents=roughness }
         if let opacity=value["opacity"].number { m.transparency=CGFloat(opacity) }
         if let sided=value["double_sided"].bool { m.isDoubleSided=sided }
+        if value["surface"]["profile"].text == "water" { m.transparency=CGFloat(value["opacity"].number ?? 0.72);m.isDoubleSided=true }
+        if value["surface"]["profile"].text == "glass" { m.transparency=CGFloat(value["opacity"].number ?? 0.25);m.isDoubleSided=true }
+        SceneAppearance.applySurface(value["surface"],to:m)
         return m
       }
     }
@@ -162,6 +174,10 @@ extension UIColor {
     let viewDistance = spec["view_distance_meters"].number ?? 150
     guard (150...10000).contains(viewDistance) else { throw failure("Invalid viewing distance") }
     // Build off-scene and attach only after structural and visibility checks.
+    if spec["environment"].object != nil {
+      let environment=try JSONDecoder().decode(VisualEnvironmentState.self,from:JSONEncoder().encode(spec["environment"]))
+      guard environment.fog.start_meters < environment.fog.end_meters, environment.fog.end_meters <= viewDistance else { throw failure("Invalid explicit environment distances") }
+    }
     let root = SCNNode()
     var built: [String: SCNNode] = [:]
     let list = spec["nodes"].list
@@ -324,7 +340,7 @@ extension UIColor {
     for j in list {
       if let supportID=j["support_node_id"].string {
         guard let node=built[j["id"].text],let support=built[supportID] else { throw failure("Declared support is missing") }
-        try RouteAudit.support(root:root,node:node,support:support)
+        try RouteAudit.support(root:root,node:node,support:support,contact:j["support_contact"].array == nil ? nil : vector(j["support_contact"]))
       }
     }
     try StageAudit.check(spec:spec,root:root,nodes:built,initial:initial,ipd:ipd,fov:fov,aspect:eyeAspect,applyMaterial:{ value,node in self.applyMaterial(value,to:node) })
@@ -348,6 +364,7 @@ extension UIColor {
       attachmentRig = rig
     }
     left.camera?.zFar = viewDistance; right.camera?.zFar = viewDistance
+    scene.lightingEnvironment.contents=nil;scene.lightingEnvironment.intensity=0
     scene.background.contents = UIColor(hex: spec["atmosphere"]["background_color"].text)
     scene.fogColor = UIColor(hex: spec["atmosphere"]["background_color"].text)
     scene.fogStartDistance = 5
@@ -362,8 +379,10 @@ extension UIColor {
     let sun = SCNNode()
     sun.light = SCNLight()
     sun.light?.type = .directional
+    sun.name="braive_sun"
     sun.light?.intensity = CGFloat(spec["lighting"]["key_intensity"].value * 800)
     let direction = vector(spec["lighting"]["key_direction"])
+    appearanceSunDirection=direction;appearanceSeed=Int(spec["construction_plan"]["seed"].value)
     let ray = SIMD3<Float>(direction.x, direction.y, direction.z)
     if simd_length(ray) > 0.001 {
       sun.simdOrientation = simd_quatf(from: SIMD3<Float>(0,0,-1), to: simd_normalize(ray))
@@ -382,6 +401,11 @@ extension UIColor {
       let initialBehavior = list.first(where: { $0["id"].text == c["scene_node_id"].text })?["animation"].text ?? "idle"
       animate(c["id"].text, initialBehavior == "none" ? "idle" : initialBehavior)
     }
+    if spec["environment"].object != nil {
+      try SceneAppearance.applyEnvironment(spec["environment"],to:scene,sunDirection:appearanceSunDirection,seed:appearanceSeed)
+      appearanceStyle=spec["environment"]["style"]
+    }
+    surfaceMaterials=SceneAppearance.animatedMaterials(scene.rootNode)
   }
   func animate(_ id: String, _ behavior: String) {
     guard let n = nodes[characters[id] ?? id] else { return }
@@ -395,6 +419,8 @@ extension UIColor {
     case "set_material":
       if let node = nodes[op["node_id"].text] {
         applyMaterial(op["material"],to:node)
+        if let appearanceStyle { SceneAppearance.applyStyle(appearanceStyle,to:node) }
+        surfaceMaterials=SceneAppearance.animatedMaterials(scene.rootNode)
       }
     case "character_action": animate(op["character_id"].text, op["behavior"].text)
     case "viewpoint_transition":
@@ -403,6 +429,10 @@ extension UIColor {
       if let path = motionPaths[op["path_id"].text] {
         renderMotion()
         viewpointFade=nil
+        if let expected=path.start_position, expected.count==3,
+          simd_length(head.simdPosition-SIMD3(expected[0],expected[1],expected[2]))>max(0.35,path.clearance_radius_meters ?? 0.25) {
+          executionBlocked=true;onRuntimeIssue?("The route's entry anchor does not match the participant position");return
+        }
         let forward = head.simdWorldOrientation.act(SIMD3<Float>(0,0,-1))
         let flat = SIMD3<Float>(forward.x,0,forward.z)
         let heading = simd_length(flat) > 0.001 ? simd_quatf(from: SIMD3<Float>(0,0,-1), to: simd_normalize(flat)) : simd_quatf(angle: 0, axis: SIMD3(0,1,0))
@@ -412,7 +442,7 @@ extension UIColor {
             let world=candidate.sample(at:candidate.startedAt+p.at_seconds).position
             return SCNVector3(world.x,world.y,world.z)
           }
-          try RouteAudit.check(root:scene.rootNode,points:points,walking:["walk","run"].contains(path.purpose),ignored:attachmentRig.map { [$0] } ?? [])
+          try RouteAudit.check(root:scene.rootNode,points:points,walking:["walk","run"].contains(path.purpose),ignored:attachmentRig.map { [$0] } ?? [],radius:path.clearance_radius_meters ?? 0.25,eyeHeight:path.eye_height_meters ?? 1.6)
           viewerMotion=candidate
         } catch { executionBlocked=true;onRuntimeIssue?(error.localizedDescription) }
       }
@@ -424,11 +454,21 @@ extension UIColor {
           let world=candidate.sample(at:candidate.startedAt+p.at_seconds).position
           return SCNVector3(world.x,world.y,world.z)
         }
-        do { try RouteAudit.check(root:scene.rootNode,points:points.map { SCNVector3($0.x,$0.y+1.6,$0.z) },walking:["walk","run"].contains(path.purpose),ignored:[node]) }
+        do { try RouteAudit.check(root:scene.rootNode,points:points.map { SCNVector3($0.x,$0.y+(path.eye_height_meters ?? 1.6),$0.z) },walking:["walk","run"].contains(path.purpose),ignored:[node],radius:path.clearance_radius_meters ?? 0.25,eyeHeight:path.eye_height_meters ?? 1.6) }
         catch { executionBlocked=true;onRuntimeIssue?(error.localizedDescription);return }
         nodeMotions[op["node_id"].text] = (candidate, op["face_motion"].bool ?? false)
       }
     case "set_environment":
+      if op["environment"].object != nil {
+        do {
+          try SceneAppearance.applyEnvironment(op["environment"],to:scene,sunDirection:appearanceSunDirection,seed:appearanceSeed)
+          appearanceStyle=op["environment"]["style"]
+        }
+        catch { executionBlocked=true;onRuntimeIssue?(error.localizedDescription) }
+        if let intensity=op["ambient_intensity"].number { scene.rootNode.childNode(withName:"braive_ambient",recursively:false)?.light?.intensity=CGFloat(intensity*650) }
+        return
+      }
+      scene.lightingEnvironment.contents=nil;scene.lightingEnvironment.intensity=0
       scene.background.contents = UIColor(hex: op["background_color"].text)
       scene.fogColor = UIColor(hex: op["background_color"].text)
       scene.fogEndDistance = max(8, (left.camera?.zFar ?? 150) * (1 - op["fog_density"].value))
@@ -486,6 +526,7 @@ extension UIColor {
     return completed
   }
   func renderMotion() {
+    for material in surfaceMaterials { material.setValue(Float(animationTime),forKey:"braiveTime") }
     if let fade = viewpointFade {
       if activeElapsed - fade.startedAt >= 0.3 { setViewerPosition(fade.destination) }
       if activeElapsed - fade.startedAt >= 0.6 { viewpointFade = nil }

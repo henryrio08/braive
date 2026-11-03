@@ -4,6 +4,7 @@ import {canonicalSceneReferences} from './scene-references.js';
 import {assertCurrentDialogue,dialogueContext} from './dialogue.js';
 import {meshCatalog,assetManifest,generationCharacterIDs} from './assets.js';
 import express from 'express';
+import {compileConstruction,constructionRequirements} from './construction.js';
 import {dispatchTool,plannedTool} from './tool-dispatch.js';
 import { createServer } from 'node:http';
 import { randomUUID, timingSafeEqual } from 'node:crypto';
@@ -43,10 +44,16 @@ const attempts=new Map<string,{deadline:number,repairs:number}>();
 const jobs=new Map<string,Job>(); const running=new Map<string,AbortController>(); const revisions=new Map<string,number>();
 
 const capabilities={version:'iphone-initial-1',nodes:350,resolved_nodes:1000,primitives:180000,geometry_bytes:24000000,resource_notes:'Draw-call, texture and resident-memory targets require physical-device profiling; they are not runtime-enforced caps.',units:'meters',eye_height:1.6,initial_forward:'negative Z',geometry:['box','plane','sphere','cylinder','asset'],characters:'Use approved soft_adult character.base assets with their original palette. These are intentionally simple, friendly stylized people. Keep comfortable personal space; default at least 2.5m from the viewer unless the user asks for closer contact. Do not use legacy neutral/casual models for new experiences.',voices:['default'],asset_catalog_format:'category.subcategory: [[asset_id, triangle_count], ...]. All assets normalized to meters, base y=0, forward -Z. Use each GLB intact; do not author its mesh or skeleton children.',assets:meshCatalog, audio_assets:['forest','piano','wind','room','crowd','whoosh']};
-capabilities.version='iphone-guided-validation-4';
+capabilities.version='iphone-construction-visuals-5';
+Object.assign(capabilities,{construction_version:'1',asset_bounds:Object.fromEntries(assetManifest.map(a=>[a.id,a.bounds_meters])),surface_profiles:['matte','ground','water','glass','foliage'],sky:'App-owned procedural cubemap or solid background; explicit fog distances. No image-generation call or arbitrary shader source.'});
 Object.assign(capabilities,{scenario_engine:'Guided automatic stages: movement and events start on stage entry and advance by time or motion completion. No WALK/SIT/ASK or stage-advance commands. Natural user speech reaches the approved character only in authored conversation_target windows. Quiet scenes need no speaking.',movement:'move_viewer follows an authored motion_paths trajectory in meters; each path starts at the current camera position, points are absolute destinations at increasing positive seconds. Preserve head-tracked orientation. Paths can be interrupted by another path without teleporting; STOP freezes the active clock. walk, run, swim, climb, fall, glide, ride and other trajectories use the same generic system. move_node animates another actor/prop along a path, optionally facing its travel direction.',view_distance_meters:10000});
 Object.assign(capabilities,{character_assets:assetManifest.filter(a=>generationCharacterIDs.has(a.id)).map(a=>({asset_id:a.id,tags:a.tags,resolved_nodes:a.resolved_node_count,triangles:a.approx_tris,behaviors:['idle','listen','speak','walk','run','sit']}))});
 const assets=capabilities.audio_assets.map(id=>({id,kind:'audio',description:`Bundled synthesized ${id}`,origin:'bundled'}));
+function authoredScene(scene:SceneSpec|undefined):Omit<SceneSpec,'construction_report'>|undefined {
+ if(!scene)return undefined;
+ const {construction_report,...authored}=scene;
+ return authored;
+}
 async function generate(request:PlanRequest, job:Job, signal:AbortSignal) {
  let plan:SessionPlan|undefined, scene:SceneSpec|undefined, audio:AudioPlan|undefined, issues:unknown;
  const generationPhase=request.revision===1?'setup':'builder_revision';
@@ -65,8 +72,9 @@ async function generate(request:PlanRequest, job:Job, signal:AbortSignal) {
    job.stage=attempt?'Repairing scene validation issues':'Authoring spatial scene and sound';
    // Audio first supplies a stable cue manifest to scene authoring.
    audio??=await dispatchTool(plan!,'plan_audio',generationPhase,async args=>model('AudioPlan',{plan,available_assets:assets,tool_arguments:args},'Select only supplied audio assets. Required whoosh. Keep narrative speech audible. Match plan revision.',signal));
-   scene=await dispatchTool(plan!,'compose_scene',generationPhase,async args=>model('SceneSpec',{plan,capabilities,audio,tool_arguments:args,previous_scene:scene??previous?.scene,issues},authoring+" Use registered GLBs for characters and props; primitives for environment/task geometry. Preserve each Character.asset_id exactly and copy Character.color_hex to Material.color. Use node animation sit for seated characters; match supporting chairs to the actual pose. Preserve the approved friendly style and comfortable spacing. Place normalized asset bases at floor height. No unregistered IDs. Neutral behavior uses app-owned joint motions, not invented GLB animation clips. Return compact JSON with concise descriptions. Prefer 30-60 scene nodes when sufficient for all approved participants, setting, depth and interactions; never remove task semantics to meet that guideline.",signal,true));
+   scene=await dispatchTool(plan!,'compose_scene',generationPhase,async args=>model('SceneSpec',{plan,requirements:constructionRequirements(plan!),capabilities,audio,tool_arguments:args,previous_scene:authoredScene(scene??previous?.scene),issues},authoring+" Use registered GLBs for characters and props; primitives for environment/task geometry. Preserve each Character.asset_id exactly and copy Character.color_hex to Material.color. Use node animation sit for seated characters; match supporting chairs to the actual pose. Preserve the approved friendly style and comfortable spacing. Place normalized asset bases at floor height. No unregistered IDs. Neutral behavior uses app-owned joint motions, not invented GLB animation clips. Return compact JSON with concise descriptions. Prefer 30-60 scene nodes when sufficient for all approved participants, setting, depth and interactions; never remove task semantics to meet that guideline.",signal,true));
    scene=canonicalSceneReferences(plan!,scene!,audio!);
+   scene=compileConstruction(plan!,scene!);
    const errors=sceneIssues(plan!,scene!,audio!);
    for(const l of audio!.layers) if(!capabilities.audio_assets.includes(l.asset_id)) errors.push({path:'/audio/layers',rule:'asset',message:'Unknown audio asset'});
    if(errors.length) throw new AppError('INVALID_MODEL_OUTPUT','Scene requires repair',errors);
@@ -114,7 +122,8 @@ app.post('/v1/jobs/:id/validation',async(req,res,next)=>{
   res.status(202).json(job);
   try {
    const {plan,audio,scene}=job.result;
-   const repaired=canonicalSceneReferences(plan,await model('SceneSpec',{plan,audio,previous_scene:scene,capabilities,issues:[{path:'/nodes',rule:'native_preflight',message:req.body.message}]},authoring,controller.signal,true),audio);
+   const authored=canonicalSceneReferences(plan,await model('SceneSpec',{plan,audio,requirements:constructionRequirements(plan),previous_scene:authoredScene(scene),capabilities,issues:[{path:'/nodes',rule:'native_preflight',message:req.body.message}]},authoring,controller.signal,true),audio);
+   const repaired=compileConstruction(plan,authored);
    const errors=sceneIssues(plan,repaired,audio);if(errors.length) throw new AppError('INVALID_MODEL_OUTPUT','Native repair invalid',errors);
    controller.signal.throwIfAborted();if(revisions.get(job.session_id)!==job.revision)return;
    job.result={plan,audio,scene:repaired};approved.set(job.session_id,job.result);job.status='succeeded';job.stage='Ready for device validation';

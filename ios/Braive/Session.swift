@@ -159,6 +159,13 @@ import SwiftUI
     timer = Timer.publish(every: 0.05, on: .main, in: .common).autoconnect().sink { [weak self] _ in
       self?.tick()
     }
+    #if DEBUG
+    if ProcessInfo.processInfo.arguments.contains("--appearance-audit") {
+      preview();audio.silence()
+      do { try AppearanceAudit.run(to:store.root.appendingPathComponent("AppearanceReview")) }
+      catch { message="Appearance review failed: "+error.localizedDescription }
+    }
+    #endif
     if ProcessInfo.processInfo.arguments.contains("--asset-audit") {
       preview()
       do {

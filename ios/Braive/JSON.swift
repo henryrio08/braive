@@ -1,5 +1,8 @@
 import CoreFoundation
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 // Lossless project-contract transport. Validation stays in the shared OpenAPI and native preflight.
 struct JSON: Codable, Equatable {

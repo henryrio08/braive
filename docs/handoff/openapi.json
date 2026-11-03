@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Braive project API and artifact contracts",
-    "version": "1.1.1",
+    "version": "1.2.0",
     "description": "Project-owned contracts, not provider endpoints. Authenticate owner-scoped requests. Internal specialist endpoints may be functions in the same backend, not separate services. Numeric limits are configurable initial budgets. Cross-field checks are specified in development-plan.md."
   },
   "security": [
@@ -545,6 +545,7 @@
           },
           "fear_description": {
             "type": "string",
+            "description": "The person's fear or situation, used to plan sights, sounds and events they experience. This is not a sequence of spoken navigation commands.",
             "maxLength": 4000
           },
           "current_ability": {
@@ -995,6 +996,7 @@
           },
           "task_instruction": {
             "type": "string",
+            "description": "Concise context for the automatically unfolding experience; do not require the participant to narrate actions or navigate by voice.",
             "maxLength": 1500
           },
           "setting_brief": {
@@ -1082,6 +1084,9 @@
           },
           "experience": {
             "$ref": "#/components/schemas/ExperiencePlan"
+          },
+          "construction_brief": {
+            "$ref": "#/components/schemas/ConstructionBrief"
           }
         },
         "required": [
@@ -1316,6 +1321,9 @@
           },
           "double_sided": {
             "type": "boolean"
+          },
+          "surface": {
+            "$ref": "#/components/schemas/SurfaceProfile"
           }
         },
         "required": [
@@ -1414,6 +1422,16 @@
             ],
             "maxLength": 80,
             "description": "For a grounded/mounted object, the node providing actual support."
+          },
+          "support_contact": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "minimum": -10000,
+              "maximum": 10000
+            },
+            "minItems": 3,
+            "maxItems": 3
           }
         },
         "required": [
@@ -1626,6 +1644,9 @@
                 "type": "number",
                 "minimum": 0,
                 "maximum": 2
+              },
+              "environment": {
+                "$ref": "#/components/schemas/VisualEnvironment"
               }
             },
             "required": [
@@ -1888,6 +1909,45 @@
             },
             "uniqueItems": true,
             "maxItems": 16
+          },
+          "environment": {
+            "$ref": "#/components/schemas/VisualEnvironment"
+          },
+          "construction_plan": {
+            "$ref": "#/components/schemas/ConstructionPlan"
+          },
+          "construction_report": {
+            "type": "object",
+            "properties": {
+              "compiler_version": {
+                "type": "string",
+                "const": "1"
+              },
+              "resolved_relation_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 80
+                },
+                "maxItems": 128,
+                "minItems": 0
+              },
+              "warnings": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/ValidationIssue"
+                },
+                "maxItems": 128,
+                "minItems": 0
+              }
+            },
+            "required": [
+              "compiler_version",
+              "resolved_relation_ids",
+              "warnings"
+            ],
+            "additionalProperties": false
           }
         },
         "required": [
@@ -3054,6 +3114,7 @@
         "type": "object",
         "properties": {
           "kind": {
+            "description": "Action experiences have no character dialogue. Choose conversation whenever character dialogue is needed, even briefly alongside automatic physical movement.",
             "enum": [
               "action",
               "conversation"
@@ -3181,6 +3242,26 @@
               "world",
               "relative"
             ]
+          },
+          "clearance_radius_meters": {
+            "type": "number",
+            "minimum": 0.15,
+            "maximum": 0.6
+          },
+          "eye_height_meters": {
+            "type": "number",
+            "minimum": 0.8,
+            "maximum": 2.2
+          },
+          "start_position": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "minimum": -10000,
+              "maximum": 10000
+            },
+            "minItems": 3,
+            "maxItems": 3
           }
         },
         "required": [
@@ -3314,6 +3395,7 @@
           },
           "announce_on_entry": {
             "type": "boolean",
+            "description": "New guided scenes explicitly use false unless speech naturally belongs to the situation or supplies essential context. Legacy records retain their existing default.",
             "default": true
           },
           "review_viewpoint_id": {
@@ -3378,6 +3460,719 @@
           "initial_step_id",
           "dialogue_policy",
           "steps"
+        ],
+        "additionalProperties": false
+      },
+      "ConstructionBrief": {
+        "type": "object",
+        "properties": {
+          "spatial_intent": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1200
+          },
+          "must_preserve": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 400
+            },
+            "maxItems": 12,
+            "minItems": 0
+          },
+          "expected_outcomes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 400
+            },
+            "maxItems": 12,
+            "minItems": 1
+          },
+          "medium_behavior": {
+            "$ref": "#/components/schemas/MediumBehavior"
+          }
+        },
+        "required": [
+          "spatial_intent",
+          "must_preserve",
+          "expected_outcomes"
+        ],
+        "additionalProperties": false
+      },
+      "SurfaceProfile": {
+        "type": "object",
+        "properties": {
+          "profile": {
+            "enum": [
+              "matte",
+              "ground",
+              "water",
+              "glass",
+              "foliage"
+            ],
+            "type": "string"
+          },
+          "scale": {
+            "type": "number",
+            "minimum": 0.1,
+            "maximum": 20
+          },
+          "strength": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 0.12
+          },
+          "speed": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 2
+          }
+        },
+        "required": [
+          "profile",
+          "scale",
+          "strength",
+          "speed"
+        ],
+        "additionalProperties": false
+      },
+      "VisualEnvironment": {
+        "type": "object",
+        "properties": {
+          "mode": {
+            "type": "string",
+            "enum": [
+              "interior",
+              "outdoor",
+              "underwater"
+            ]
+          },
+          "sky": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "solid",
+                  "procedural"
+                ]
+              },
+              "horizon_color": {
+                "type": "string",
+                "pattern": "^#[0-9a-fA-F]{6}$"
+              },
+              "zenith_color": {
+                "type": "string",
+                "pattern": "^#[0-9a-fA-F]{6}$"
+              },
+              "ground_color": {
+                "type": "string",
+                "pattern": "^#[0-9a-fA-F]{6}$"
+              },
+              "sun_color": {
+                "type": "string",
+                "pattern": "^#[0-9a-fA-F]{6}$"
+              },
+              "sun_size_degrees": {
+                "type": "number",
+                "minimum": 0.25,
+                "maximum": 8
+              },
+              "haze": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "cloud_coverage": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              }
+            },
+            "required": [
+              "kind",
+              "horizon_color",
+              "zenith_color",
+              "ground_color",
+              "sun_color",
+              "sun_size_degrees",
+              "haze",
+              "cloud_coverage"
+            ],
+            "additionalProperties": false
+          },
+          "fog": {
+            "type": "object",
+            "properties": {
+              "color": {
+                "type": "string",
+                "pattern": "^#[0-9a-fA-F]{6}$"
+              },
+              "start_meters": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 10000
+              },
+              "end_meters": {
+                "type": "number",
+                "minimum": 0.1,
+                "maximum": 10000
+              }
+            },
+            "required": [
+              "color",
+              "start_meters",
+              "end_meters"
+            ],
+            "additionalProperties": false
+          },
+          "lighting_environment_intensity": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "style": {
+            "type": "object",
+            "properties": {
+              "light_bands": {
+                "type": "integer",
+                "minimum": 3,
+                "maximum": 10
+              },
+              "strength": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 0.35
+              }
+            },
+            "required": [
+              "light_bands",
+              "strength"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "mode",
+          "sky",
+          "fog",
+          "lighting_environment_intensity"
+        ],
+        "additionalProperties": false
+      },
+      "ConstructionRequirementRealization": {
+        "type": "object",
+        "properties": {
+          "requirement_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "node_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80
+            },
+            "maxItems": 350,
+            "minItems": 0
+          },
+          "stage_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80
+            },
+            "maxItems": 12,
+            "minItems": 0
+          },
+          "path_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80
+            },
+            "maxItems": 16,
+            "minItems": 0
+          }
+        },
+        "required": [
+          "requirement_id",
+          "node_ids",
+          "stage_ids",
+          "path_ids"
+        ],
+        "additionalProperties": false
+      },
+      "ConstructionZone": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "center": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "minimum": -10000,
+              "maximum": 10000
+            },
+            "minItems": 3,
+            "maxItems": 3
+          },
+          "size": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "minimum": 0.1,
+              "maximum": 20000
+            },
+            "minItems": 3,
+            "maxItems": 3
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "interior",
+              "outdoor",
+              "enclosure"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "center",
+          "size",
+          "kind"
+        ],
+        "additionalProperties": false
+      },
+      "ConstructionAssembly": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "root_node_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "member_node_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80
+            },
+            "maxItems": 350,
+            "minItems": 1
+          },
+          "zone_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "requirement_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "maxItems": 64,
+            "minItems": 0
+          }
+        },
+        "required": [
+          "id",
+          "root_node_id",
+          "member_node_ids",
+          "zone_id",
+          "requirement_ids"
+        ],
+        "additionalProperties": false
+      },
+      "ConstructionAnchor": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "node_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "support",
+              "seat",
+              "attachment",
+              "entry",
+              "exit"
+            ]
+          },
+          "position": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "minimum": -10000,
+              "maximum": 10000
+            },
+            "minItems": 3,
+            "maxItems": 3
+          },
+          "footprint": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "minimum": 0.01,
+              "maximum": 1000
+            },
+            "minItems": 2,
+            "maxItems": 2
+          }
+        },
+        "required": [
+          "id",
+          "node_id",
+          "kind",
+          "position",
+          "footprint"
+        ],
+        "additionalProperties": false
+      },
+      "ConstructionRelation": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "on",
+              "inside",
+              "faces",
+              "attached_to",
+              "near",
+              "clear_of"
+            ]
+          },
+          "subject_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "target_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "anchor_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "offset": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "minimum": -10000,
+              "maximum": 10000
+            },
+            "minItems": 3,
+            "maxItems": 3
+          },
+          "clearance": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1000
+          },
+          "tolerance": {
+            "type": "number",
+            "minimum": 0.001,
+            "maximum": 0.5
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "subject_anchor_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "subject_id",
+          "target_id",
+          "offset",
+          "clearance",
+          "tolerance",
+          "required"
+        ],
+        "additionalProperties": false
+      },
+      "ConstructionRoute": {
+        "type": "object",
+        "properties": {
+          "path_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "from_anchor_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "to_anchor_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "stage_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80
+            },
+            "maxItems": 12,
+            "minItems": 1
+          },
+          "requirement_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "maxItems": 64,
+            "minItems": 0
+          },
+          "clearance_radius_meters": {
+            "type": "number",
+            "minimum": 0.15,
+            "maximum": 0.6
+          },
+          "eye_height_meters": {
+            "type": "number",
+            "minimum": 0.8,
+            "maximum": 2.2
+          }
+        },
+        "required": [
+          "path_id",
+          "stage_ids",
+          "requirement_ids",
+          "clearance_radius_meters",
+          "eye_height_meters"
+        ],
+        "additionalProperties": false
+      },
+      "ConstructionPlan": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "string",
+            "const": "1"
+          },
+          "seed": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2147483647
+          },
+          "requirements": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ConstructionRequirementRealization"
+            },
+            "maxItems": 80,
+            "minItems": 1
+          },
+          "zones": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ConstructionZone"
+            },
+            "maxItems": 16,
+            "minItems": 1
+          },
+          "assemblies": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ConstructionAssembly"
+            },
+            "maxItems": 64,
+            "minItems": 0
+          },
+          "anchors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ConstructionAnchor"
+            },
+            "maxItems": 96,
+            "minItems": 0
+          },
+          "relations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ConstructionRelation"
+            },
+            "maxItems": 128,
+            "minItems": 0
+          },
+          "routes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ConstructionRoute"
+            },
+            "maxItems": 16,
+            "minItems": 0
+          },
+          "medium_regions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MediumRegion"
+            },
+            "maxItems": 16,
+            "minItems": 0
+          }
+        },
+        "required": [
+          "version",
+          "seed",
+          "requirements",
+          "zones",
+          "assemblies",
+          "anchors",
+          "relations",
+          "routes"
+        ],
+        "additionalProperties": false
+      },
+      "MediumBehavior": {
+        "type": "object",
+        "properties": {
+          "substance": {
+            "type": "string",
+            "enum": [
+              "air",
+              "water",
+              "mixed"
+            ]
+          },
+          "motion": {
+            "type": "string",
+            "enum": [
+              "still",
+              "suggested_by_visuals",
+              "authored_viewer_path"
+            ]
+          },
+          "visibility": {
+            "type": "string",
+            "enum": [
+              "clear",
+              "foggy"
+            ]
+          },
+          "participant_motion": {
+            "type": "string",
+            "enum": [
+              "none",
+              "swim",
+              "fall",
+              "glide"
+            ]
+          },
+          "unsupported_dynamics": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 160
+            },
+            "maxItems": 8
+          }
+        },
+        "required": [
+          "substance",
+          "motion",
+          "visibility",
+          "participant_motion",
+          "unsupported_dynamics"
+        ],
+        "additionalProperties": false
+      },
+      "MediumRegion": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "zone_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "medium": {
+            "type": "string",
+            "enum": [
+              "air",
+              "water"
+            ]
+          },
+          "surface_node_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "flow_visual": {
+            "type": "string",
+            "enum": [
+              "none",
+              "ripples",
+              "foliage_flutter"
+            ]
+          },
+          "viewer_path_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80
+            },
+            "maxItems": 16,
+            "uniqueItems": true
+          }
+        },
+        "required": [
+          "id",
+          "zone_id",
+          "medium",
+          "flow_visual",
+          "viewer_path_ids"
         ],
         "additionalProperties": false
       }
