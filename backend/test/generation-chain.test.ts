@@ -4,7 +4,7 @@ import {generateExperience,experienceSceneIssues} from '../src/generation-chain.
 import {constructionRequirements} from '../src/construction.js';
 import {AppError,validateSceneBuilderOutput} from '../src/contracts.js';
 import type {ExperienceDraft} from '../src/experience.js';
-import type {PlanRequest,Job,SessionPlan,SceneSpec,SceneNode} from '../../docs/handoff/contracts.js';
+import type {PlanRequest,Job,MotionPath,SessionPlan,SceneSpec,SceneNode} from '../../docs/handoff/contracts.js';
 
 const request=():PlanRequest=>({schema_version:'1',session_id:'c36a8c25-43c2-46fc-b3bc-c48bb8d43192',revision:1,
  fear_description:'I want to experience a quiet open room.',current_ability:'A short quiet experience feels manageable.',
@@ -115,6 +115,52 @@ test('builder schema permits compiler-owned stage fields to be omitted and final
  assert.equal(h.repairs(),0);
 });
 
+test('generation uses approved travel semantics and real camera points across builder output variations',async t=>{
+ const purposes:MotionPath['purpose'][]=['walk','run','swim','climb','fall','glide','ride','other'];
+ for(const movement of purposes)for(const purpose of purposes)for(const binding of ['route','stage requirement']){
+  await t.test(`${movement} with builder purpose ${purpose} via ${binding}`,async()=>{
+   const edited=draft();
+   edited.experience.requires_motion=true;
+   Object.assign(edited.experience.stages[0],{movement,goal:'Travel toward the marker',sensory_brief:'Notice the surroundings along the route'});
+   if(movement==='swim')edited.construction_brief.medium_behavior={
+    substance:'water',motion:'authored_viewer_path',visibility:'clear',participant_motion:'swim',unsupported_dynamics:[],
+   };
+   const start=[0,movement==='fall'?2.4:1.6,0],destination=[5,movement==='climb'?3.6:1.6,0];
+   const h=harness({edited,automaticSceneRepair:false,model:call=>{
+    if(call.role!=='scene_builder')return;
+    const candidate=sceneFor(call.input.plan),construction=candidate.construction_plan!;
+    candidate.motion_paths=[{id:'travel',purpose,interpolation:'linear',coordinate_space:'world',start_position:start,
+     points:[{position:destination,at_seconds:27}],eye_height_meters:movement==='swim'?0.85:1.6}];
+    const stage=construction.requirements.find(requirement=>requirement.requirement_id==='stage:stage_1')!;
+    stage.path_ids=['travel'];
+    construction.requirements.find(requirement=>requirement.requirement_id==='motion')!.path_ids=['travel'];
+    if(binding==='route')construction.routes=[{path_id:'travel',stage_ids:['stage_1'],requirement_ids:[stage.requirement_id],
+     eye_height_meters:candidate.motion_paths[0].eye_height_meters!,clearance_radius_meters:0.25}];
+    candidate.viewpoints[0].position=start;
+    candidate.viewpoints.push({id:'arrival',position:destination,description:'The end of the route'});
+    construction.relations.push({id:'arrival_clearance',kind:'clear_of',subject_id:'focal_object',target_id:'arrival',
+     offset:[0,0,0],clearance:3,tolerance:0.01,required:true});
+    if(movement==='swim'){
+     const surface=structuredClone(candidate.nodes[0]);
+     surface.id='water_surface';surface.position[1]=1.4;surface.collision_role='none';
+     surface.material.surface={profile:'water',scale:1,strength:0.05,speed:0.25};
+     candidate.nodes.push(surface);
+     construction.medium_regions=[{id:'water',zone_id:'room_zone',medium:'water',surface_node_id:surface.id,flow_visual:'none',viewer_path_ids:['travel']}];
+    }
+    validateSceneBuilderOutput(call.input.plan,call.input.audio,candidate);
+    return candidate;
+   }});
+   const {scene}=await h.run();
+   assert.equal(scene.motion_paths![0].purpose,movement==='other'?purpose:movement);
+   assert.deepEqual(scene.motion_paths![0].start_position,start);
+   assert.deepEqual(scene.motion_paths![0].points,[{position:destination,at_seconds:27}]);
+   assert.ok(scene.construction_report!.resolved_relation_ids.includes('arrival_clearance'));
+   assert.ok(!scene.construction_report!.warnings.some(issue=>issue.path.endsWith('/arrival_clearance')));
+   assert.equal(h.repairs(),0);
+  });
+ }
+});
+
 test('editor final plan reaches construction, with original context and compact planning capabilities',async()=>{
  const edited=draft();edited.setting_brief='An open room with softer evening light.';edited.experience.stages[0].sensory_brief='Warm evening light and quiet surroundings.';
  const h=harness({edited}),result=await h.run();
@@ -217,6 +263,22 @@ test('schema-rejected builder output survives into the repair with independent c
  assert.ok(repair.issues.some((i:any)=>i.path==='/nodes/1/parent_id'&&i.rule==='reference'));
  assert.ok(repair.issues.some((i:any)=>i.rule==='required'&&i.message.includes('review_viewpoint_id')));
  assert.equal(h.repairs(),1);
+});
+
+test('construction failures omit builder fields that the stage compiler owns',async()=>{
+ const h=harness({automaticSceneRepair:false,model:call=>{
+  if(call.role!=='scene_builder')return;
+  const candidate=sceneFor(call.input.plan);
+  candidate.nodes[1].parent_id='missing_parent';
+  for(const step of candidate.scenario!.steps)Reflect.deleteProperty(step,'terminal');
+  validateSceneBuilderOutput(call.input.plan,call.input.audio,candidate);
+  return candidate;
+ }});
+ await assert.rejects(h.run(),(error:AppError)=>{
+  assert.ok(error.issues.some(issue=>issue.path==='/nodes/1/parent_id'&&issue.rule==='reference'));
+  assert.ok(!error.issues.some(issue=>issue.rule==='required'&&issue.message.includes('terminal')));
+  return true;
+ });
 });
 
 test('the editor fixes a structurally valid author timing mistake without spending the shared repair',async()=>{

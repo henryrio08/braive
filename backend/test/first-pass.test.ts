@@ -11,7 +11,7 @@ function draft(stages: Array<{movement: string; conversation: number | null; dur
 }
 const plan = {task_instruction: 'Practice', characters: [{id: 'character_1'}]} as unknown as SessionPlan;
 function scene(overrides: Partial<SceneSpec> = {}): SceneSpec {
-  return {nodes: [], motion_paths: [{id: 'path_a', purpose: 'swim', interpolation: 'linear', coordinate_space: 'world', start_position: [0, 0.9, 8], points: [{at_seconds: 30, position: [0, 0.9, -4]}]}],
+  return {nodes: [], events: [], interactions: [], motion_paths: [{id: 'path_a', purpose: 'swim', interpolation: 'linear', coordinate_space: 'world', start_position: [0, 0.9, 8], points: [{at_seconds: 30, position: [0, 0.9, -4]}]}],
     scenario: {objective: 'x', initial_step_id: 'stage_1', steps: [{id: 'stage_1', prompt: '', terminal: false, start_operations: [{type: 'set_environment', background_color: '#bfe8f5', fog_density: 0.002}], actions: []}]},
     construction_plan: {routes: [{path_id: 'path_a', stage_ids: ['stage_2'], requirement_ids: [], clearance_radius_meters: 0.25, eye_height_meters: 0.9}]},
     ...overrides} as unknown as SceneSpec;
@@ -47,6 +47,42 @@ test('stage compiler: missing or ambiguous route geometry is a stage-scoped issu
       {path_id: 'path_b', stage_ids: ['stage_1'], requirement_ids: [], clearance_radius_meters: 0.25, eye_height_meters: 0.9},
     ]} as unknown as SceneSpec['construction_plan']}));
   assert.equal(ambiguous.issues.length, 1); assert.match(ambiguous.issues[0].message, /bind exactly one/);
+});
+
+test('stage compiler recovers omitted route metadata and reuses the declared opening focus', () => {
+  const source=scene();
+  source.nodes=[{id:'shore',role:'environment'}] as SceneSpec['nodes'];
+  source.scenario!.steps[0].focus_node_ids=['shore'];
+  source.motion_paths!.push({id:'arrival',purpose:'swim',interpolation:'linear',coordinate_space:'world',
+    start_position:[0,0.9,-4],points:[{at_seconds:20,position:[0,0.9,-7]}]});
+  source.construction_plan!.requirements=[{requirement_id:'stage:stage_3',node_ids:[],stage_ids:['stage_3'],path_ids:['arrival']}];
+  const approved=draft([
+    {movement:'none',conversation:null,duration:10},
+    {movement:'swim',conversation:null,duration:30},
+    {movement:'swim',conversation:null,duration:20},
+  ]);
+  const staged=materializeStageGraph(approved,plan,source);
+  assert.deepEqual(staged.issues,[]);
+  assert.equal(staged.scene.nodes[0].role,'task_focus');
+  assert.deepEqual(staged.scene.scenario!.steps[2].start_operations,[{type:'move_viewer',path_id:'arrival'}]);
+  assert.equal(staged.scene.construction_plan!.routes[1].eye_height_meters,0.9);
+  assert.deepEqual(staged.scene.motion_paths,source.motion_paths);
+  assert.equal(source.construction_plan!.routes.length,1);
+  assert.equal(source.nodes[0].role,'environment');
+
+  source.construction_plan!.requirements[0].path_ids.push('path_a');
+  assert.equal(materializeStageGraph(approved,plan,source).issues[0].rule,'route_binding');
+});
+
+test('stage compiler keeps an authored purpose when one path is shared across conflicting uses',()=>{
+ const source=scene();
+ source.construction_plan!.routes[0].stage_ids=['stage_1','stage_2'];
+ const approved=draft([{movement:'walk',conversation:null,duration:30},{movement:'run',conversation:null,duration:30}]);
+ assert.equal(materializeStageGraph(approved,plan,source).scene.motion_paths![0].purpose,'swim');
+
+ source.events=[{at_active_second:0,operation:{type:'move_node',path_id:'path_a',node_id:'another_actor'}}] as SceneSpec['events'];
+ approved.experience.stages[1].movement='walk';
+ assert.equal(materializeStageGraph(approved,plan,source).scene.motion_paths![0].purpose,'swim');
 });
 
 test('preparation: time-zero waypoint becomes the route origin, preserving later waypoints and destination', () => {

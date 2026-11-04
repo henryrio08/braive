@@ -381,7 +381,7 @@ extension UIColor {
         catch { print("[scene quality] \(error.localizedDescription)") }
       }
     }
-    try StageAudit.check(spec:spec,root:root,nodes:built,initial:initial,ipd:ipd,fov:fov,aspect:eyeAspect,applyMaterial:{ value,node in self.applyMaterial(value,to:node) })
+    try StageAudit.check(spec:spec,root:root,nodes:built,characterNodeIDs:expectedCharacters,initial:initial,ipd:ipd,fov:fov,aspect:eyeAspect,applyMaterial:{ value,node in self.applyMaterial(value,to:node) })
     var estimatedSubmissions=0
     root.enumerateChildNodes { n,_ in estimatedSubmissions += n.geometry?.elements.count ?? 0 }
     metrics=RenderMetrics()
@@ -490,16 +490,21 @@ extension UIColor {
         } catch { executionBlocked=true;onRuntimeIssue?(error.localizedDescription) }
       }
     case "move_node":
-      if let path = motionPaths[op["path_id"].text], let node = nodes[op["node_id"].text] {
+      let nodeID = op["node_id"].text
+      if let path = motionPaths[op["path_id"].text], let node = nodes[nodeID] {
         renderMotion()
-        let candidate=ViewerMotion.start(path:path,origin:node.simdWorldPosition,at:activeElapsed,frame:node.simdWorldOrientation,replacing:nodeMotions[op["node_id"].text]?.motion)
-        let points=[node.worldPosition]+path.points.filter { candidate.startedAt+$0.at_seconds > activeElapsed }.map { p -> SCNVector3 in
-          let world=candidate.sample(at:candidate.startedAt+p.at_seconds).position
-          return SCNVector3(world.x,world.y,world.z)
+        let candidate=ViewerMotion.start(path:path,origin:node.simdWorldPosition,at:activeElapsed,frame:node.simdWorldOrientation,replacing:nodeMotions[nodeID]?.motion)
+        // Use human clearance for approved characters. Animated props retain
+        // their actual collision geometry without acquiring a human body.
+        if characters.values.contains(nodeID) {
+          let points=[node.worldPosition]+path.points.filter { candidate.startedAt+$0.at_seconds > activeElapsed }.map { p -> SCNVector3 in
+            let world=candidate.sample(at:candidate.startedAt+p.at_seconds).position
+            return SCNVector3(world.x,world.y,world.z)
+          }
+          do { try RouteAudit.check(root:scene.rootNode,points:points.map { SCNVector3($0.x,$0.y+(path.eye_height_meters ?? 1.6),$0.z) },walking:["walk","run"].contains(path.purpose),ignored:[node],radius:path.clearance_radius_meters ?? 0.25,eyeHeight:path.eye_height_meters ?? 1.6) }
+          catch { executionBlocked=true;onRuntimeIssue?(error.localizedDescription);return }
         }
-        do { try RouteAudit.check(root:scene.rootNode,points:points.map { SCNVector3($0.x,$0.y+(path.eye_height_meters ?? 1.6),$0.z) },walking:["walk","run"].contains(path.purpose),ignored:[node],radius:path.clearance_radius_meters ?? 0.25,eyeHeight:path.eye_height_meters ?? 1.6) }
-        catch { executionBlocked=true;onRuntimeIssue?(error.localizedDescription);return }
-        nodeMotions[op["node_id"].text] = (candidate, op["face_motion"].bool ?? false)
+        nodeMotions[nodeID] = (candidate, op["face_motion"].bool ?? false)
       }
     case "set_environment":
       if op["environment"].object != nil {

@@ -1,5 +1,5 @@
 import type {AudioPlan, Job, PlanRequest, SceneSpec, SessionPlan, ValidationIssue} from '../../docs/handoff/contracts.js';
-import {AppError, validate, validateProviderOutput, sceneIssues} from './contracts.js';
+import {AppError, validate, validateProviderOutput, validateSceneBuilderOutput, sceneIssues} from './contracts.js';
 import {assembleExperience, planningCapabilities, validateExperience, validateExperienceShape, type ExperienceDraft} from './experience.js';
 import {compileScene, constructionRequirements, deterministicCorrections} from './construction.js';
 import {applyScenePatch, computeRepairScope, patchEligible, sceneHash, type SceneRepairPatch} from './repair-patch.js';
@@ -113,7 +113,8 @@ export async function generateExperience(request:PlanRequest,job:Job,deps:Genera
    if(staged.issues.length)throw new AppError('INVALID_MODEL_OUTPUT','Stage graph requires route geometry',staged.issues);
    validate('SceneSpec',staged.scene);validateProviderOutput('SceneSpec',staged.scene);
    const compiled=compileScene(plan,staged.scene,audio);
-   if(compiled.construction_report&&corrected.corrections.length)compiled.construction_report.corrections=corrected.corrections;
+   const corrections=[...corrected.corrections,...staged.corrections];
+   if(compiled.construction_report&&corrections.length)compiled.construction_report.corrections=corrections;
    const errors=[...sceneIssues(plan,compiled,audio),...experienceSceneIssues(experience,plan,compiled)];
    if(errors.length)throw new AppError('INVALID_MODEL_OUTPUT','Scene requires repair',errors);
    return compiled;
@@ -126,7 +127,7 @@ export async function generateExperience(request:PlanRequest,job:Job,deps:Genera
    if(candidate&&error instanceof AppError&&error.code==='INVALID_MODEL_OUTPUT'){
     const issues:ValidationIssue[]=[];
     try {
-     validate('SceneSpec',candidate);
+     validateSceneBuilderOutput(plan,audio,candidate);
      const prepared=deterministicCorrections(canonicalSceneReferences(plan,candidate,audio)).scene;const staged=materializeStageGraph(experience,plan,prepared);if(staged.issues.length)issues.push(...staged.issues);
      issues.push(...experienceSceneIssues(experience,plan,staged.scene));
      try {compileScene(plan,staged.scene,audio);}
