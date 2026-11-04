@@ -79,6 +79,55 @@ test('zone fit catches world coordinates mistakenly repeated on a local child',(
  assert.ok(compileConstruction(plan,scene).construction_report);
 });
 
+test('inside with preserve_position checks containment without moving the subject (island/cove regression)',()=>{
+ const {plan,scene}=setup();
+ const island={...scene.nodes[1],id:'island',position:[0,-0.9,-28]} as any; delete island.prop_name; island.role='environment';
+ scene.nodes.push(island);
+ scene.construction_plan!.zones.push({id:'cove',center:[0,1,-16],size:[70,12,70],kind:'outdoor'});
+ scene.construction_plan!.assemblies.push({id:'island_assembly',root_node_id:'island',member_node_ids:['island'],zone_id:'cove',requirement_ids:[]});
+ scene.construction_plan!.relations.push({id:'rel_island_in_cove',kind:'inside',subject_id:'island',target_id:'cove',offset:[0,0,0],clearance:0,tolerance:0.5,required:true,containment_behavior:'preserve_position'} as any);
+ const compiled=compileConstruction(plan,scene);
+ assert.deepEqual(compiled.nodes.find(n=>n.id==='island')!.position,[0,-0.9,-28]);
+});
+test('inside with preserve_position fails with relation, position and measured bounds when outside',()=>{
+ const {plan,scene}=setup();
+ const island={...scene.nodes[1],id:'island',position:[0,-0.9,-60]} as any; delete island.prop_name; island.role='environment';
+ scene.nodes.push(island);
+ scene.construction_plan!.zones.push({id:'cove',center:[0,1,-16],size:[70,12,70],kind:'outdoor'});
+ scene.construction_plan!.assemblies.push({id:'island_assembly',root_node_id:'island',member_node_ids:['island'],zone_id:'cove',requirement_ids:[]});
+ scene.construction_plan!.relations.push({id:'rel_island_in_cove',kind:'inside',subject_id:'island',target_id:'cove',offset:[0,0,0],clearance:0,tolerance:0.5,required:true,containment_behavior:'preserve_position'} as any);
+ assert.throws(()=>compileConstruction(plan,scene),(e:any)=>e.issues.some((i:any)=>i.rule==='fit'&&i.message.includes('rel_island_in_cove')&&i.message.includes('-60')));
+});
+test('legacy inside without explicit behavior still places at target center plus offset',()=>{
+ const {plan,scene}=setup();
+ scene.construction_plan!.relations=[{id:'place_table',kind:'inside',subject_id:'table',target_id:'room',offset:[0,-1.5,0],clearance:0,tolerance:0.5,required:true}];
+ const compiled=compileConstruction(plan,scene);
+ assert.deepEqual(compiled.nodes[1].position,[0,0.5,0]);
+});
+test('empty asset IDs are rejected instead of treated as registered geometry',()=>{
+ const {plan,scene}=setup();
+ (scene.nodes[1].geometry as any)={kind:'asset',asset_id:''};
+ const issues=sceneIssues(plan,scene,{session_id:plan.session_id,revision:1,layers:[]} as unknown as AudioPlan);
+ assert.ok(issues.some(i=>i.rule==='asset'&&/empty/i.test(i.message)),JSON.stringify(issues));
+});
+test('assembly macros lower seating rows into existing node contracts',()=>{
+ const {plan,scene}=setup();
+ (scene.construction_plan as any).macros=[{id:'aud',kind:'seating_rows',root_node_id:'table',zone_id:'room',chair_asset_id:'furniture.chair.classic_chair_01',rows:2,seats_per_row:4,origin:[0,0,-6],seat_spacing:0.9,row_spacing:1.1,facing_yaw:0}];
+ const compiled=compileConstruction(plan,scene);
+ const chairs=compiled.nodes.filter(n=>n.id.startsWith('aud_seat_'));
+ assert.equal(chairs.length,8);
+ assert.ok(chairs.every(n=>n.geometry.kind==='asset'));
+});
+test('enclosure and scatter macros lower bounded finished geometry',()=>{
+ const {plan,scene}=setup();
+ (scene.construction_plan as any).macros=[
+  {id:'room_walls',kind:'enclosure',root_node_id:'table',zone_id:'room',center:[0,0,-3],size:[8,3,6],wall_height:2.6,opening_width:1.2},
+  {id:'plants',kind:'scatter',root_node_id:'table',zone_id:'room',asset_id:'nature.bush.nature_plant_bush_01',count:6,area_center:[0,0,-3],area_size:[6,4],min_spacing:0.8,seed_offset:3}];
+ const compiled=compileConstruction(plan,scene);
+ const walls=compiled.nodes.filter(n=>n.id.startsWith('room_walls_wall_'));
+ assert.ok(walls.length>=4,JSON.stringify(walls.map(w=>w.id)));
+ assert.equal(compiled.nodes.filter(n=>n.id.startsWith('plants_item_')).length,6);
+});
 test('water behavior needs a declared medium region and an actual visual surface',()=>{
  const {plan,scene}=setup();
  plan.construction_brief={spatial_intent:'Quiet shallow pool',must_preserve:[],expected_outcomes:[],medium_behavior:{substance:'water',motion:'still',visibility:'clear',participant_motion:'none',unsupported_dynamics:['No buoyancy simulation']}};

@@ -1312,7 +1312,7 @@
           "texture_asset_id": {
             "type": "string",
             "maxLength": 100,
-            "description": "Reserved legacy field; no texture assets are currently registered. New output must omit it."
+            "description": "Registered texture asset ID from the bundled manifest; trusted code loads it. Omit when unused."
           },
           "opacity": {
             "type": "number",
@@ -1324,6 +1324,12 @@
           },
           "surface": {
             "$ref": "#/components/schemas/SurfaceProfile"
+          },
+          "texture_scale": {
+            "type": "number",
+            "minimum": 0.01,
+            "maximum": 100,
+            "description": "World-space UV repeat scale for texture_asset_id."
           }
         },
         "required": [
@@ -3917,6 +3923,14 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 80
+          },
+          "containment_behavior": {
+            "type": "string",
+            "enum": [
+              "preserve_position",
+              "place_by_offset"
+            ],
+            "description": "inside only: preserve_position checks containment at the authored position without moving the subject; place_by_offset (legacy default when absent) moves the subject origin to target center plus offset, where offset = intended world position minus target center."
           }
         },
         "required": [
@@ -4056,6 +4070,13 @@
             },
             "maxItems": 16,
             "minItems": 0
+          },
+          "macros": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AssemblyMacro"
+            },
+            "maxItems": 16
           }
         },
         "required": [
@@ -4173,6 +4194,141 @@
           "medium",
           "flow_visual",
           "viewer_path_ids"
+        ],
+        "additionalProperties": false
+      },
+      "AssemblyMacro": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "seating_rows",
+              "enclosure",
+              "scatter"
+            ]
+          },
+          "root_node_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "zone_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "chair_asset_id": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "asset_id": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "wall_asset_id": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "rows": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 12
+          },
+          "seats_per_row": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 24
+          },
+          "origin": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "minItems": 3,
+            "maxItems": 3
+          },
+          "center": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "minItems": 3,
+            "maxItems": 3
+          },
+          "size": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "minItems": 3,
+            "maxItems": 3
+          },
+          "seat_spacing": {
+            "type": "number",
+            "minimum": 0.3,
+            "maximum": 5
+          },
+          "row_spacing": {
+            "type": "number",
+            "minimum": 0.3,
+            "maximum": 10
+          },
+          "facing_yaw": {
+            "type": "number"
+          },
+          "wall_height": {
+            "type": "number",
+            "minimum": 0.5,
+            "maximum": 20
+          },
+          "opening_width": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 20
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200
+          },
+          "area_center": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "minItems": 3,
+            "maxItems": 3
+          },
+          "area_size": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "minItems": 2,
+            "maxItems": 2
+          },
+          "min_spacing": {
+            "type": "number",
+            "minimum": 0.1,
+            "maximum": 20
+          },
+          "seed_offset": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100000
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "root_node_id",
+          "zone_id"
         ],
         "additionalProperties": false
       }

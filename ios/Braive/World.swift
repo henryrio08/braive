@@ -2,6 +2,7 @@ import CoreMotion
 import Metal
 import SceneKit
 import SwiftUI
+import UIKit
 
 extension UIColor {
   convenience init(hex: String) {
@@ -22,6 +23,48 @@ extension UIColor {
   private var executionBlocked = false
   var eyeAspect = 1.0
   let scene = SCNScene(), head = SCNNode(), motion = CMMotionManager()
+  let headsetPanels = HeadsetPanels()
+  private var addedAudience: [SCNNode] = []
+  func setHeadsetText(title: String, detail: String, command: String, status: String, visible: Bool) {
+    headsetPanels.update(title: title, detail: detail, command: command, status: status, visible: visible)
+  }
+  /// Bounded same-world audience growth for active edits: adds seated
+  /// library characters in an arc facing the viewer without touching the
+  /// loaded scene, stage, timer, or conversation target. Returns total.
+  func growAudience(targetTotal: Int) -> Int {
+    let cap = 16
+    let target = min(cap, max(0, targetTotal))
+    let existing = audienceCount
+    guard target > existing else { return existing }
+    let ids = (try? AssetLibrary.entries.filter { $0.id.hasPrefix("character.base.") && $0.generation_enabled != false }.map(\.id)) ?? []
+    guard !ids.isEmpty else { return existing }
+    let chairID = try? AssetLibrary.first(category: "furniture", subcategory: "chair")
+    var added = 0
+    for index in existing..<target {
+      let slot = index - existing
+      let row = slot / 6, seat = slot % 6
+      let angle = Float(seat - 2) * 0.22 + Float(row) * 0.07
+      let radius: Float = 4.2 + Float(row) * 1.6
+      let position = SCNVector3(sin(angle) * radius, 0, -cos(angle) * radius)
+      if let chairID, let chair = try? AssetLibrary.make(chairID) {
+        chair.position = position
+        chair.eulerAngles.y = .pi + angle
+        scene.rootNode.addChildNode(chair)
+        addedAudience.append(chair)
+      }
+      guard let person = try? AssetLibrary.make(ids[index % ids.count], colorHex: ["#c98b69", "#7b9385", "#8d6e5d", "#a87f5f"][index % 4]) else { continue }
+      person.position = position
+      person.eulerAngles.y = .pi + angle
+      scene.rootNode.addChildNode(person)
+      AssetLibrary.animate(person, behavior: chairID == nil ? "idle" : "sit")
+      addedAudience.append(person)
+      added += 1
+    }
+    return existing + added
+  }
+  var audienceCount: Int {
+    nodes.values.filter { AssetLibrary.isCharacter($0) }.count + addedAudience.filter { AssetLibrary.isCharacter($0) }.count
+  }
   let left = SCNNode(), right = SCNNode()
   var nodes: [String: SCNNode] = [:], viewpoints: [String: SCNVector3] = [:],
     characters: [String: String] = [:]
@@ -63,6 +106,7 @@ extension UIColor {
   init() {
     head.position = SCNVector3(0, 1.6, 0)
     scene.rootNode.addChildNode(head)
+    headsetPanels.attach(to: head)
     for (eye, x) in [(left, -ipd / 2), (right, ipd / 2)] {
       eye.camera = SCNCamera()
       eye.camera?.fieldOfView = 70
@@ -100,6 +144,7 @@ extension UIColor {
     executionBlocked=false
     motionPaths = [:]; viewerMotion = nil; viewpointFade = nil
     nodeMotions = [:]
+    addedAudience = []
     attachmentRig = nil
     practiceClock = PracticeClock()
     for child in scene.rootNode.childNodes where child !== head { child.removeFromParentNode() }
@@ -107,9 +152,38 @@ extension UIColor {
     viewpoints = [:]
     characters = [:]
   }
+  private var textureCache: [String: UIImage] = [:]
+  /// Registered texture delivery: only bundled image assets load, decoded
+  /// bounded to 1024px and cached. Mesh assets keep their library materials;
+  /// a texture ID never replaces finished geometry appearance on failure.
+  func textureImage(_ assetID: String) -> UIImage? {
+    if let cached = textureCache[assetID] { return cached }
+    guard let entry = (try? AssetLibrary.entries)?.first(where: { $0.id == assetID }),
+      ["png", "jpg", "jpeg"].contains((entry.relative_path as NSString).pathExtension.lowercased()),
+      let url = Bundle.main.resourceURL?.appendingPathComponent(entry.relative_path),
+      let image = UIImage(contentsOfFile: url.path) else { return nil }
+    let maxSide: CGFloat = 1024
+    let scale = min(1, maxSide / max(image.size.width, image.size.height))
+    let decoded: UIImage
+    if scale < 1 {
+      let size = CGSize(width: image.size.width * scale, height: image.size.height * scale)
+      decoded = UIGraphicsImageRenderer(size: size).image { _ in image.draw(in: CGRect(origin: .zero, size: size)) }
+    } else { decoded = image }
+    if textureCache.count > 24 { textureCache.removeAll() }
+    textureCache[assetID] = decoded
+    return decoded
+  }
   func material(_ value: JSON) -> SCNMaterial {
     let m = SCNMaterial()
-    m.diffuse.contents = UIColor(hex: value["color"].text)
+    if let textureID = value["texture_asset_id"].string, let image = textureImage(textureID) {
+      m.diffuse.contents = image
+      let scale = Float(value["texture_scale"].number ?? 1)
+      m.diffuse.contentsTransform = SCNMatrix4MakeScale(scale, scale, 1)
+      m.diffuse.wrapS = .repeat
+      m.diffuse.wrapT = .repeat
+    } else {
+      m.diffuse.contents = UIColor(hex: value["color"].text)
+    }
     m.roughness.contents = value["roughness"].value
     m.transparency = CGFloat(value["opacity"].number ?? 1)
     m.isDoubleSided = value["double_sided"].bool ?? false
@@ -715,6 +789,44 @@ extension UIColor {
       if let n = try? AssetLibrary.make(rocks[i % rocks.count].id) {
         let angle = Float(i) * 2.39996
         n.position = SCNVector3(sin(angle) * 4, 0, cos(angle) * 4)
+        scene.rootNode.addChildNode(n)
+      }
+    }
+    // Clearing composition: worn earth path, layered middle-distance detail,
+    // distant tree ring for depth. Centre stays clear for the welcome panel.
+    let path = SCNNode(geometry: finish(SCNBox(width: 1.6, height: 0.04, length: 9, chamferRadius: 0.02), "#8a7a5f"))
+    path.position = SCNVector3(0, 0.01, -1.5)
+    scene.rootNode.addChildNode(path)
+    let bushes = all.filter { $0.category == "nature" && $0.subcategory == "bush" }
+    let patches = all.filter { $0.category == "nature" && $0.subcategory == "ground_patch" }
+    for i in 0..<28 where !bushes.isEmpty {
+      if let n = try? AssetLibrary.make(bushes[i % bushes.count].id) {
+        let angle = Float(i) * 2.39996
+        let radius = Float(3.2 + Double(i % 6) * 0.9)
+        let x = sin(angle) * radius, z = cos(angle) * radius
+        if abs(x) < 1.6 && z < 1 && z > -7 { continue }
+        n.position = SCNVector3(x, 0, z)
+        n.eulerAngles.y = angle * 1.7
+        scene.rootNode.addChildNode(n)
+      }
+    }
+    for i in 0..<16 where !patches.isEmpty {
+      if let n = try? AssetLibrary.make(patches[i % patches.count].id) {
+        let angle = Float(i) * 2.39996 + 0.4
+        let radius = Float(2.4 + Double(i % 4) * 0.7)
+        n.position = SCNVector3(sin(angle) * radius, 0.005, cos(angle) * radius)
+        n.eulerAngles.y = angle
+        scene.rootNode.addChildNode(n)
+      }
+    }
+    for i in 0..<26 where !trees.isEmpty {
+      let angle = Float(i) / 26 * .pi * 2
+      let radius = Float(19 + (i % 5) * 2)
+      if let n = try? AssetLibrary.make(trees[i % trees.count].id) {
+        n.position = SCNVector3(sin(angle) * radius, 0, cos(angle) * radius)
+        n.eulerAngles.y = angle + Float(i) * 0.3
+        let s = 1.15 + Float(i % 3) * 0.2
+        n.scale = SCNVector3(s, s, s)
         scene.rootNode.addChildNode(n)
       }
     }

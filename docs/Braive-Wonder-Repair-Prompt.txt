@@ -1,0 +1,9 @@
+Fix the recurring “Construction constraints require repair” failure in Braive’s backend. Use the attached rejected scene as a regression case and implement a fix that works for future scenes.
+
+The repro: the generated island starts at [0, -0.9, -28]. The `inside` relation `rel_island_in_cove` targets a cove centered at [0, 1, -16] with offset [0, 0, 0]. The compiler treats `inside` as both placement and containment, so it moves the island to the cove center. The palms follow, and the validator reports four `zone_fit` errors.
+
+Trace `inside` through the construction compiler, schema, and builder and repair prompts. Make the distinction between checking containment at an existing position and intentionally repositioning an object explicit. Preserve the behavior of existing scenes that intentionally use `inside` to place an object, including valid zero-offset placement. Make the builder and repair instructions explain that a placement offset equals the intended world position minus the target center. If placement causes a zone failure, make the error name the relation and show the resulting position.
+
+Keep the fix general. Do not special-case this island, widen tolerances, or disable geometry checks. Add regression coverage for the attached failure and for intentional placement at a zone center. For the fixture, the offset [0, -1.9, -12] preserves the intended island position. The final swim waypoint [0, 0.35, -20.5] keeps the swimmer just offshore without changing stage timing. Both edits passed Braive’s backend checks on the saved scene.
+
+Run the backend checks and report the code changes, regression results, and whether phone validation is still needed.

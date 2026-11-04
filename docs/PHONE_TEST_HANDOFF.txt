@@ -1,0 +1,27 @@
+BRAIVE IPHONE TEST HANDOFF (Windows laptop, November 3, 2026)
+
+Current working branch: codex/braive-work. Fetch before editing; commit and push after fixes. The iPhone 14 runs iOS 27.0.1. The source and Docker setup are on this laptop. The Xcode 27.1 archive remains in C:\Users\rscot\Downloads\Xcode_27.1.xip. Do not commit the archive, Apple login, Meta key, pairing code, or spending ledger.
+
+1. Plug in and unlock the iPhone. Trust this computer if asked. Leave Apple Devices for Windows installed and running. Developer Mode and developer trust are enabled on the phone. Braive launches by tapping its icon; xtool's separate launch command is broken on recent iOS.
+
+2. The prepared Docker container is braive-xtool-ready. Start it if needed: docker start braive-xtool-ready. It already has xtool 1.24.0, Swift 6.4.1, the Darwin SDK from the Xcode archive, and the owner's local Apple sign-in. Credentials are not in Git. If pairing fails, unlock the phone and accept its Trust prompt.
+
+3. To compile: docker exec braive-xtool-ready sh -lc 'cd /work && xtool dev build'
+
+4. To sign and install: docker exec braive-xtool-ready sh -lc 'cd /work && USBMUXD_SOCKET_ADDRESS=host.docker.internal:27015 xtool dev run --usb'
+
+   This uses Apple Devices on Windows. Do not attach the iPhone to WSL with usbipd for deployment: that path reached [Connecting] 100% but then lost the phone connection. Successful deployment reaches [Installing] and [Verifying] 100%. xtool signs the app with an XTL-... prefix on the installed bundle ID. The app's configured ID remains edu.uiuc.braive.
+
+5. For live scenes, first check that no other billable Braive server is running and that the existing cumulative Meta ledger is intact. From the repo root, run: node scripts/start-phone-test.mjs
+
+   This starts the approved $50-capped test server on port 8788, listening on all interfaces. It does not reset the ledger. This laptop's active iPhone USB network address was 172.20.10.2; Wi-Fi address 10.192.44.3 was inactive. The address may change. Find the active address with Get-NetIPAddress -AddressFamily IPv4 and look for Apple Mobile Device Ethernet / Ethernet 2. The iPhone and laptop must have a working network path.
+
+6. On the iPhone, open http://172.20.10.2:8788/health in Safari, replacing the address if it changed. It must show "status":"ok". This was verified on November 3. If Safari cannot open it, fix the phone-to-laptop network path before trying to generate a scene.
+
+7. In Braive Settings > Connection setup, set Practice server address to http://172.20.10.2:8788 (or the current working address). The pairing code must match BRAIVE_TOKEN in backend/.env on this laptop. Do not paste it into chat or commit it. The original braive.local:8787 address did not reach a server here; it caused an apparent 35-second scene timeout before any generation job began.
+
+8. Test Settings > Listen to voice and the voice picker, then start a practice. The preview became audible after the playback-session fix. A later picker fix freezes the voice list while Settings is open and avoids repeated redraws; verify scrolling and selected voice on the final installed build. Speech activity should show "Hearing you" promptly in the headset. Scene preparation has a ten-minute deadline after the server accepts a job, and transient polling errors retry the same paid job. A live scene has not yet completed on this phone.
+
+9. If a scene fails, note the exact app message and elapsed time. Check the local server's terminal output and /health, keeping keys and user speech out of logs shared publicly. "The request timed out" at about 35 seconds with no progress stage usually means the initial request could not reach the server. A ten-minute generation deadline is a different failure. Do not blindly retry billable requests; inspect the job/server first.
+
+See docs/xtool-windows.md and docs/iphone-voice-followup-2026-11-03.md for details. The backend default .env is disabled and bound to localhost; use the approved phone-test script for a live test.

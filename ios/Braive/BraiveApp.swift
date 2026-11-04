@@ -42,16 +42,22 @@ struct ContentView: View {
             Color.black.opacity(s.phase == .intro ? 1 : 0.82).ignoresSafeArea()
           }
           if s.phase == .reveal { Color.black.opacity(max(0, 1 - s.revealFadeProgress)).ignoresSafeArea() }
-          HStack(spacing: 0) {
-            eyeHUD.frame(width: geo.size.width / 2)
-            eyeHUD.frame(width: geo.size.width / 2)
+          // Headset text is rendered in-world through both eye cameras
+          // (HeadsetPanels); the SwiftUI copy remains only outside the headset.
+          if !s.headsetReady {
+            HStack(spacing: 0) {
+              eyeHUD.frame(width: geo.size.width / 2)
+              eyeHUD.frame(width: geo.size.width / 2)
+            }
           }
         }
         if !s.pauses.isEmpty {
           Color.black.opacity(0.91).ignoresSafeArea()
-          HStack(spacing: 0) {
-            pauseHUD.frame(width: geo.size.width / 2)
-            pauseHUD.frame(width: geo.size.width / 2)
+          if !s.headsetReady {
+            HStack(spacing: 0) {
+              pauseHUD.frame(width: geo.size.width / 2)
+              pauseHUD.frame(width: geo.size.width / 2)
+            }
           }
         }
         if s.launching {
@@ -95,9 +101,16 @@ struct ContentView: View {
     }
     .onChange(of: panel) { _, value in
       s.pause("phone_controls", enabled: value != nil)
-      if value != .settings { s.audio.stopVoicePreview() }
+      if value != .settings {
+        s.audio.stopVoicePreview()
+        s.voicePreviewStatus = ""
+        speechVoices = []
+      }
     }
-    .onChange(of: s.server) { _, value in UserDefaults.standard.set(value, forKey: "server") }
+    .onChange(of: s.server) { _, value in
+      UserDefaults.standard.set(value, forKey: "server")
+      s.connection = "Server address changed · Reconnect before practice"
+    }
     .onChange(of: s.token) { _, value in UserDefaults.standard.set(value, forKey: "token") }
   }
   var welcome: some View {
@@ -146,7 +159,7 @@ struct ContentView: View {
   }
   var eyeHUD: some View {
     HeadsetHUD(copy: s.headsetCopy,
-      status: s.voiceListening ? (s.characterReplyPending ? "Reply on its way" : "Listening") : s.connecting ? "Getting ready" : "Voice unavailable",
+      status: s.voiceListening ? (s.characterReplyPending ? "Reply on its way" : s.speechFeedback.isEmpty ? "Listening" : s.speechFeedback) : s.connecting ? "Getting ready" : "Voice unavailable",
       remaining: s.phase == .active && !s.loading ? s.remaining : nil,
       preparing: s.loading || (s.phase == .planning && !s.builder))
   }
@@ -236,11 +249,22 @@ struct ContentView: View {
           if let current = speechVoices.first(where: { $0.identifier == speechVoiceID }) ?? speechVoices.first {
             Text("Using \(SpeechVoice.label(current))").font(.caption).foregroundStyle(.secondary)
             if current.quality == .default {
-              Text("For a more natural voice, download an Enhanced or Premium English voice in iPhone Settings → Accessibility → Read & Speak → Voices. Return here when it’s ready.")
+              Text("For a more natural voice, download an Enhanced or Premium English voice in iPhone Settings → Accessibility → Read & Speak → Voices. Close and reopen Braive Settings when it’s ready.")
                 .font(.caption).foregroundStyle(.secondary)
             }
           }
-          Button("Listen to voice") { s.audio.previewVoice() }
+          Button("Listen to voice") {
+            do {
+              let voice = speechVoices.first(where: { $0.identifier == speechVoiceID }) ?? speechVoices.first
+              try s.audio.previewVoice(using: voice)
+              s.voicePreviewStatus = "Playing preview. Use the iPhone volume buttons if it sounds quiet."
+            } catch {
+              s.voicePreviewStatus = "Voice preview could not start: " + error.localizedDescription
+            }
+          }
+          if !s.voicePreviewStatus.isEmpty {
+            Text(s.voicePreviewStatus).font(.caption).foregroundStyle(.secondary)
+          }
         }
         Section("Headset fit") {
           Slider(value: $ipd, in: 55...75, step: 1)
@@ -271,15 +295,13 @@ struct ContentView: View {
               .autocorrectionDisabled().keyboardType(.URL)
             SecureField("Pairing code", text: $s.token)
             Text(s.connection).font(.caption).textSelection(.enabled)
-            Text("For this development build, connect to the paired Mac on the same network.")
+            Text("Use the practice server’s address on the same network. The app checks it before starting.")
               .font(.caption).foregroundStyle(.secondary)
           }
         }
       }.tint(accent).navigationTitle("Settings").toolbar { Button("Done") { panel = nil } }
-        .onAppear { refreshVoices() }
+        .onAppear { if speechVoices.isEmpty { refreshVoices() } }
         .onDisappear { s.audio.stopVoicePreview() }
-        .onReceive(NotificationCenter.default.publisher(for: AVSpeechSynthesizer.availableVoicesDidChangeNotification)) { _ in refreshVoices() }
-        .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in refreshVoices() }
         .confirmationDialog("Delete your sessions and reflections?", isPresented: $confirmDelete) {
           Button("Delete all", role: .destructive) {
             do { try s.deleteHistory() } catch { s.fail(error) }

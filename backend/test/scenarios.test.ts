@@ -39,9 +39,11 @@ test('a stage cannot wait for motion launched only in a future stage',()=>{
  assert.deepEqual(sceneIssues(plan,scene,audio),[]);
 });
 
-test('unsupported texture output is rejected instead of silently ignored',()=>{
+test('unregistered texture output is rejected; registered texture references are accepted',()=>{
  const {plan,scene,audio}=setup();scene.nodes[0].material.texture_asset_id='invented';
- assert.ok(sceneIssues(plan,scene,audio).some(i=>i.rule==='capability'));
+ assert.ok(sceneIssues(plan,scene,audio).some(i=>i.rule==='asset'&&/registered/i.test(i.message)));
+ const ok=setup();ok.scene.nodes[0].material.texture_asset_id='nature.ground_patch.nature_ground_grass_01';ok.scene.nodes[0].material.texture_scale=2;
+ assert.deepEqual(sceneIssues(ok.plan,ok.scene,ok.audio).filter(i=>i.path.includes('texture')),[]);
 });
 test('solo scenarios and coherent viewer-carried equipment use the new action runtime',()=>{
  const {plan,scene,audio}=setup();plan.interaction_mode='solo';

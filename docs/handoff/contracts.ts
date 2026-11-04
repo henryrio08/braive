@@ -20,7 +20,7 @@ export type SceneRequest = { "plan": SessionPlan; "capabilities_version": string
 
 export type Geometry = ({ "kind": "box"; "size": Array<number> }) | ({ "kind": "plane"; "width": number; "height": number }) | ({ "kind": "sphere"; "radius": number }) | ({ "kind": "cylinder"; "radius": number; "height": number }) | ({ "kind": "asset"; "asset_id": string });
 
-export type Material = { surface?: SurfaceProfile; "color": string; "roughness": number; "texture_asset_id"?: string; "opacity"?: number; "double_sided"?: boolean };
+export type Material = { surface?: SurfaceProfile; "color": string; "roughness": number; "texture_asset_id"?: string; "texture_scale"?: number; "opacity"?: number; "double_sided"?: boolean };
 
 export type SceneNode = { collision_role?: "solid" | "none"; support_node_id?: string | null; support_contact?: [number,number,number]; "id": string; "parent_id": string | null; "role": "environment" | "prop" | "character" | "task_focus"; "geometry": Geometry; "position": Array<number>; "rotation_radians": Array<number>; "scale": Array<number>; "material": Material; "animation": "none" | "idle" | "listen" | "speak" | "gesture" | "walk" | "run" | "swim" | "sit"; "description": string; "prop_name"?: string };
 
@@ -105,7 +105,12 @@ export type ConstructionPlan = {
  zones:Array<{id:string;center:[number,number,number];size:[number,number,number];kind:'interior'|'outdoor'|'enclosure'}>;
  assemblies:Array<{id:string;root_node_id:string;member_node_ids:string[];zone_id:string;requirement_ids:string[]}>;
  anchors:Array<{id:string;node_id:string;kind:'support'|'seat'|'attachment'|'entry'|'exit';position:[number,number,number];footprint:[number,number]}>;
- relations:Array<{id:string;kind:'on'|'inside'|'faces'|'attached_to'|'near'|'clear_of';subject_id:string;target_id:string;anchor_id?:string;subject_anchor_id?:string;offset:[number,number,number];clearance:number;tolerance:number;required:boolean}>;
+ relations:Array<{id:string;kind:'on'|'inside'|'faces'|'attached_to'|'near'|'clear_of';subject_id:string;target_id:string;anchor_id?:string;subject_anchor_id?:string;offset:[number,number,number];clearance:number;tolerance:number;required:boolean;containment_behavior?:'preserve_position'|'place_by_offset'}>;
  routes:Array<{path_id:string;from_anchor_id?:string;to_anchor_id?:string;stage_ids:string[];requirement_ids:string[];clearance_radius_meters:number;eye_height_meters:number}>;
  medium_regions?:MediumRegion[];
+ macros?:AssemblyMacro[];
 };
+export type AssemblyMacro =
+ | {id:string;kind:'seating_rows';root_node_id:string;zone_id:string;chair_asset_id:string;rows:number;seats_per_row:number;origin:[number,number,number];seat_spacing:number;row_spacing:number;facing_yaw:number}
+ | {id:string;kind:'enclosure';root_node_id:string;zone_id:string;center:[number,number,number];size:[number,number,number];wall_height:number;opening_width:number;wall_asset_id?:string}
+ | {id:string;kind:'scatter';root_node_id:string;zone_id:string;asset_id:string;count:number;area_center:[number,number,number];area_size:[number,number];min_spacing:number;seed_offset:number};

@@ -58,13 +58,15 @@ export function sceneIssues(plan: SessionPlan, scene: SceneSpec, audio: AudioPla
   if(n.material.surface&&((g.kind==='asset'&&characterIDs.has(g.asset_id))||n.role==='character'))fail(`/nodes/${i}/material/surface`,'palette','Approved character materials cannot receive environmental surface profiles');
   if(n.material.surface?.profile==='water'&&n.collision_role!=='none')fail(`/nodes/${i}/collision_role`,'medium','Visual water surfaces must not be solid route obstacles; support needs separate real geometry');
   if(n.support_node_id && (!nodes.has(n.support_node_id)||n.support_node_id===n.id))fail(`/nodes/${i}/support_node_id`,'reference','Support must name another loaded node');
-  if(n.material.texture_asset_id)fail(`/nodes/${i}/material/texture_asset_id`,'capability','No texture assets are registered by this renderer');
+  if(n.material.texture_asset_id!==undefined&&!assetIDs.has(n.material.texture_asset_id))fail(`/nodes/${i}/material/texture_asset_id`,'asset','Texture must name a registered bundled asset ID; trusted code loads it');
+  if((n.material as any).texture_scale!==undefined&&!((n.material as any).texture_scale>0))fail(`/nodes/${i}/material/texture_scale`,'size','Texture UV scale must be positive');
   const approvedProp=!!n.prop_name&&!!plan.props?.includes(n.prop_name);
   if(n.prop_name&&!approvedProp)fail(`/nodes/${i}/prop_name`,'prop_match','Scene prop name must match an approved plan prop');
   if(g.kind!=='asset' && n.role!=='environment' && !(plan.experience&&(n.role==='task_focus'||n.role==='prop'&&(approvedProp||carried(n.id))))) fail(`/nodes/${i}/geometry`,'architecture_only','Use GLBs or coherent procedural assemblies bound to an approved plan prop; characters require the registered rig');
   if(n.role==='character' && (g.kind!=='asset' || !characterIDs.has(g.asset_id))) fail(`/nodes/${i}/geometry`,'neutral_character','Characters must use a registered rigged character.base asset');
   if(n.animation==='sit'&&(g.kind!=='asset'||!supportsSit(g.asset_id)))fail(`/nodes/${i}/animation`,'supported_pose','A seated actor requires a registered authored sitting pose');
-  if(g.kind==='asset' && !assetIDs.has(g.asset_id)) fail(`/nodes/${i}/geometry`,'asset','Use only registered individual object assets.');
+  if(g.kind==='asset' && !g.asset_id?.trim()) fail(`/nodes/${i}/geometry`,'asset','Empty asset_id is invalid; use a registered asset or dimensioned procedural geometry.');
+  else if(g.kind==='asset' && !assetIDs.has(g.asset_id)) fail(`/nodes/${i}/geometry`,'asset','Use only registered individual object assets.');
   if(g.kind==='box' && g.size.some(v=>v<=0) || g.kind==='sphere' && g.radius<=0 || g.kind==='cylinder' && (g.radius<=0 || g.height<=0) || g.kind==='plane' && (g.width<=0 || g.height<=0)) fail(`/nodes/${i}/geometry`,'size','Positive geometry dimensions required');
  }
  if(!scene.nodes.some(n=>n.role==='task_focus')) fail('/nodes','task_focus','Visible task_focus required');

@@ -35,6 +35,9 @@ import SwiftUI
   @Published var liveEnabled = false
   @Published var connecting = false
   @Published var voiceListening = false
+  @Published var speechFeedback = ""
+  @Published var voicePreviewStatus = ""
+  private var speechFeedbackExpiresAt = 0.0
   @Published var setupNotice = ""
   @Published var scenarioActions: [String] = []
   @Published var characterReplyPending = false
@@ -126,6 +129,8 @@ import SwiftUI
   var useHistory = false
   var parent: String?
   var builder = false
+  var builderEditing = false
+  var pendingNextAttemptChange = ""
   var active = 0.0, lastTick = ProcessInfo.processInfo.systemUptime, introTime = 0.0, stopCount = 0
   var fired = Set<Int>(), beatFired = Set<Int>()
   var turns: [Any] = []
@@ -168,6 +173,8 @@ import SwiftUI
     audio.onText = { [weak self] text, final, id in self?.heard(text, final: final, id: id) }
     audio.onActivity = { [weak self] speaking in
       self?.speechFloor.detect(speaking, now: ProcessInfo.processInfo.systemUptime)
+      self?.speechFeedback = speaking ? "Hearing you…" : "Finishing your words…"
+      self?.speechFeedbackExpiresAt = ProcessInfo.processInfo.systemUptime + (speaking ? 5 : 2)
     }
     audio.onDisconnect = { [weak self] reason in
       self?.connection = "Voice disconnected: " + reason
@@ -289,10 +296,19 @@ import SwiftUI
     Task {
       defer { connecting = false }
       do {
-        connection = "Preparing on-device voice…"
+        connection = "Checking practice server…"
+        do {
+          let health = try await api.call("/health", timeout: 5)
+          guard health["status"].text == "ok" else { throw URLError(.badServerResponse) }
+        } catch {
+          throw NSError(domain: "BraiveConnection", code: 1, userInfo: [
+            NSLocalizedDescriptionKey: "Cannot reach the practice server at \(server). Open Settings → Connection setup and use this computer’s reachable address."
+          ])
+        }
+        connection = "Practice server reachable · Preparing on-device voice…"
         try await audio.start(api: api)
         setupNotice = ""
-        connection = "On-device voice ready"
+        connection = "On-device voice ready · Practice server reachable"
         go(.lobby, "When you’re ready to start, say START!")
         headsetReady = false
         world.scene.isPaused = !pauses.isEmpty
@@ -396,6 +412,8 @@ import SwiftUI
       return
     }
     transcript = text
+    speechFeedback = final ? "Got it" : "Hearing your words…"
+    speechFeedbackExpiresAt = ProcessInfo.processInfo.systemUptime + (final ? 1.5 : 3)
     let words = text.lowercased().split(whereSeparator: { !$0.isLetter }).map(String.init)
     // Conservative STOP works on partials. Device voice processing handles playback echo; verify in goggles.
     if canStop && words.contains("stop") {
@@ -410,6 +428,17 @@ import SwiftUI
     guard seen.insert(id).inserted else { return }
     if pauses.contains("user_stop") {
       if let answer = stopConfirmation.answer(text,at:ProcessInfo.processInfo.systemUptime) { confirmStop(end:answer == .end) }
+      return
+    }
+    if pauses.contains("builder_edit") {
+      if VoiceAnswer.normalized(text) == "resume" {
+        builderEditing = false
+        pause("builder_edit", enabled: false)
+        message = "Continuing from where you left off."
+        audio.say(message)
+      } else if builderEditing {
+        collectActiveEdit(text)
+      }
       return
     }
     guard pauses.isEmpty, !loading, !adapting else { return }
@@ -707,7 +736,16 @@ import SwiftUI
             ])
           }
           try await Task.sleep(for: .milliseconds(600))
-          let j = try await api.call("/v1/jobs/" + jobID, timeout: max(0.1, min(35, generationDeadline - ProcessInfo.processInfo.systemUptime)))
+          let j: JSON
+          do {
+            j = try await api.call("/v1/jobs/" + jobID,
+              timeout: max(0.1, min(35, generationDeadline - ProcessInfo.processInfo.systemUptime)))
+          } catch let error as URLError where [.timedOut, .networkConnectionLost, .cannotConnectToHost, .notConnectedToInternet].contains(error.code) {
+            // The server owns the paid job. Keep polling that same job until its
+            // actual deadline instead of starting another one after a short gap.
+            message = "Still preparing your scene · Reconnecting to the server"
+            continue
+          }
           guard owner == sessionID, rev == revision, !Task.isCancelled else { return }
           message = j["stage"].text + " · Say hey builder to add details"
           if j["status"].text == "failed" {
@@ -798,6 +836,7 @@ import SwiftUI
   }
   func tick() {
     let now = ProcessInfo.processInfo.systemUptime
+    if !speechFeedback.isEmpty && now >= speechFeedbackExpiresAt { speechFeedback = "" }
     let dt = min(0.2, now - lastTick)
     lastTick = now
     guard pauses.isEmpty else { return }
@@ -822,9 +861,9 @@ import SwiftUI
       }
       return
     }
-    voiceListening = audio.ready && audio.engine.isRunning
+    let listening = audio.ready && audio.engine.isRunning
       && (audio.captureStats.snapshot(engineRunning: true)["callbacks"] as? Int ?? 0) > 0
-    if voiceListening { connection = "Listening" }
+    if voiceListening != listening { voiceListening = listening }
     if phase == .intro {
       introTime += dt
       if introTime >= 8 {
@@ -894,6 +933,11 @@ import SwiftUI
     checkpoint(force:true)
   }
   func perform(_ text: String) {
+    let lowered = text.lowercased()
+    if lowered.contains("hey builder") || lowered.contains("make the audience") || lowered.contains("more people") || lowered.contains("larger audience") || lowered.contains("bigger audience") {
+      beginActiveEdit(prefill: lowered.contains("hey builder") ? "" : text)
+      return
+    }
     observe("speech_excerpt", "transcript", text)
     if scenario?.isGuided == true {
       guard !VoiceAnswer.needsTime(text), let target = scenario?.conversationTarget,
@@ -922,6 +966,63 @@ import SwiftUI
     let id = ScenarioRuntime.requestedCharacter(text, characters: people.map { (id: $0["id"].text, name: $0["name"].text, role: $0["role"].text) })
     guard let character = people.first(where: { $0["id"].text == id }) else { narration.enqueue("Say ask followed by the character’s name and your question.", at: active); return }
     dialogue(text, character: character)
+  }
+  func refreshHeadsetPanels() {
+    let copy = pauses.isEmpty ? headsetCopy : pausedHeadsetCopy
+    let status = !pauses.isEmpty ? "Paused" : voiceListening ? (characterReplyPending ? "Reply on its way" : speechFeedback.isEmpty ? "Listening" : speechFeedback) : connecting ? "Getting ready" : ""
+    let statusText = phase == .active && pauses.isEmpty && remaining > 0 ? "\(status)  \(Int(remaining.rounded()))s" : status
+    world.setHeadsetText(title: copy.title, detail: copy.detail, command: [copy.command, copy.hint].filter { !$0.isEmpty }.joined(separator: " · "), status: statusText, visible: headsetReady && phase != .setup)
+  }
+  func beginActiveEdit(prefill: String) {
+    guard phase == .active, !builderEditing else { return }
+    builderEditing = true
+    answer = VoiceAnswer()
+    checkpoint(force: true)
+    pause("builder_edit", enabled: true)
+    if prefill.isEmpty {
+      message = "Your place is saved. What should change in this same place? Say that's all when finished."
+      audio.say(message)
+    } else {
+      applyActiveEdit(prefill)
+    }
+  }
+  func collectActiveEdit(_ text: String) {
+    switch answer.receive(text) {
+    case .complete(let value): answer = VoiceAnswer(); applyActiveEdit(value)
+    case .cleared, .empty:
+      message = "What should change in this same place? Say that's all when finished, or resume to continue."
+      audio.say(message)
+    default: break
+    }
+  }
+  /// Bounded same-world revision: population, appearance and decorative
+  /// changes apply now with stage, timer, pose and conversation preserved.
+  /// Task, route and duration changes are recorded for the next attempt.
+  func applyActiveEdit(_ text: String) {
+    let lowered = text.lowercased()
+    var applied = ""
+    if lowered.contains("audience") || lowered.contains("people") || lowered.contains("crowd") || lowered.contains("larger") || lowered.contains("bigger") || lowered.contains("more") {
+      let before = world.audienceCount
+      let total = world.growAudience(targetTotal: min(16, max(before + 8, 8)))
+      applied = total > before ? "Your audience is now \(total) people, in this same place." : "Your audience is already at the size this place can hold well."
+      observe("active_edit", "app_event", "Audience \(before) to \(total): " + text)
+    } else if lowered.contains("warm") || lowered.contains("bright") || lowered.contains("light") {
+      operation(JSON(["type": "set_environment", "background_color": "#a8c8b8", "fog_density": 0.12, "ambient_intensity": 0.9]))
+      applied = "The light in this same place is warmer and brighter now."
+      observe("active_edit", "app_event", "Lighting: " + text)
+    } else if lowered.contains("quiet") || lowered.contains("calm") || lowered.contains("dim") {
+      operation(JSON(["type": "set_environment", "background_color": "#5f7a72", "fog_density": 0.2, "ambient_intensity": 0.55]))
+      applied = "This same place is calmer and dimmer now."
+      observe("active_edit", "app_event", "Calm lighting: " + text)
+    } else {
+      pendingNextAttemptChange = text
+      applied = "That change shapes your next attempt in this same place. This attempt continues as it is."
+      observe("active_edit", "app_event", "Next attempt: " + text)
+    }
+    record["active_edit"] = JSON(text)
+    checkpoint(force: true)
+    message = applied + " Say resume to continue."
+    audio.say(message)
   }
   func dialogue(_ text: String, character: JSON) {
     guard remoteConsent && liveEnabled else { return }
