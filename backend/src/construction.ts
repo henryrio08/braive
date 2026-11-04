@@ -67,7 +67,10 @@ function constructionSource(source:SceneSpec):SceneSpec {
  if(!source.construction_plan)return source;
  const scene=structuredClone(source),cp=scene.construction_plan!,nodes=new Map(scene.nodes.map(n=>[n.id,n]));
  const operations=[...scene.events.map(e=>e.operation),...scene.interactions.flatMap(i=>i.choices.flatMap(c=>c.operations)),...(scene.scenario?.steps.flatMap(s=>[...s.start_operations,...s.actions.flatMap(a=>a.operations)])??[])];
- const controlled=new Set([...(scene.viewer_attached_node_ids??[]),...operations.flatMap(o=>'node_id' in o?[o.node_id]:[])]);
+ // A show-only operation on an initially visible node does not control the
+ // rest of a static grouping. Any actual hide or other operation still does.
+ const controlled=new Set([...(scene.viewer_attached_node_ids??[]),
+  ...operations.flatMap(op=>'node_id' in op&&!(op.type==='set_visible'&&op.visible)?[op.node_id]:[])]);
  fitZoneSlabs(scene,cp,nodes,controlled);
  // The task realization is the author-owned source of focal-object identity.
  if(!scene.nodes.some(n=>n.role==='task_focus')){
@@ -117,7 +120,12 @@ function constructionSource(source:SceneSpec):SceneSpec {
  */
 export function deterministicCorrections(source:SceneSpec):{scene:SceneSpec;corrections:string[]} {
  const scene=structuredClone(source),corrections:string[]=[];
+ const requiredNodes=new Set((scene.construction_plan?.requirements??[]).flatMap(requirement=>requirement.node_ids));
  for(const node of scene.nodes){
+  if(node.role==='prop'&&!node.prop_name&&node.geometry.kind!=='asset'&&!requiredNodes.has(node.id)){
+   node.role='environment';
+   corrections.push(`Classified unnamed procedural scenery ${node.id} as environment; geometry and collision are unchanged.`);
+  }
   // The renderer registers no texture assets. When the authored material
   // already carries a color, that color is the defined fallback: retain it
   // and drop the unusable optional reference instead of failing the scene.
@@ -196,6 +204,29 @@ export function deterministicCorrections(source:SceneSpec):{scene:SceneSpec;corr
    }
   }
   const nodeById=new Map(scene.nodes.map(n=>[n.id,n]));
+  // Preserve a seated pose and its declared support when a placement
+  // annotation cannot locate a real contact. Standing mesh bounds cannot
+  // reconstruct a seat contact. Strict review still reports the bad relation.
+  if(visualStrictness()==='permissive'){
+   const anchorsById=new Map((cp.anchors??[]).map(anchor=>[anchor.id,anchor]));
+   cp.relations=(cp.relations??[]).filter(relation=>{
+    if(relation.kind!=='on')return true;
+    const subject=nodeById.get(relation.subject_id);
+    const targetAnchor=anchorsById.get(relation.anchor_id??relation.target_id);
+    const support=anchorsById.get(relation.target_id)?.node_id??relation.target_id;
+    if(subject?.id===support&&subject.parent_id===null&&subject.collision_role==='solid'&&
+      (!subject.support_node_id||subject.support_node_id===subject.id)){
+     if(subject.support_node_id===subject.id)subject.support_node_id=null;
+     corrections.push(`Dropped ${relation.id}; solid world root ${subject.id} cannot support itself, and retains its authored geometry.`);
+     return false;
+    }
+    if(subject?.role!=='character'||subject.animation!=='sit'||subject.support_node_id!==support||!nodeById.has(support))return true;
+    const contact=relation.subject_anchor_id?anchorsById.get(relation.subject_anchor_id):undefined;
+    if(targetAnchor?.node_id===support&&contact?.node_id===subject.id)return true;
+    corrections.push(`Kept the authored seated pose of ${subject.id} on ${support}; ignored ${relation.id} because it lacks matching seat contact anchors.`);
+    return false;
+   });
+  }
   // Anchor references that were named but never declared, or declared on
   // the wrong node, are mechanical bookkeeping errors. Containment ignores
   // anchors entirely, so drop them there; a support subject contact falls
@@ -325,7 +356,8 @@ export function compileConstruction(plan:SessionPlan,source:SceneSpec):SceneSpec
   }
  }
  if(medium?.participant_motion==='swim'&&!regions.some(r=>r.medium==='water'&&r.viewer_path_ids.length))fail('/construction_plan/medium_regions','motion','A planned swim needs a real viewer swim route through a declared water region');
- if(medium?.motion==='authored_viewer_path'&&!regions.some(r=>r.viewer_path_ids.length))fail('/construction_plan/medium_regions','motion','Planned medium travel needs an authored viewer route; no fluid force is simulated');
+ if(medium?.motion==='authored_viewer_path'&&(medium.substance!=='air'||medium.participant_motion!=='none')&&
+   !regions.some(r=>r.viewer_path_ids.length))fail('/construction_plan/medium_regions','motion','Planned medium travel needs an authored viewer route; no fluid force is simulated');
  const fulfilled=new Map(cp.requirements.map(r=>[r.requirement_id,r]));
  if(fulfilled.size!==cp.requirements.length)fail('/construction_plan/requirements','unique','Requirement references must be unique');
  for(const entry of cp.requirements){
@@ -499,10 +531,13 @@ export function compileConstruction(plan:SessionPlan,source:SceneSpec):SceneSpec
   }
   return best;
  };
+ const characterNodes=new Set(plan.characters.map(character=>character.scene_node_id));
  for(const route of cp.routes){
   const path=paths.get(route.path_id);if(!path)continue;
   const isViewer=viewerPathIDs.has(path.id),actorID=nodeActors.get(path.id);
-  if(!isViewer&&!actorID)continue;
+  // The swept radius and eye height describe a person, not a moving prop.
+  // Props remain solid for participant and character route checks.
+  if(!isViewer&&(!actorID||!characterNodes.has(actorID)))continue;
   const eye=route.eye_height_meters,radius=route.clearance_radius_meters;
   const origin:Vec3=isViewer?((path.start_position as Vec3|undefined)??[...initialView] as Vec3):point(frames(actorID!),[0,0,0]);
   const absolute:Vec3[]=path.coordinate_space==='relative'?[origin,...path.points.map(p=>[origin[0]+p.position[0],origin[1]+p.position[1],origin[2]+p.position[2]] as Vec3)]:[origin,...path.points.map(p=>p.position as Vec3)];

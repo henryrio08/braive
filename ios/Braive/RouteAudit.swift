@@ -70,8 +70,19 @@ import SceneKit
           let t=Float(sample)/Float(count)
           let p=SCNVector3(a.x+(b.x-a.x)*t,a.y+(b.y-a.y)*t,a.z+(b.z-a.z)*t)
           let foot=p.y-eyeHeight
-          let support=hits(SCNVector3(p.x,foot+0.3,p.z),SCNVector3(p.x,foot-0.35,p.z))
-          guard support.contains(where: { $0.worldNormal.y > 0.5 }) else {
+          func supportAt(_ x: Float, _ z: Float) -> [SCNHitTestResult] {
+            hits(SCNVector3(x,foot+0.3,z),SCNVector3(x,foot-0.35,z))
+          }
+          let support=supportAt(p.x,p.z)
+          let centerSupported=support.contains { $0.worldNormal.y > 0.5 }
+          // The backend allows 2 cm of horizontal tolerance at a floor edge.
+          // SceneKit may miss the exact edge of a triangle, so retry nearby
+          // before rejecting the sample. Keep the same vertical support limits.
+          let edge:Float=0.02
+          let edgeSupported=centerSupported || [(edge,0),(-edge,0),(0,edge),(0,-edge)].contains { x,z in
+            supportAt(p.x+x,p.z+z).contains { $0.worldNormal.y > 0.5 }
+          }
+          guard edgeSupported else {
             throw ScenePreflight.error("Route support missing on segment \(i-1) near sample \(sample) (\(support.count) hits, Y normals \(support.map { $0.worldNormal.y }))")
           }
         }
@@ -96,6 +107,11 @@ import SceneKit
     let floor=SCNNode(geometry:SCNBox(width:6,height:0.1,length:8,chamferRadius:0));floor.position=SCNVector3(0,-0.05,-3);root.addChildNode(floor)
     let points=[SCNVector3(0,1.6,0),SCNVector3(0,1.6,-5)]
     try check(root:root,points:points,walking:true)
+    try check(root:root,points:[SCNVector3(0,1.6,1),points[1]],walking:true)
+    var unsupportedEdge=false
+    do { try check(root:root,points:[SCNVector3(0,1.6,1.05),points[1]],walking:true) }
+    catch { unsupportedEdge=error.localizedDescription.contains("Route support missing") }
+    guard unsupportedEdge else { throw ScenePreflight.error("Route audit accepted a start outside the floor edge") }
     let wall=SCNNode(geometry:SCNBox(width:4,height:3,length:0.02,chamferRadius:0))
     wall.name="route_audit_wall"
     wall.position=SCNVector3(0,1.5,-7)

@@ -6,7 +6,7 @@ import UIKit
 @MainActor enum ScenePreflight {
   static func check(
     root: SCNNode, focus: [SCNNode], position: SCNVector3, ipd: Float, fov: Double, aspect: Double, far viewDistance: Double = 150,
-    strictVisualReview: Bool = false
+    strictVisualReview: Bool = false, requireVisibleFocus: Bool = true
   ) throws {
     guard let device = MTLCreateSystemDefaultDevice() else {
       throw error("Metal renderer unavailable")
@@ -97,7 +97,9 @@ import UIKit
           atTime: 0, with: CGSize(width: 320, height: 320 / max(0.5, aspect)),
           antialiasingMode: .none))
       let visible = focusPixels.strideCount { r, g, b in r > 200 && g < 30 && b < 30 }
-      guard visible > 0 else { throw error("Task focal point is not visible in one eye (0 visible pixels)") }
+      if visible == 0 && (requireVisibleFocus || strictVisualReview) {
+        throw error("Task focal point is not visible in one eye (0 visible pixels)")
+      }
       if visible < 200 {
         let message = "Task focal point is occluded or too small in one eye (\(visible) visible pixels)"
         if strictVisualReview { throw error(message) }
@@ -208,6 +210,13 @@ import UIKit
         // A visible but flat composition is usable in normal playback;
         // the strict diagnostic below still detects its quality defect.
         try check(root:root,focus:focus,position:SCNVector3(0,1.6,0),ipd:0.064,fov:70,aspect:1)
+      }
+      if mode == "occluded" {
+        var blockedAtStart = false
+        do { try check(root:root,focus:focus,position:SCNVector3(0,1.6,0),ipd:0.064,fov:70,aspect:1) }
+        catch { blockedAtStart = error.localizedDescription.contains("0 visible pixels") }
+        guard blockedAtStart else { throw error("Preflight accepted an invisible opening focus") }
+        try check(root:root,focus:focus,position:SCNVector3(0,1.6,0),ipd:0.064,fov:70,aspect:1,requireVisibleFocus:false)
       }
       if mode == "transparent" || mode == "cutout" {
         do { try check(root:root,focus:focus,position:SCNVector3(0,1.6,0),ipd:0.064,fov:70,aspect:1,strictVisualReview:true) }

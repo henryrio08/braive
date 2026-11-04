@@ -323,6 +323,8 @@ export function sceneOutputSchema(plan:SessionPlan,audio:AudioPlan):any {
  * SceneSpec is still fully validated after preparation, before playback. */
 export function sceneBuilderSchema(plan:SessionPlan,audio:AudioPlan):any {
  const schema=sceneOutputSchema(plan,audio),step=schema.$defs.ScenarioStep;
+ schema.properties.nodes.minItems=1;
+ schema.properties.viewpoints.minItems=1;
  const compiled=new Set(['terminal','completion','conversation_target','review_viewpoint_id','focus_node_ids','announce_on_entry']);
  step.required=(step.required??[]).filter((field:string)=>!compiled.has(field));
  return schema;

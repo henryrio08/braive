@@ -112,7 +112,7 @@ test('repair feedback identifies the disconnected assembly member and the unscal
  const {plan,scene}=setup();scene.nodes[1].scale=[20,1,20];
  scene.construction_plan!.anchors.push({id:'table_edge',node_id:'table',kind:'entry',position:[8,0,0],footprint:[1,1]});
  scene.construction_plan!.assemblies[0].member_node_ids.push('floor');
- scene.events.push({at_active_second:1,operation:{type:'set_visible',node_id:'table',visible:true}});
+ scene.events.push({at_active_second:1,operation:{type:'set_visible',node_id:'table',visible:false}});
  assert.throws(()=>compileConstruction(plan,scene),(e:any)=>{
   assert.ok(e.issues.some((i:any)=>i.path==='/construction_plan/anchors/1/position'&&i.message.includes('table_edge on table')&&i.message.includes('unscaled geometry bounds')));
   assert.ok(e.issues.some((i:any)=>i.path==='/construction_plan/assemblies/0/member_node_ids/1'&&i.message.includes('member floor')&&i.message.includes('table')));
@@ -135,6 +135,7 @@ test('the shared repair receives independent scene failures even when constructi
 test('static independent roots are partitioned without changing geometry or world transforms',()=>{
  const {plan,scene}=setup();scene.nodes[1].position=[1,0.5,-3];scene.construction_plan!.relations=[];
  scene.construction_plan!.assemblies[0].member_node_ids.push('floor');
+ scene.events.push({at_active_second:0,operation:{type:'set_visible',node_id:'table',visible:true}});
  const original=structuredClone(scene.nodes),compiled=compileConstruction(plan,scene);
  assert.equal(compiled.construction_plan!.assemblies.length,2);
  assert.deepEqual(compiled.nodes,original);
@@ -176,6 +177,19 @@ function routeSetup(purpose:string,wall:boolean){
 test('a viewer route through solid geometry fails backend construction with the blocking node and segment',()=>{
  const {plan,scene}=routeSetup('walk',true);
  assert.throws(()=>compileConstruction(plan,scene),(e:any)=>e.issues.some((i:any)=>i.rule==='route_clearance'&&i.message.includes('wall')&&i.message.includes('segment 1')));
+});
+
+test('human clearance distinguishes an animated object from an approved actor',()=>{
+ const {plan,scene}=routeSetup('other',true);
+ scene.nodes[1].position=[0,0.8,-1];
+ scene.construction_plan!.relations=[];
+ scene.motion_paths![0].points.forEach(p=>{p.position[1]=0.8;});
+ scene.scenario!.steps[0].start_operations=[{type:'move_node',node_id:'table',path_id:'travel',face_motion:false}];
+ assert.ok(compileConstruction(plan,scene).construction_report);
+
+ plan.characters=[{id:'actor',scene_node_id:'table'}] as SessionPlan['characters'];
+ scene.construction_plan!.requirements.push({requirement_id:'cast:actor',node_ids:['table'],stage_ids:[],path_ids:[]});
+ assert.throws(()=>compileConstruction(plan,scene),(e:any)=>e.issues.some((i:any)=>i.rule==='route_clearance'&&i.message.includes('wall')));
 });
 
 test('a clear viewer route and a supported walk pass backend construction',()=>{

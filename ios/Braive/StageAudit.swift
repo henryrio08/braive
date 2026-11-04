@@ -1,7 +1,7 @@
 import SceneKit
 
 @MainActor enum StageAudit {
-  static func check(spec: JSON, root: SCNNode, nodes: [String:SCNNode], initial: SCNVector3,
+  static func check(spec: JSON, root: SCNNode, nodes: [String:SCNNode], characterNodeIDs: Set<String>, initial: SCNVector3,
     ipd: Float, fov: Double, aspect: Double, strictVisualReview: Bool = false,
     applyMaterial: (JSON, SCNNode) -> Void) throws {
     let paths=Dictionary(uniqueKeysWithValues:spec["motion_paths"].list.map { ($0["id"].text,$0) })
@@ -38,16 +38,19 @@ import SceneKit
             }
           case "move_viewer", "move_node":
             guard let path=paths[op["path_id"].text] else { throw ScenePreflight.error("Stage route is unavailable") }
-            let actor=op["type"].text == "move_node" ? nodes[op["node_id"].text] : nil
+            let nodeID=op["node_id"].text
+            let actor=op["type"].text == "move_node" ? nodes[nodeID] : nil
             let origin=actor?.worldPosition ?? viewer
             let points=path["points"].list.map { point -> SCNVector3 in
               let p=point["position"].list.map { Float($0.value) }
               return path["coordinate_space"].text == "relative" ? SCNVector3(origin.x+p[0],origin.y+p[1],origin.z+p[2]) : SCNVector3(p[0],p[1],p[2])
             }
-            let ground=["walk","run"].contains(path["purpose"].text)
-            let lift:Float=actor == nil ? 0 : Float(path["eye_height_meters"].number ?? 1.6)
-            let bodyPoints=([origin]+points).map { SCNVector3($0.x,$0.y+lift,$0.z) }
-            try RouteAudit.check(root:root,points:bodyPoints,walking:ground,ignored:attached+(actor.map { [$0] } ?? []),radius:Float(path["clearance_radius_meters"].number ?? 0.25),eyeHeight:Float(path["eye_height_meters"].number ?? 1.6))
+            if actor == nil || characterNodeIDs.contains(nodeID) {
+              let ground=["walk","run"].contains(path["purpose"].text)
+              let lift:Float=actor == nil ? 0 : Float(path["eye_height_meters"].number ?? 1.6)
+              let bodyPoints=([origin]+points).map { SCNVector3($0.x,$0.y+lift,$0.z) }
+              try RouteAudit.check(root:root,points:bodyPoints,walking:ground,ignored:attached+(actor.map { [$0] } ?? []),radius:Float(path["clearance_radius_meters"].number ?? 0.25),eyeHeight:Float(path["eye_height_meters"].number ?? 1.6))
+            }
             if let end=points.last { if let actor { actor.worldPosition=end } else { moveViewer(to:end) } }
           case "viewpoint_transition":
             if let view=spec["viewpoints"].list.first(where: { $0["id"].text == op["destination_id"].text }) {
@@ -75,7 +78,9 @@ import SceneKit
             if strictVisualReview { throw ScenePreflight.error("Stage review requires an explicit focal object") }
             print("[scene quality] Stage review has no explicit focal object")
           } else {
-            try ScenePreflight.check(root:root,focus:focus,position:SCNVector3(p[0],p[1],p[2]),ipd:ipd,fov:fov,aspect:aspect,far:spec["view_distance_meters"].number ?? 150,strictVisualReview:strictVisualReview)
+            // Review viewpoints are composition hints, not runtime camera
+            // positions. World.load separately verifies the actual opening.
+            try ScenePreflight.check(root:root,focus:focus,position:SCNVector3(p[0],p[1],p[2]),ipd:ipd,fov:fov,aspect:aspect,far:spec["view_distance_meters"].number ?? 150,strictVisualReview:strictVisualReview,requireVisibleFocus:false)
           }
         } else {
           if strictVisualReview { throw ScenePreflight.error("Stage review viewpoint is missing") }
