@@ -64,7 +64,7 @@ function fitZoneSlabs(scene:SceneSpec,cp:ConstructionPlan,nodes:Map<string,Scene
  }
 }
 
-function constructionSource(source:SceneSpec):SceneSpec {
+function constructionSource(plan:SessionPlan,source:SceneSpec):SceneSpec {
  if(!source.construction_plan)return source;
  const scene=structuredClone(source),cp=scene.construction_plan!,nodes=new Map(scene.nodes.map(n=>[n.id,n]));
  const operations=[...scene.events.map(e=>e.operation),...scene.interactions.flatMap(i=>i.choices.flatMap(c=>c.operations)),...(scene.scenario?.steps.flatMap(s=>[...s.start_operations,...s.actions.flatMap(a=>a.operations)])??[])];
@@ -77,6 +77,24 @@ function constructionSource(source:SceneSpec):SceneSpec {
  if(!scene.nodes.some(n=>n.role==='task_focus')){
   const focus=new Set(cp.requirements.find(r=>r.requirement_id==='task')?.node_ids??[]);
   for(const node of scene.nodes)if(focus.has(node.id)&&node.role!=='character')node.role='task_focus';
+ }
+ // An explicitly named prop and its declared component binding can supply
+ // missing names on the components without creating a new approved prop.
+ const realizations=new Map(cp.requirements.map(requirement=>[requirement.requirement_id,requirement.node_ids]));
+ const componentProps=new Map<string,Set<string>>();
+ for(const requirement of constructionRequirements(plan)){
+  if(requirement.kind!=='prop')continue;
+  const members=realizations.get(requirement.id)??[];
+  if(!members.some(id=>nodes.get(id)?.prop_name===requirement.target))continue;
+  for(const id of members){
+   const props=componentProps.get(id)??new Set<string>();
+   props.add(requirement.target);
+   componentProps.set(id,props);
+  }
+ }
+ for(const node of scene.nodes){
+  const props=componentProps.get(node.id);
+  if(node.role==='prop'&&!node.prop_name&&props?.size===1)node.prop_name=[...props][0];
  }
  // Partition static collections along their actual hierarchy. This changes only
  // assembly bookkeeping: never reparent or move geometry to satisfy metadata.
@@ -314,7 +332,7 @@ export function deterministicCorrections(source:SceneSpec):{scene:SceneSpec;corr
 }
 
 export function compileScene(plan:SessionPlan,source:SceneSpec,audio:AudioPlan):SceneSpec {
- const prepared=constructionSource(source);
+ const prepared=constructionSource(plan,source);
  let compiled:SceneSpec;
  try {compiled=compileConstruction(plan,prepared);}
  catch(error){
@@ -334,7 +352,7 @@ export function compileScene(plan:SessionPlan,source:SceneSpec,audio:AudioPlan):
  * IDs, cast, stages, intensity and duration are never regenerated here. */
 export function compileConstruction(plan:SessionPlan,source:SceneSpec):SceneSpec {
  if(!source.construction_plan)return source; // Saved scenes predate this compiler.
- const scene=constructionSource(source),cp=scene.construction_plan!,issues:ValidationIssue[]=[],warnings:ValidationIssue[]=[];
+ const scene=constructionSource(plan,source),cp=scene.construction_plan!,issues:ValidationIssue[]=[],warnings:ValidationIssue[]=[];
  // These annotations describe construction quality, not executable scene data.
  // The approved plan and actual route audits remain authoritative.
  const advisoryRules=new Set(['priority','coverage','bounds','support','fit','zone_fit','placement','orientation','clearance','anchor_alignment']);
@@ -353,6 +371,14 @@ export function compileConstruction(plan:SessionPlan,source:SceneSpec):SceneSpec
  const paths=new Map((scene.motion_paths??[]).map(p=>[p.id,p]));
  const stages=new Set(scene.scenario?.steps.map(s=>s.id)??[]);
  const requirements=constructionRequirements(plan),expected=new Map(requirements.map(r=>[r.id,r]));
+ const annotateRequirements=(ids:string[],path:string)=>[...new Set(ids.flatMap(id=>{
+  if(expected.has(id))return [id];
+  const suffix=id.match(/:[a-f0-9]{10}$/)?.[0];
+  const matches=suffix?requirements.filter(requirement=>requirement.id.endsWith(suffix)):[];
+  if(matches.length===1)return [matches[0].id];
+  fail(path,'reference',`Ignored unknown requirement annotation ${id}; approved requirement bindings are validated separately.`,false);
+  return [];
+ }))];
  const medium=plan.construction_brief?.medium_behavior,regions=cp.medium_regions??[];
  if(medium&&['water','mixed'].includes(medium.substance)&&!regions.some(r=>r.medium==='water'))fail('/construction_plan/medium_regions','medium','Approved water involvement needs an explicit water region; surface appearance alone does not describe immersion');
  if(scene.environment?.mode==='underwater'&&!regions.some(r=>r.medium==='water'))fail('/construction_plan/medium_regions','medium','An underwater environment needs an explicit water region');
@@ -409,7 +435,8 @@ export function compileConstruction(plan:SessionPlan,source:SceneSpec):SceneSpec
  }
  const assigned=new Set<string>();
  for(const [assemblyIndex,assembly] of cp.assemblies.entries()){
-  if(!nodes.has(assembly.root_node_id)||!zones.has(assembly.zone_id)||assembly.requirement_ids.some(id=>!expected.has(id)))fail('/construction_plan/assemblies','reference','Assembly root, zone or requirement is missing');
+  if(!nodes.has(assembly.root_node_id)||!zones.has(assembly.zone_id))fail('/construction_plan/assemblies','reference','Assembly root or zone is missing');
+  assembly.requirement_ids=annotateRequirements(assembly.requirement_ids,`/construction_plan/assemblies/${assemblyIndex}/requirement_ids`);
   for(const [memberIndex,id] of assembly.member_node_ids.entries()){
    if(assigned.has(id))fail('/construction_plan/assemblies','unique','A node belongs to multiple assemblies');assigned.add(id);
    let current:string|null=id;const seen=new Set<string>();
@@ -505,7 +532,8 @@ export function compileConstruction(plan:SessionPlan,source:SceneSpec):SceneSpec
  }
  for(const route of cp.routes){
   const path=paths.get(route.path_id);
-  if(!path||route.stage_ids.some(id=>!stages.has(id))||route.requirement_ids.some(id=>!expected.has(id))){fail('/construction_plan/routes','reference','Route references an unknown path, stage or requirement');continue;}
+  if(!path||route.stage_ids.some(id=>!stages.has(id))){fail('/construction_plan/routes','reference','Route references an unknown path or stage');continue;}
+  route.requirement_ids=annotateRequirements(route.requirement_ids,`/construction_plan/routes/${path.id}/requirement_ids`);
   if((route.from_anchor_id||route.to_anchor_id)&&path.coordinate_space==='relative'){fail('/construction_plan/routes','frame','Anchored routes require world coordinates; relative routes are checked against the current heading on the phone');continue;}
   // Anchor links are annotations on the authoritative trajectory (see the
   // alignment check below). A dangling link is dropped with a warning rather

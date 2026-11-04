@@ -200,6 +200,26 @@ test('explicit task realization supplies missing focal roles without inventing a
  assert.throws(()=>compileScene(plan,scene,{session_id:plan.session_id,revision:1,layers:[]} as unknown as AudioPlan),(e:any)=>e.issues.some((i:any)=>i.rule==='task_focus'));
 });
 
+test('construction derives component prop names and repairs redundant requirement labels',()=>{
+ const {plan,scene}=setup(),construction=scene.construction_plan!;
+ plan.construction_brief={spatial_intent:'Table and work surface',must_preserve:[],expected_outcomes:['Reach the work table']};
+ const outcome=constructionRequirements(plan).find(requirement=>requirement.kind==='outcome')!;
+ const prop=construction.requirements.find(requirement=>requirement.requirement_id.startsWith('prop:'))!;
+ const component:SceneNode={...structuredClone(scene.nodes[1]),id:'table_component',role:'prop',prop_name:undefined,parent_id:'table',position:[0,0.15,0]};
+ scene.nodes.push(component);
+ prop.node_ids.push(component.id);
+ construction.requirements.push({requirement_id:outcome.id,node_ids:['table'],stage_ids:[],path_ids:[]});
+ construction.assemblies[0].member_node_ids.push(component.id);
+ construction.assemblies[0].requirement_ids=['boundary:'+outcome.id.split(':')[1],'stale_annotation',prop.requirement_id];
+ const audio={session_id:plan.session_id,revision:1,layers:[]} as unknown as AudioPlan;
+ const compiled=compileScene(plan,scene,audio);
+ assert.equal(compiled.nodes.at(-1)!.prop_name,'Table');
+ assert.deepEqual(compiled.construction_plan!.assemblies[0].requirement_ids,[outcome.id,prop.requirement_id]);
+ assert.ok(compiled.construction_report!.warnings.some(issue=>issue.message.includes('stale_annotation')));
+ prop.node_ids.pop();
+ assert.throws(()=>compileScene(plan,scene,audio),(e:any)=>e.issues.some((i:any)=>i.rule==='architecture_only'));
+});
+
 function routeSetup(purpose:string,wall:boolean){
  const {plan,scene}=setup();
  scene.construction_plan!.relations[0].offset=[5,0,-3];
