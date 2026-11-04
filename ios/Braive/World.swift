@@ -77,6 +77,8 @@ extension UIColor {
       eye.camera?.wantsHDR = true
       eye.camera?.screenSpaceAmbientOcclusionIntensity = 0.12
       eye.camera?.screenSpaceAmbientOcclusionRadius = 0.25
+      // Fixed exposure keeps brightness stable while the head moves.
+      eye.camera?.wantsExposureAdaptation = false
       eye.position.x = x
       head.addChildNode(eye)
     }
@@ -424,12 +426,17 @@ extension UIColor {
       sun.simdPosition = SIMD3(initial.x,initial.y,initial.z) - simd_normalize(ray) * 18
     }
     sun.light?.castsShadow = true
-    sun.light?.shadowMapSize = CGSize(width: 1024, height: 1024)
+    // Scale the shadow frustum to the authored scene so grounding shadows
+    // survive beyond a fixed 18 m box without wasting resolution indoors.
+    let shadowBounds = root.boundingBox
+    let shadowSpan = max(shadowBounds.max.x - shadowBounds.min.x, shadowBounds.max.z - shadowBounds.min.z)
+    let shadowScale: CGFloat = min(44, max(16, CGFloat(shadowSpan) * 0.75))
+    sun.light?.shadowMapSize = shadowSpan <= 26 ? CGSize(width: 2048, height: 2048) : CGSize(width: 1024, height: 1024)
     sun.light?.shadowSampleCount = 4
     sun.light?.shadowRadius = 3
     sun.light?.shadowColor = UIColor.black.withAlphaComponent(0.28)
-    sun.light?.orthographicScale = 18
-    sun.light?.zFar = 70
+    sun.light?.orthographicScale = shadowScale
+    sun.light?.zFar = max(70, shadowScale * 2.5)
     scene.rootNode.addChildNode(sun)
     for c in plan["characters"].list {
       characters[c["id"].text] = c["scene_node_id"].text

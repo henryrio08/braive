@@ -64,6 +64,38 @@ instructions on every poll.
   chosen because no renderer is available in this environment to verify
   larger visual changes.
 
+## November 4 continuation (presentation, UX, live evidence)
+
+- Rendering (`ios/Braive/World.swift`): fixed exposure (no adaptation pumping
+  during head movement); the directional shadow frustum now scales with the
+  authored scene's bounds (16–44 m, 2048 maps at room scale, 1024 beyond) so
+  grounding shadows survive outside the old fixed 18 m box. The builder prompt
+  now requires depth-layered composition (focus / mid-ground / background),
+  plausible scale and clustered props.
+- UX (`ios/Braive/HeadsetHUD.swift`): the planning headset cue now shows the
+  current backend stage (excerpted) instead of only rotating tips, so asking /
+  listening / processing state is legible in the viewer. Phone-side planning
+  already shows the same stage text.
+- Live generation (bounded `scripts/live-generation.mjs`, escalated sandbox):
+  run 1 passed author (27.6 s, $0.015) and editor (17.6 s, $0.016), then the
+  harness's own $1.00 reservation cap blocked the Wonder builder
+  ("1.066 USD reserved") — a test-harness limit, not a product failure. Run 2
+  with the cap temporarily raised reached the builder ($0.354 settled); its
+  scene failed on three repairable issues (anchor fit, relation priority,
+  conversation target), the single construction repair engaged, and the
+  harness's 125 s overall deadline stopped the run mid-repair. End-to-end
+  success is therefore still unproven. Session spend: $1.52 including one
+  $1.104 unsettled repair reservation retained per project rules; ledger
+  synced back to the main checkout (22 entries, $3.7245 charged, $46.28 of
+  $50 remaining). No further live runs were made: each retry costs real
+  credit and the 125 s harness deadline, not the product, is the blocker.
+- Complete journey checks (readiness blackout, both landscape orientations,
+  voice, reveal, STOP/resume, persistence, adapted repeat) and actual-renderer
+  before/after captures remain unrun: this environment has no Swift toolchain,
+  simulator or device, and native edits above still need that pass. On device,
+  use the existing DEBUG audits (`PreflightAudit`, `StageAudit`,
+  `--render-scenario-review`) for before/after captures.
+
 ## Verification
 
 - Backend: `tsc --noEmit` clean; full suite 127/127 passing (123 baseline plus
