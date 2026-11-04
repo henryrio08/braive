@@ -19,6 +19,7 @@ try {
  for(let i=0;i<40;i++){try{if((await fetch(base+'/health')).ok)break;}catch{}await new Promise(r=>setTimeout(r,100));}
  const scenarios={
  library:{fear_description:'Practice a one-minute community garden proposal to eight friendly neighbors in a sunny library. Include a clear speaking area, windows, and responsive audience questions.',current_ability:'Synthetic test participant: can speak for one minute, but gets flustered by follow-up questions. Keep it friendly.'},
+ walk:{fear_description:'Practice walking calmly through an indoor office hallway to a small meeting room, passing a few friendly colleagues, then settling at the table.',current_ability:'Synthetic test participant: comfortable walking indoors at an easy pace, a little nervous about arriving and greeting people. Keep it gentle.'},
  swim:{fear_description:'Practice swimming calmly through open water from a quiet cove toward a small island with palms, staying near the surface at an easy pace.',current_ability:'Synthetic test participant: a cautious swimmer who is comfortable floating and swimming slowly in calm, clear water. Keep it gentle and unhurried.'},
 };
  const scenarioName=process.env.BRAIVE_LIVE_SCENARIO??'library';

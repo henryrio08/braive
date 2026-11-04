@@ -3,7 +3,7 @@ import {assetManifest} from './assets.js';
 import {AppError,document,sceneIssues} from './contracts.js';
 import type {SceneSpec,SceneNode,SessionPlan,ValidationIssue,ConstructionPlan,AudioPlan} from '../../docs/handoff/contracts.js';
 import {identity,multiply,inverse,point,transform,transformedBounds,contains,distance,type Vec3,type Bounds} from './spatial-math.js';
-import {evaluateAcceptance,zoneSeverity,type ClassifiedIssue} from './acceptance.js';
+import {classifyVisual,evaluateAcceptance,zoneSeverity,type ClassifiedIssue} from './acceptance.js';
 
 export type ConstructionRequirement={id:string;kind:'task'|'cast'|'prop'|'stage'|'motion'|'boundary'|'outcome';target:string;description:string};
 export function constructionRequirements(plan:SessionPlan):ConstructionRequirement[]{
@@ -124,6 +124,144 @@ export function deterministicCorrections(source:SceneSpec):{scene:SceneSpec;corr
   if(node.material.texture_asset_id&&node.material.color){
    corrections.push(`Removed unsupported texture reference ${node.material.texture_asset_id} from ${node.id}; retained its authored material color ${node.material.color}.`);
    delete node.material.texture_asset_id;
+  }
+  // Protected characters keep their approved materials; an environmental
+  // surface override on a character is never meaningful scene geometry.
+  if(node.role==='character'&&node.material.surface!==undefined){
+   corrections.push(`Removed environmental surface override from protected character ${node.id}; retained its approved character material.`);
+   delete node.material.surface;
+  }
+ }
+ // Operations naming a node that does not exist can never execute; drop
+ // them (recorded) rather than rejecting the whole scene, mirroring the
+ // dangling route-anchor treatment.
+ {
+  const existing=new Set(scene.nodes.map(n=>n.id));
+  const dropOps=(ops:SceneSpec['events'][number]['operation'][]|undefined,where:string)=>{
+   if(!ops)return ops;
+   return ops.filter(op=>{
+    const target=(op as {node_id?:string}).node_id;
+    if(target&&!existing.has(target)){corrections.push(`Dropped unexecutable operation in ${where}: it names missing node ${target}.`);return false;}
+    return true;
+   });
+  };
+  scene.events=(scene.events??[]).filter(event=>{
+   const target=(event.operation as {node_id?:string}).node_id;
+   if(target&&!existing.has(target)){corrections.push(`Dropped unexecutable event: it names missing node ${target}.`);return false;}
+   return true;
+  });
+  for(const step of scene.scenario?.steps??[]){
+   step.start_operations=dropOps(step.start_operations,`step ${step.id}`)??[];
+   for(const action of step.actions??[])action.operations=dropOps(action.operations,`step ${step.id}`)??[];
+  }
+ }
+ const cp=scene.construction_plan;
+ if(cp){
+  // An unambiguous time-zero waypoint IS the route origin: it becomes the
+  // path start, preserving later waypoints, times, frame and destination.
+  for(const path of scene.motion_paths??[]){
+   const first=path.points[0];
+   if(first&&first.at_seconds===0){
+    if(!path.start_position){path.start_position=[...first.position];corrections.push(`Normalized time-zero waypoint of ${path.id} into its route origin; later waypoints and timing unchanged.`);path.points=path.points.slice(1);}
+    else if(distance(path.start_position,first.position)<1e-6){path.points=path.points.slice(1);corrections.push(`Removed redundant time-zero waypoint duplicating the origin of ${path.id}.`);}
+   }
+  }
+  const nodeIds=new Set(scene.nodes.map(n=>n.id));
+  const anchorIds=new Set((cp.anchors??[]).map(a=>a.id));
+  const zoneIds=new Set((cp.zones??[]).map(z=>z.id));
+  const requiredNodes=new Set((cp.requirements??[]).flatMap(r=>r.node_ids));
+  // Facing the participant is the only reading of a faces relation whose
+  // target does not resolve to scene geometry.
+  for(const relation of cp.relations??[]){
+   if(relation.kind==='faces'&&relation.target_id!=='viewer'&&!nodeIds.has(relation.target_id)&&!anchorIds.has(relation.target_id)&&!zoneIds.has(relation.target_id)){
+    corrections.push(`Retargeted ${relation.id} from unresolvable ${relation.target_id} to the viewer (participant).`);
+    relation.target_id='viewer';
+   }
+   // Requirement flags derive from approved bindings, not model bookkeeping:
+   // a relation whose subject realizes an approved requirement is required.
+   if(!relation.required&&requiredNodes.has(relation.subject_id)){
+    relation.required=true;
+    corrections.push(`Derived required=true for ${relation.id} from its subject's approved requirement binding.`);
+   }
+  }
+  // A named anchor is authoritative for its relation's target frame: when
+  // the relation target names a different existing node than the anchor's
+  // owner, the anchor's node is the support the builder actually described.
+  for(const relation of cp.relations??[]){
+   if(!relation.anchor_id||relation.target_id===relation.anchor_id)continue;
+   const anchor=(cp.anchors??[]).find(a=>a.id===relation.anchor_id);
+   if(anchor&&anchor.node_id!==relation.target_id&&nodeIds.has(anchor.node_id)&&nodeIds.has(relation.target_id)){
+    corrections.push(`Derived target ${anchor.node_id} for ${relation.id} from its named anchor ${anchor.id} (the anchor belongs to that node).`);
+    relation.target_id=anchor.node_id;
+   }
+  }
+  const nodeById=new Map(scene.nodes.map(n=>[n.id,n]));
+  // Anchor references that were named but never declared, or declared on
+  // the wrong node, are mechanical bookkeeping errors. Containment ignores
+  // anchors entirely, so drop them there; a support subject contact falls
+  // back to the subject's bottom-center (materialized explicitly), except
+  // for seated characters whose contact point is a real authored choice.
+  for(const relation of cp.relations??[]){
+   const declared=new Map((cp.anchors??[]).map(a=>[a.id,a]));
+   if(['within','inside'].includes(relation.kind)){
+    if(relation.anchor_id&&!declared.has(relation.anchor_id)){delete relation.anchor_id;corrections.push(`Dropped undeclared anchor reference from containment relation ${relation.id}; containment targets the zone/node volume.`);}
+    if(relation.subject_anchor_id&&!declared.has(relation.subject_anchor_id)){delete relation.subject_anchor_id;corrections.push(`Dropped undeclared subject anchor reference from containment relation ${relation.id}.`);}
+    continue;
+   }
+   if(relation.kind!=='on')continue;
+   const subject=nodeById.get(relation.subject_id);
+   if(relation.subject_anchor_id){
+    const existing=declared.get(relation.subject_anchor_id);
+    if(existing&&existing.node_id!==relation.subject_id&&subject?.role!=='character'){
+     delete relation.subject_anchor_id;
+     corrections.push(`Dropped subject anchor ${existing.id} from ${relation.id}; it belongs to ${existing.node_id}, so the subject's bottom-center contact applies.`);
+    } else if(!existing&&subject&&subject.role!=='character'){
+     const sb=geometryBounds(subject);
+     cp.anchors=[...(cp.anchors??[]),{id:relation.subject_anchor_id,node_id:subject.id,kind:'support',position:[0,sb.min[1],0],footprint:[Math.max(0.05,(sb.max[0]-sb.min[0])*Math.abs(subject.scale[0]??1)),Math.max(0.05,(sb.max[2]-sb.min[2])*Math.abs(subject.scale[2]??1))]} as NonNullable<SceneSpec['construction_plan']>['anchors'][number]];
+     corrections.push(`Materialized missing subject contact anchor ${relation.subject_anchor_id} on ${subject.id} (bottom-center) for ${relation.id}.`);
+    }
+   }
+  }
+  // A support relation naming an anchor that was never declared gets that
+  // anchor materialized on its target node: top-center of the target's local
+  // bounds, with the subject's footprint clamped to the target. No position
+  // is invented for the subject; the relation offset still governs placement.
+  for(const relation of cp.relations??[]){
+   if(relation.kind!=='on'||!relation.anchor_id)continue;
+   if((cp.anchors??[]).some(a=>a.id===relation.anchor_id))continue;
+   const target=nodeById.get(relation.target_id),subject=nodeById.get(relation.subject_id);
+   if(!target||!subject)continue;
+   const tb=geometryBounds(target),sb=geometryBounds(subject);
+   cp.anchors=[...(cp.anchors??[]),{id:relation.anchor_id,node_id:target.id,kind:'support',position:[0,tb.max[1],0],footprint:[Math.min(sb.max[0]-sb.min[0],tb.max[0]-tb.min[0]),Math.min(sb.max[2]-sb.min[2],tb.max[2]-tb.min[2])]} as NonNullable<SceneSpec['construction_plan']>['anchors'][number]];
+   corrections.push(`Materialized missing support anchor ${relation.anchor_id} on ${target.id} (top-center) for ${relation.id}.`);
+  }
+  // A zero offset on a support relation whose subject was authored somewhere
+  // else means "authored position is the contact": derive the offset from
+  // the authored world position instead of relocating the subject.
+  const byId=new Map(scene.nodes.map(n=>[n.id,n]));
+  const framesOf=(id:string,seen=new Set<string>()):number[]|null=>{
+   const n=byId.get(id);if(!n||seen.has(id))return null;
+   const local=transform(n.position,n.rotation_radians,n.scale);
+   if(!n.parent_id)return local;
+   const parent=framesOf(n.parent_id,new Set([...seen,id]));return parent?multiply(parent,local):null;
+  };
+  for(const relation of cp.relations??[]){
+   if(relation.kind!=='on')continue;
+   const anchor=(cp.anchors??[]).find(a=>a.id===(relation.anchor_id??relation.target_id));if(!anchor)continue;
+   const subjectFrame=framesOf(relation.subject_id),anchorFrame=framesOf(anchor.node_id);
+   if(!subjectFrame||!anchorFrame)continue;
+   const authored=point(subjectFrame,[0,0,0]),anchorWorld=point(anchorFrame,anchor.position);
+   const derived=[authored[0]-anchorWorld[0],relation.offset[1],authored[2]-anchorWorld[2]] as Vec3;
+   // Only when the subject was authored AT the support (within its bounds,
+   // modestly expanded): a distant placeholder origin still means the
+   // relation should move the subject onto the support as authored.
+   const anchorNode=byId.get(anchor.node_id);
+   const supportBounds=anchorNode?transformedBounds(geometryBounds(anchorNode),anchorFrame):null;
+   const atSupport=!supportBounds||(authored[0]>=supportBounds.min[0]-2&&authored[0]<=supportBounds.max[0]+2&&authored[2]>=supportBounds.min[2]-2&&authored[2]<=supportBounds.max[2]+2&&Math.abs(authored[1]-anchorWorld[1])<=3);
+   if(atSupport&&distance(derived,relation.offset)>0.05){
+    relation.offset=derived;
+    corrections.push(`Derived support offset ${JSON.stringify(derived.map(v=>Math.round(v*100)/100))} for ${relation.id} from the subject's authored position (authored placement at the support preserved).`);
+   }
   }
  }
  return {scene,corrections};
@@ -275,7 +413,7 @@ export function compileConstruction(plan:SessionPlan,source:SceneSpec):SceneSpec
    // Containment-only: verify the authored position, never move the subject.
    const box=zone?{min:zone.center.map((v,i)=>v-zone.size[i]/2) as Vec3,max:zone.center.map((v,i)=>v+zone.size[i]/2) as Vec3}:worldBounds(relation.target_id);
    const available={min:box.min.map(v=>v+relation.clearance) as Vec3,max:box.max.map(v=>v-relation.clearance) as Vec3};
-   if(!contains(available,worldBounds(n.id),relation.tolerance))fail(at,'fit',`${n.id} bounds ${JSON.stringify(worldBounds(n.id))} is not within ${relation.target_id} usable bounds ${JSON.stringify(available)} at its authored position (within checks containment only; nothing was moved)${describeAuthored(n)}. Fix the authored position or rotation, or use inside with offset = intended world position minus the target origin/zone center to place it.`,relation.required);
+   if(!contains(available,worldBounds(n.id),relation.tolerance)){const b=worldBounds(n.id);const subjectSize=b.max.map((v,i)=>v-b.min[i]);fail(at,'fit',`${n.id} bounds ${JSON.stringify(b)} is not within ${relation.target_id} usable bounds ${JSON.stringify(available)} at its authored position (within checks containment only; nothing was moved)${describeAuthored(n)}. Fix the authored position or rotation, or use inside with offset = intended world position minus the target origin/zone center to place it.`,relation.required,{severity:zoneSeverity([0,1,2].map(axis=>Math.max(available.min[axis]-b.min[axis],b.max[axis]-available.max[axis],0)),available.max.map((v,i)=>v-available.min[i])),outdoor:zone?.kind==='outdoor',...((relation.clearance>0||[0,1,2].some(axis=>(subjectSize[axis])>(available.max[axis]-available.min[axis])+relation.tolerance))?{classification:'hard' as const}:{})});}
   }else if(['near','attached_to','inside'].includes(relation.kind)){
    move(n.id,destination);
    placedBy.set(n.id,relation.id);
@@ -283,7 +421,7 @@ export function compileConstruction(plan:SessionPlan,source:SceneSpec):SceneSpec
    if(relation.kind==='inside'){
     const box=zone?{min:zone.center.map((v,i)=>v-zone.size[i]/2) as Vec3,max:zone.center.map((v,i)=>v+zone.size[i]/2) as Vec3}:worldBounds(relation.target_id);
     const available={min:box.min.map(v=>v+relation.clearance) as Vec3,max:box.max.map(v=>v-relation.clearance) as Vec3};
-    if(!contains(available,worldBounds(n.id),relation.tolerance))fail(at,'fit',`${n.id} bounds ${JSON.stringify(worldBounds(n.id))} cannot fit ${relation.target_id} usable bounds ${JSON.stringify(available)} at tolerance ${relation.tolerance}m${describeAuthored(n)}`,relation.required);
+    if(!contains(available,worldBounds(n.id),relation.tolerance)){const b=worldBounds(n.id);const subjectSize=b.max.map((v,i)=>v-b.min[i]);fail(at,'fit',`${n.id} bounds ${JSON.stringify(b)} cannot fit ${relation.target_id} usable bounds ${JSON.stringify(available)} at tolerance ${relation.tolerance}m${describeAuthored(n)}`,relation.required,{severity:zoneSeverity([0,1,2].map(axis=>Math.max(available.min[axis]-b.min[axis],b.max[axis]-available.max[axis],0)),available.max.map((v,i)=>v-available.min[i])),outdoor:zone?.kind==='outdoor',...((relation.clearance>0||[0,1,2].some(axis=>(subjectSize[axis])>(available.max[axis]-available.min[axis])+relation.tolerance))?{classification:'hard' as const}:{})});}
    }
   }
   visiting.delete(relation.id);done.add(relation.id);
@@ -304,7 +442,7 @@ export function compileConstruction(plan:SessionPlan,source:SceneSpec):SceneSpec
   const a=worldBounds(relation.subject_id),targetBounds=anchor?{min:at,max:at}:zone?{min:zone.center.map((v,i)=>v-zone.size[i]/2) as Vec3,max:zone.center.map((v,i)=>v+zone.size[i]/2) as Vec3}:nodes.has(relation.target_id)?worldBounds(relation.target_id):{min:at,max:at};
   const b={min:targetBounds.min.map((v,i)=>v+relation.offset[i]),max:targetBounds.max.map((v,i)=>v+relation.offset[i])};
   const gap=Math.hypot(...[0,1,2].map(i=>Math.max(0,b.min[i]-a.max[i],a.min[i]-b.max[i])));
-  if(gap+relation.tolerance<relation.clearance)fail('/construction_plan/relations/'+relation.id,'clearance',`${relation.subject_id} to ${relation.target_id}: measured AABB gap ${gap.toFixed(3)}m, required ${relation.clearance}m, tolerance ${relation.tolerance}m. Floor support is on, not clearance from the floor.`,relation.required);
+  if(gap+relation.tolerance<relation.clearance)fail('/construction_plan/relations/'+relation.id,'clearance',`${relation.subject_id} to ${relation.target_id}: measured AABB gap ${gap.toFixed(3)}m, required ${relation.clearance}m, tolerance ${relation.tolerance}m. Floor support is on, not clearance from the floor.`,relation.required,{severity:relation.clearance/Math.max(gap,0.05),measured:String(gap),allowed:String(relation.clearance)});
   done.add(relation.id);
  }
  for(const route of cp.routes){
@@ -401,9 +539,15 @@ export function compileConstruction(plan:SessionPlan,source:SceneSpec):SceneSpec
   const volume={min:zone.center.map((v,i)=>v-zone.size[i]/2) as Vec3,max:zone.center.map((v,i)=>v+zone.size[i]/2) as Vec3};
   // Open air has no physical ceiling. Preserve real enclosures, explicit
   // containment, water volumes, and every horizontal/lower bound.
-  const openTop=zone.kind==='outdoor'&&!regions.some(r=>r.zone_id===zone.id&&r.medium==='water')&&!cp.relations.some(r=>['inside','within'].includes(r.kind)&&r.target_id===zone.id);
+  const waterZone=regions.some(r=>r.zone_id===zone.id&&r.medium==='water');
+  const containedSubjects=new Set(cp.relations.filter(r=>['inside','within'].includes(r.kind)&&r.target_id===zone.id).map(r=>r.subject_id));
   for(const id of assembly.member_node_ids){
    const bounds=worldBounds(id);
+   // Open air has no physical ceiling for ordinary members (a tree canopy
+   // above a conceptual outdoor grouping zone is layout metadata, not a
+   // boundary violation). Explicitly contained subjects, water volumes and
+   // real enclosures keep their ceiling.
+   const openTop=zone.kind==='outdoor'&&!containedSubjects.has(id);
    const measured:Bounds={min:volume.min,max:openTop?[volume.max[0],Math.max(volume.max[1],bounds.max[1]),volume.max[2]]:volume.max};
    if(!contains(measured,bounds,0.2)){
     const parent=nodes.get(id)?.parent_id;
@@ -413,7 +557,7 @@ export function compileConstruction(plan:SessionPlan,source:SceneSpec):SceneSpec
     const overflow=[0,1,2].map(axis=>{const low=measured.min[axis]-bounds.min[axis],high=bounds.max[axis]-measured.max[axis];return (low>0?` ${'xyz'[axis]} low by ${low.toFixed(2)}m`:'')+(high>0?` ${'xyz'[axis]} high by ${high.toFixed(2)}m`:'');}).join('').trim();
     const overflowText=overflow?` Overflow:${overflow}.`:'';
     const frame=parent?` ${id} is a child of ${parent}, whose scale ${JSON.stringify(nodes.get(parent)?.scale)} also scales its geometry and local offset.`:'';
-    fail(`/nodes/${nodeIndices.get(id)}`,'zone_fit',`${id} world bounds ${JSON.stringify(bounds)} exceed zone ${zone.id} ${JSON.stringify(volume)} (0.2m boundary allowance).${frame}${via}${overflowText}${describeAuthored(nodes.get(id)!)} Use independent world roots for static objects, or correct local transforms for genuine children.`,requiredGeometry.has(id),{classification:severity<=1?'soft':'hard',severity,measured:JSON.stringify(bounds),allowed:JSON.stringify(volume)});
+    fail(`/nodes/${nodeIndices.get(id)}`,'zone_fit',`${id} world bounds ${JSON.stringify(bounds)} exceed zone ${zone.id} ${JSON.stringify(volume)} (0.2m boundary allowance).${frame}${via}${overflowText}${describeAuthored(nodes.get(id)!)} Use independent world roots for static objects, or correct local transforms for genuine children.`,requiredGeometry.has(id),{classification:classifyVisual({path:'',rule:'zone_fit',message:'',severity,outdoor:zone.kind==='outdoor'}).classification,severity,outdoor:zone.kind==='outdoor',measured:JSON.stringify(bounds),allowed:JSON.stringify(volume)});
    }
   }
  }
@@ -425,21 +569,24 @@ export function compileConstruction(plan:SessionPlan,source:SceneSpec):SceneSpec
   const center=relation.anchor_id?anchorPoint(relation.anchor_id):anchors.has(relation.target_id)?anchorPoint(relation.target_id):zone?zone.center:point(frames(relation.target_id),[0,0,0]);
   const requested=center.map((v,i)=>v+relation.offset[i]) as Vec3;
   const origin=point(frames(n.id),[0,0,0]);
-  if(['near','attached_to'].includes(relation.kind)&&distance(origin,requested)>relation.tolerance)fail('/construction_plan/relations/'+relation.id,'placement','Later constraints displaced the requested relationship',relation.required);
+  if(['near','attached_to'].includes(relation.kind)&&distance(origin,requested)>relation.tolerance)fail('/construction_plan/relations/'+relation.id,'placement','Later constraints displaced the requested relationship',relation.required,{severity:distance(origin,requested)/Math.max(0.3,relation.tolerance)});
   const contact=relation.subject_anchor_id?anchorPoint(relation.subject_anchor_id):[origin[0],worldBounds(n.id).min[1],origin[2]];
   if(relation.kind==='on'&&distance(contact,requested)>relation.tolerance)fail('/construction_plan/relations/'+relation.id,'support','Later constraints displaced the supported object',relation.required);
   if(relation.kind==='faces'){
    const local=n.parent_id?point(inverse(frames(n.parent_id)),requested):requested;
    const yaw=Math.atan2(-(local[0]-n.position[0]),-(local[2]-n.position[2]));
-   if(Math.abs(Math.atan2(Math.sin(yaw-n.rotation_radians[1]),Math.cos(yaw-n.rotation_radians[1])))>relation.tolerance)fail('/construction_plan/relations/'+relation.id,'orientation','Facing constraints did not converge after placement',relation.required);
+   const angularError=Math.abs(Math.atan2(Math.sin(yaw-n.rotation_radians[1]),Math.cos(yaw-n.rotation_radians[1])));
+   if(angularError>relation.tolerance)fail('/construction_plan/relations/'+relation.id,'orientation','Facing constraints did not converge after placement',relation.required,{severity:angularError/Math.max(0.3,relation.tolerance)});
   }
   if(['inside','within'].includes(relation.kind)){
    const bounds=zone?{min:zone.center.map((v,i)=>v-zone.size[i]/2) as Vec3,max:zone.center.map((v,i)=>v+zone.size[i]/2) as Vec3}:worldBounds(relation.target_id);
-   if(!contains({min:bounds.min.map(v=>v+relation.clearance) as Vec3,max:bounds.max.map(v=>v-relation.clearance) as Vec3},worldBounds(n.id),relation.tolerance))fail('/construction_plan/relations/'+relation.id,'fit','Later placement violates the required usable space',relation.required);
+   const available={min:bounds.min.map(v=>v+relation.clearance) as Vec3,max:bounds.max.map(v=>v-relation.clearance) as Vec3},subjectBounds=worldBounds(n.id);const subjectSize=subjectBounds.max.map((v,i)=>v-subjectBounds.min[i]);
+   if(!contains(available,subjectBounds,relation.tolerance))fail('/construction_plan/relations/'+relation.id,'fit','Later placement violates the required usable space',relation.required,{severity:zoneSeverity([0,1,2].map(axis=>Math.max(available.min[axis]-subjectBounds.min[axis],subjectBounds.max[axis]-available.max[axis],0)),available.max.map((v,i)=>v-available.min[i])),outdoor:zone?.kind==='outdoor',...((relation.clearance>0||[0,1,2].some(axis=>(subjectSize[axis])>(available.max[axis]-available.min[axis])+relation.tolerance))?{classification:'hard' as const}:{})});
   }
  }
- const acceptance=evaluateAcceptance(issues as ClassifiedIssue[]);
- if(issues.some(issue=>(issue as ClassifiedIssue).classification!=='soft')||acceptance.reasons.length)throw new AppError('INVALID_MODEL_OUTPUT','Construction constraints require repair',issues);
+ const classified=(issues as ClassifiedIssue[]).map(issue=>classifyVisual(issue));
+ const acceptance=evaluateAcceptance(classified);
+ if(classified.some(issue=>issue.classification!=='soft')||acceptance.reasons.length)throw new AppError('INVALID_MODEL_OUTPUT','Construction constraints require repair',classified);
  warnings.push(...acceptance.acceptedSoft);
  scene.construction_report={compiler_version:'1',resolved_relation_ids:[...done].sort(),warnings:[...new Map(warnings.map(w=>[JSON.stringify(w),w])).values()],...(acceptance.acceptedSoft.length?{accepted_defects:acceptance.acceptedSoft}:{})} as SceneSpec['construction_report'];
  return scene;

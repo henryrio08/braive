@@ -6,45 +6,74 @@ and are not claimed as verified by the backend work.
 
 ## What to install / restart
 
-- Branch: `codex/wonder-recovery-pipeline` (commits `aa29d8a`, `b5ec620`,
-  plus the anchor-operations commit on top; backend-only changes since the
-  last app build, plus `ios/` changes from the already-merged
-  `codex/wonder-generation-reliability` work).
+- Branch: `codex/wonder-first-pass-readiness` (on top of merged
+  `7523a92`). This branch changes the BACKEND only; the native app tree is
+  identical to the already-built one, so no app rebuild is required for
+  these changes (rebuild only if you also pull other native work).
 - Backend: restart the backend from this branch (`node
-  scripts/start-phone-test.mjs` under the existing cumulative approval, or
-  the normal launcher). No database or ledger reset: the existing
-  `backend/data/meta-test-approval.json` must be kept as-is.
-- App: rebuild with the documented Windows path if picking up the merged
-  iOS changes (`xtool dev build` in the `braive-xtool-build` container,
-  project at the worktree root), then install the produced
-  `xtool/Braive.app` as usual. Compilation was verified here on
-  2026-11-04 ("Build complete!").
+  scripts/start-phone-test.mjs`, or the normal launcher). No database or
+  ledger reset: keep `backend/data/meta-test-approval.json` as-is.
+- Native compilation of this exact native tree was verified on
+  2026-11-04 via Docker xtool ("Build complete!"); Docker was unavailable
+  in the final session, and no native code changed since.
+
+## What changed (first-pass readiness revision)
+
+- Permissive visual acceptance by default: zone_fit/fit/placement/
+  orientation/clearance findings are recorded diagnostics, not rejection,
+  with no defect-count budget. Outdoor grouping zones are layout metadata
+  (higher tolerance); interiors/enclosures, explicit clearance insets,
+  cannot-fit containment, blocked routes, missing support and broken
+  references remain hard. `BRAIVE_VISUAL_STRICTNESS=standard` restores the
+  stricter historical budgets for developer inspection.
+- The backend now compiles the executable stage graph from the approved
+  plan (order, durations, completions, conversation targets, terminal
+  step, move_viewer binding for the uniquely bound route). The builder
+  only supplies content, route geometry and preserved step operations.
+- Deterministic preparation (recorded in `construction_report.corrections`,
+  originals preserved): time-zero waypoint → route origin; missing support
+  and subject-contact anchors materialized; containment anchor references
+  dropped; support offsets derived from authored placement at the support
+  (XZ); faces relations retargeted to the viewer; requirement flags
+  derived from approved bindings; protected-character surface overrides and
+  unsupported texture references removed; operations naming missing nodes
+  dropped.
+- Repair feedback now evaluates the candidate AFTER preparation and stage
+  compilation, so it no longer contains spurious stage complaints.
+
+## Verified here (2026-11-04)
+
+- Backend suite 159/159, `tsc --noEmit` clean.
+- Henry's recovery fixture (both rejected swim candidates, both corrected
+  candidates) replayed through the production preparation + stage-compiler
+  + validation path: all four accepted; the rejected candidates needed no
+  model call, and the swim route, positive-time waypoints and destination
+  survive unchanged.
+- Retained failures replayed offline: the library window candidate and a
+  seated-audience candidate now pass locally; one swim candidate now fails
+  only on a genuine route blockage (swim body intersects shallow sand),
+  which stays hard.
+- Fresh live generations this session (all attempts reported):
+  library stationary conversation succeeded after initial generation +
+  local preparation (`recovery=deterministic`, no model repair); indoor
+  hallway walk and two swim attempts succeeded via one bounded rebuild
+  each (first candidates had genuine anchor/route geometry errors); one
+  swim attempt failed after its rebuild on outdoor-zone overflows that the
+  revised policy now accepts — its exact candidate passes offline under
+  the shipped code. A final swim attempt was terminated early at the
+  user's credit-conservation request and is not counted.
 
 ## Device checks relevant to these changes
 
-1. Fresh generation (library-style indoor request with seated audience):
-   confirm the scene reaches "Ready for device validation", passes native
-   preflight (including the route audit naming any blocking node), reveals
-   after the readiness blackout, and plays with automatic progression.
-2. STOP during practice, pause, resume-or-quit, then completion: ratings,
+1. Fresh generation (any request): confirm the scene reaches "Ready for
+   device validation", passes native preflight, reveals after the
+   readiness blackout, and plays with automatic progression. Travel stages
+   should start moving automatically; stationary stages must not move.
+2. A swimming/water request and an indoor walking request, end to end.
+3. STOP during practice, pause, resume-or-quit, then completion: ratings,
    optional reflection/feedback, session saved to history, export works.
-3. Adapted repeat of the saved session at the offered intensity.
-4. Recovery behavior: if native preflight fails, the phone should show the
-   specific backend stage/message and offer retry/revise/cancel with the
-   practice details retained (REVISE keeps situation and boundaries).
-5. Headset legibility: Speaking vs Listening status, stage prompt text,
-   STOP hint readability in both landscape orientations.
-6. Forest lobby on launch: composed clearing, no paid generation, trees
-   grounded, clear space around the participant, sky/fog consistent with
-   generated scenes.
-
-## Known backend behavior to expect
-
-- Small zone overflows may be accepted with recorded diagnostics
-  (`accepted_defects` in the scene report); obstructed routes, missing
-  support and broken references still fail.
-- Localized failures repair via a scoped patch; semantic/structural
-  failures via one bounded rebuild. The scene report's `recovery` field
-  records which path produced the accepted scene.
-- Failures keep per-attempt artifacts privately under
-  `backend/data/rejected/` and `backend/data/live-test/`.
+4. Adapted repeat of a saved session.
+5. Recovery behavior on failure: concise message, retry/revise/cancel with
+   practice details retained.
+6. Forest lobby on launch: composed clearing, no paid generation, clear
+   space around the participant.
