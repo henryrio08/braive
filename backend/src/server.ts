@@ -1,5 +1,5 @@
 import {activeBudget} from './budget.js';
-import {cancelGeneration,releaseGeneration,supersedeGeneration,repeatedGeneration,claimRepair,type GenerationAttempt} from './job-lifecycle.js';
+import {cancelGeneration,releaseGeneration,supersedeGeneration,repeatedGeneration,claimRepair,repairBlock,releaseRepair,grantRepairWindow,type GenerationAttempt} from './job-lifecycle.js';
 import {PhoneTestWindow} from './phone-test-window.js';
 import {canonicalSceneReferences} from './scene-references.js';
 import {assertCurrentDialogue,dialogueContext} from './dialogue.js';
@@ -84,7 +84,7 @@ app.post(['/v1/session-plans','/v1/scene-revisions'],(req,res,next)=>{
   supersedeGeneration(input.session_id,jobs,running);
   revisions.set(input.session_id,input.revision);
   const job:Job={job_id:randomUUID(),session_id:input.session_id,revision:input.revision,status:'running',stage:'Starting generation'};
-  attempts.set(job.job_id,{deadline:Date.now()+generationLimitMs,constructionRepairUsed:false,deviceRepairUsed:false});
+  attempts.set(job.job_id,{deadline:Date.now()+generationLimitMs,deadlineCap:Date.now()+generationLimitMs+5*60*1000,constructionRepairUsed:false,deviceRepairUsed:false});
   jobs.set(job.job_id,job); const controller=new AbortController(); running.set(job.job_id,controller);
   requests.set(job.job_id,structuredClone(input));
   const timer=setTimeout(()=>controller.abort(new Error('Ten-minute generation ceiling reached')),generationLimitMs);
@@ -104,7 +104,12 @@ app.post('/v1/jobs/:id/validation',async(req,res,next)=>{
   if(revisions.get(job.session_id)!==job.revision)throw new AppError('CONFLICT','A newer scene revision has replaced this job',[],409);
   if(running.size>=3)throw new AppError('RATE_LIMITED','Too many active generation jobs',[],429);
   if(typeof req.body.message!=='string' || req.body.message.length>2000) throw new AppError('INVALID_INPUT','Provide a bounded validation explanation');
-  if(!claimRepair(attempt,'device'))throw new AppError('TIMEOUT','Device repair allowance or generation deadline exhausted. Retry, revise, or cancel.',[],408);
+  const block=repairBlock(attempt,'device');
+  if(block==='missing')throw new AppError('CONFLICT','This scene is no longer available for automatic repair. Your practice details are unchanged; start again to rebuild the scene.',[],409);
+  if(block==='deadline')throw new AppError('TIMEOUT','The time reserved for building this scene has ended, so its automatic fix cannot start. Your practice details are unchanged; start again when you are ready.',[],408);
+  if(block==='used')throw new AppError('CONFLICT','This scene already used its one automatic fix and still needs changes. Revise the scene or start again; your practice details are unchanged.',[],409);
+  grantRepairWindow(attempt!,Date.now(),240*1000);
+  if(!claimRepair(attempt,'device'))throw new AppError('TIMEOUT','The time reserved for building this scene has ended, so its automatic fix cannot start. Your practice details are unchanged; start again when you are ready.',[],408);
   job.status='running';job.stage='Repairing device visibility checks';
   const controller=new AbortController();running.set(job.job_id,controller);
   const timer=setTimeout(()=>controller.abort(),Math.max(1,attempt.deadline-Date.now()));
@@ -119,7 +124,12 @@ app.post('/v1/jobs/:id/validation',async(req,res,next)=>{
    const errors=[...sceneIssues(plan,repaired,audio),...(experience?experienceSceneIssues(experience,plan,repaired):[])];if(errors.length) throw new AppError('INVALID_MODEL_OUTPUT','Native repair invalid',errors);
    controller.signal.throwIfAborted();if(revisions.get(job.session_id)!==job.revision)return;
    job.result={plan,audio,scene:repaired};approved.set(job.session_id,{...job.result,experience});job.status='succeeded';job.stage='Ready for device validation';
-  }catch(e:any){if(jobs.get(job.job_id)?.status!=='cancelled'){job.status='failed';job.error={code:controller.signal.aborted?'TIMEOUT':e.code??'INVALID_MODEL_OUTPUT',message:e.message,retryable:true,request_id:job.job_id,issues:e.issues};}}
+  }catch(e:any){if(jobs.get(job.job_id)?.status!=='cancelled'){
+   if(!controller.signal.aborted&&(e.code==='PROVIDER_UNAVAILABLE'||e.code==='RATE_LIMITED')){
+    // No candidate was produced; keep the scene and its repair for a later retry.
+    releaseRepair(attempt,'device');job.status='succeeded';job.stage='Ready for device validation';
+   } else {job.status='failed';job.error={code:controller.signal.aborted?'TIMEOUT':e.code??'INVALID_MODEL_OUTPUT',message:e.message,retryable:true,request_id:job.job_id,issues:e.issues};}
+  }}
   finally{clearTimeout(timer);releaseGeneration(job.job_id,controller,running);}
  }catch(e){next(e);}
 });

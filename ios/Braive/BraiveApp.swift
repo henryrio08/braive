@@ -110,7 +110,7 @@ struct ContentView: View {
   var welcome: some View {
     HStack(alignment: .center, spacing: 40) {
       VStack(alignment: .leading, spacing: 14) {
-        Text("YOUR NEXT TRY STARTS HERE").font(.system(size: 10, weight: .semibold)).tracking(2.4)
+        EmptyView()
           .foregroundStyle(accent)
         Text("Practice before\nit counts.")
           .font(.system(size: 43, weight: .regular, design: .serif)).tracking(-1.5)
@@ -119,7 +119,7 @@ struct ContentView: View {
           .font(.system(size: 15)).foregroundStyle(.white.opacity(0.7)).lineSpacing(4)
         HStack(spacing: 8) {
           Image(systemName: "waveform").foregroundStyle(accent)
-          Text("Describe it. Practice it. Try again.")
+          Text("Speech stays on this iPhone.")
         }.font(.system(size: 12)).padding(.top, 4)
       }.frame(maxWidth: .infinity, alignment: .leading)
       VStack(alignment: .leading, spacing: 14) {

@@ -157,6 +157,42 @@ test('explicit task realization supplies missing focal roles without inventing a
  assert.throws(()=>compileScene(plan,scene,{session_id:plan.session_id,revision:1,layers:[]} as unknown as AudioPlan),(e:any)=>e.issues.some((i:any)=>i.rule==='task_focus'));
 });
 
+function routeSetup(purpose:string,wall:boolean){
+ const {plan,scene}=setup();
+ scene.construction_plan!.relations[0].offset=[5,0,-3];
+ if(wall)scene.nodes.push({id:'wall',parent_id:null,role:'environment',geometry:{kind:'box',size:[4,3,0.2]},position:[0,1.5,-3],rotation_radians:[0,0,0],scale:[1,1,1],material:{color:'#8899aa',roughness:0.9},animation:'none',description:'wall'} as unknown as SceneNode);
+ scene.motion_paths=[{id:'travel',purpose:purpose as never,interpolation:'linear',coordinate_space:'world',points:[{at_seconds:2,position:[0,1.6,-2]},{at_seconds:5,position:[0,1.6,-5]}]}] as unknown as SceneSpec['motion_paths'];
+ scene.construction_plan!.routes=[{path_id:'travel',stage_ids:['look'],requirement_ids:['task'],clearance_radius_meters:0.25,eye_height_meters:1.6}];
+ scene.scenario!.steps[0].start_operations=[{type:'move_viewer',path_id:'travel'}] as never;
+ return {plan,scene};
+}
+
+test('a viewer route through solid geometry fails backend construction with the blocking node and segment',()=>{
+ const {plan,scene}=routeSetup('walk',true);
+ assert.throws(()=>compileConstruction(plan,scene),(e:any)=>e.issues.some((i:any)=>i.rule==='route_clearance'&&i.message.includes('wall')&&i.message.includes('segment 1')));
+});
+
+test('a clear viewer route and a supported walk pass backend construction',()=>{
+ const clear=routeSetup('walk',true);
+ clear.scene.motion_paths![0].points.forEach(p=>{p.position[0]=3;});
+ assert.ok(compileConstruction(clear.plan,clear.scene).construction_report);
+ const supported=routeSetup('walk',false);
+ supported.scene.motion_paths![0].points.forEach(p=>{p.position[0]=-3;});
+ assert.ok(compileConstruction(supported.plan,supported.scene).construction_report);
+});
+
+test('walking needs support under the route while swimming does not',()=>{
+ const walk=routeSetup('walk',false);
+ walk.scene.nodes=walk.scene.nodes.filter(n=>n.id!=='floor');
+ walk.scene.construction_plan!.relations=[];walk.scene.construction_plan!.anchors=[];
+ assert.throws(()=>compileConstruction(walk.plan,walk.scene),(e:any)=>e.issues.some((i:any)=>i.rule==='route_support'));
+ const swim=routeSetup('swim',false);
+ swim.scene.nodes=swim.scene.nodes.filter(n=>n.id!=='floor');
+ swim.scene.construction_plan!.relations=[];swim.scene.construction_plan!.anchors=[];swim.scene.construction_plan!.zones[0].size=[20,20,20];
+ swim.scene.motion_paths![0].points.forEach(p=>{p.position[1]=1.45;});
+ assert.ok(compileConstruction(swim.plan,swim.scene).construction_report);
+});
+
 test('open-air zones have no virtual ceiling, but enclosures and explicit containment still do',()=>{
  const {plan,scene}=setup();scene.nodes[1].geometry={kind:'box',size:[2,8,1]};scene.nodes[1].position=[1,4,-3];
  const cp=scene.construction_plan!;cp.relations=[];cp.zones[0].kind='outdoor';
