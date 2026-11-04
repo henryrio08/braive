@@ -2,8 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
 <key>CFBundleDisplayName</key><string>Braive</string>
-<key>CFBundleShortVersionString</key><string>0.4</string>
-<key>CFBundleVersion</key><string>7</string>
+<key>CFBundleShortVersionString</key><string>0.5</string>
+<key>CFBundleVersion</key><string>11</string>
 <key>NSMicrophoneUsageDescription</key><string>Braive listens for commands, your practice answers, and optional reflections.</string>
 <key>NSSpeechRecognitionUsageDescription</key><string>Braive turns your speech into practice commands and answers on this iPhone.</string>
 <key>NSLocalNetworkUsageDescription</key><string>Connect to the Braive backend running on your computer.</string>

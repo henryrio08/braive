@@ -151,5 +151,15 @@ export function materializeStageGraph(experience:ExperienceDraft,plan:SessionPla
   initial_step_id:'stage_1',
   steps,
  };
+ // These bindings describe the executable graph we just compiled; asking a
+ // model to repeat them adds no authoring freedom and can omit a valid stage.
+ if(scene.construction_plan){
+  for(const step of steps){
+   const requirement='stage:'+step.id;
+   if(!plan.experience?.stages.some(stage=>stage.id===step.id)||scene.construction_plan.requirements.some(r=>r.requirement_id===requirement))continue;
+   scene.construction_plan.requirements.push({requirement_id:requirement,node_ids:(step.focus_node_ids??[]).filter(id=>scene.nodes.some(n=>n.id===id)),stage_ids:[step.id],path_ids:step.start_operations.flatMap(op=>op.type==='move_viewer'?[op.path_id]:[])});
+   corrections.push('Bound compiled stage '+step.id+' to its actual executable step.');
+  }
+ }
  return {scene,issues,corrections};
 }

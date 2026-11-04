@@ -183,9 +183,9 @@ import Foundation
     if case .behavior(let behavior) = ScenePatch.parse("make them wave", currentAudience: 4) {
       expect(behavior == "gesture", "make them wave -> behavior gesture (got \(behavior))")
     } else { fatalError("FAILED: make them wave -> behavior") }
-    if case .behavior(let behavior) = ScenePatch.parse("make the audience nod", currentAudience: 4) {
-      expect(behavior == "gesture", "make the audience nod -> behavior gesture (got \(behavior))")
-    } else { fatalError("FAILED: make the audience nod -> behavior") }
+    if case .ambiguous = ScenePatch.parse("make the audience nod", currentAudience:4) {
+      print("ok: unsupported nod is not silently replaced with a wave")
+    } else { fatalError("FAILED: unsupported nod must be clarified") }
 
     // patchMaterial sets texture only on the matching environment floor node.
     guard let materialPatched = ScenePatch.patchMaterial(scene: scene, textureID: "texture.surface.wood_01")
@@ -211,7 +211,7 @@ import Foundation
       expect(node["role"].text == "environment", "decor node role environment")
       expect(node["geometry"]["asset_id"].text == "nature.bush.nature_plant_bush_01", "decor node bush asset")
       expect(node["description"].text == "Decorative planting", "decor node description")
-      expect(node["collision_role"].text == "none" && node["collision"].text == "none", "decor node collision none")
+      expect(node["collision_role"].text == "none" && node["collision"].string == nil, "decor node uses only the actual collision_role contract")
       expect(node["position"].list.count == 3, "decor node has position")
     }
     guard let decoratedAgain = ScenePatch.patchDecorative(scene: decorated.scene, existingNodes: audienceNodes)

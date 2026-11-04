@@ -27,10 +27,13 @@ import UIKit
       material.diffuse.contents = UIColor.black
       material.lightingModel = .constant
       material.isDoubleSided = false
+      material.readsFromDepthBuffer = false
+      material.writesToDepthBuffer = false
       plane.materials = [material]
       let node = SCNNode(geometry: plane)
       node.position = SCNVector3(0, 0, -2.9)
       node.name = "braive_blackout"
+      node.renderingOrder = 10_000
       root.addChildNode(node)
       blackoutNode = node; blackoutMaterial = material
     }
@@ -45,37 +48,44 @@ import UIKit
     panelNode?.removeFromParentNode(); panelNode = nil
     statusNode?.removeFromParentNode(); statusNode = nil
     guard visible else { return }
-    if !title.isEmpty || !detail.isEmpty || !command.isEmpty {
+    if !title.isEmpty || !detail.isEmpty {
       let image = Self.renderPanel(title: title, detail: detail, command: command)
-      let plane = SCNPlane(width: 1.6, height: 0.9)
+      let plane = SCNPlane(width: 1.6, height: 1.6 * image.size.height / image.size.width)
       let material = SCNMaterial()
       material.diffuse.contents = image
       material.isDoubleSided = false
       material.lightingModel = .constant
+      material.readsFromDepthBuffer = false
+      material.writesToDepthBuffer = false
       plane.materials = [material]
       let node = SCNNode(geometry: plane)
       node.position = SCNVector3(0, -0.02, -2.5)
       node.name = "braive_headset_panel"
+      node.renderingOrder = 10_002
       root.addChildNode(node)
       panelNode = node
     }
     if !status.isEmpty {
-      let image = Self.renderStatus(status)
-      let plane = SCNPlane(width: 1.0, height: 0.2)
+      let compact = title.isEmpty && detail.isEmpty ? [status, command].filter { !$0.isEmpty }.joined(separator: " · ") : status
+      let image = Self.renderStatus(compact)
+      let plane = SCNPlane(width: 1.4, height: 0.2)
       let material = SCNMaterial()
       material.diffuse.contents = image
       material.lightingModel = .constant
+      material.readsFromDepthBuffer = false
+      material.writesToDepthBuffer = false
       plane.materials = [material]
       let node = SCNNode(geometry: plane)
       node.position = SCNVector3(0, -0.62, -2.1)
       node.name = "braive_headset_status"
+      node.renderingOrder = 10_003
       root.addChildNode(node)
       statusNode = node
     }
   }
 
   private static func renderPanel(title: String, detail: String, command: String) -> UIImage {
-    let size = CGSize(width: 1024, height: 576)
+    let size = CGSize(width: 1024, height: detail.isEmpty ? 300 : 576)
     let renderer = UIGraphicsImageRenderer(size: size)
     return renderer.image { _ in
       let rect = CGRect(origin: .zero, size: size)
@@ -101,7 +111,7 @@ import UIKit
   }
 
   private static func renderStatus(_ status: String) -> UIImage {
-    let size = CGSize(width: 640, height: 128)
+    let size = CGSize(width: 1024, height: 128)
     let renderer = UIGraphicsImageRenderer(size: size)
     return renderer.image { _ in
       UIColor(white: 0.02, alpha: 0.6).setFill()

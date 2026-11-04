@@ -50,6 +50,8 @@ def inventory(source):
     with (source/'LICENSE_INDEX.csv').open(encoding='utf-8-sig', newline='') as f: rows=list(csv.DictReader(f))
     supplements_path=source/'character-provenance.json'
     supplements={a['asset_id']:a for a in json.loads(supplements_path.read_text())} if supplements_path.exists() else {}
+    curation_path=source/'asset-curation.json'
+    curation=json.loads(curation_path.read_text()) if curation_path.exists() else {}
     indexed={}; ids=set(); manifest=[]
     for r in rows:
         rel=PurePosixPath(r['file_path'])
@@ -79,6 +81,10 @@ def inventory(source):
             manifest[-1]['material_tint_names']=tint_names
         if r['category']=='character' and r['subcategory']=='base': manifest[-1]['resolved_node_count']=len(gltf.get('nodes',[]))+3
         if 'generation_enabled' in supplements.get(expected,{}):manifest[-1]['generation_enabled']=supplements[expected]['generation_enabled']
+        curated=curation.get(expected,{})
+        for field in ['generation_enabled','style_family','placement_notes','semantic_front_yaw_radians','preview_sheet']:
+            if field in curated:manifest[-1][field]=curated[field]
+        if 'semantic_front_yaw_radians' in curated and (not isinstance(curated['semantic_front_yaw_radians'],(int,float)) or not math.isfinite(curated['semantic_front_yaw_radians'])):raise ValueError('Invalid semantic front: '+expected)
         dependencies=[]
         for image in gltf.get('images',[]):
             uri=image.get('uri','')

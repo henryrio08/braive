@@ -37,7 +37,8 @@
     "author": "Kenney",
     "license": "CC0-1.0",
     "sha256": "77572792bfe2773b715b8cd8e18644b52b3e1f155fe10450254b50f9c364382a",
-    "generation_enabled": true
+    "generation_enabled": false,
+    "note": "Historical scenes remain loadable. New default uses the coherent civilian source family."
   },
   {
     "asset_id": "character.base.soft_adult_02",
@@ -46,7 +47,8 @@
     "author": "Kenney",
     "license": "CC0-1.0",
     "sha256": "8cfcff43460da8b421f2a7fdfb43ec177321cad2746db9497cbf128d5806e2a8",
-    "generation_enabled": true
+    "generation_enabled": false,
+    "note": "Historical scenes remain loadable. New default uses the coherent civilian source family."
   },
   {
     "asset_id": "character.base.soft_adult_03",
@@ -55,7 +57,8 @@
     "author": "Kenney",
     "license": "CC0-1.0",
     "sha256": "791fc0c203924c175c0a3d5b60d030daf36797b039506689cf7cd01ef5253b3c",
-    "generation_enabled": true
+    "generation_enabled": false,
+    "note": "Historical scenes remain loadable. New default uses the coherent civilian source family."
   },
   {
     "asset_id": "character.base.soft_adult_04",
@@ -64,6 +67,55 @@
     "author": "Kenney",
     "license": "CC0-1.0",
     "sha256": "2288438e7baf9acc91a870c82dc00d66710bb486592cfc3474ef8ed93a03863a",
-    "generation_enabled": true
+    "generation_enabled": false,
+    "note": "Historical scenes remain loadable. New default uses the coherent civilian source family."
+  },
+  {
+    "asset_id": "character.base.civilian_01",
+    "source_url": "https://kenney.nl/assets/animated-characters-protagonists",
+    "source_archive_sha256": "ec3787de70fa2200256848d74201b10f6b6c3126594e9857bf989753312c2b84",
+    "source_file": "Model/characterMedium.fbx",
+    "license": "CC0-1.0",
+    "author": "Kenney",
+    "sha256": "794e2abc48cb8d2ff93511ae7842723d5e12c93191e69a1cdec0d408c7c0e9f0",
+    "generation_enabled": true,
+    "derivation": "Original mesh/weights/UVs; omitted unweighted controls; app-owned rig clips; plain civilian vector skin variants.",
+    "visual_evidence": "docs/asset-review/civilian (Blender); native headset review pending"
+  },
+  {
+    "asset_id": "character.base.civilian_02",
+    "source_url": "https://kenney.nl/assets/animated-characters-protagonists",
+    "source_archive_sha256": "ec3787de70fa2200256848d74201b10f6b6c3126594e9857bf989753312c2b84",
+    "source_file": "Model/characterMedium.fbx",
+    "license": "CC0-1.0",
+    "author": "Kenney",
+    "sha256": "6fec574b6b6aa644d2a25ca50625218f03f9911e2b09617d9f2e9163568b86c5",
+    "generation_enabled": true,
+    "derivation": "Original mesh/weights/UVs; omitted unweighted controls; app-owned rig clips; plain civilian vector skin variants.",
+    "visual_evidence": "docs/asset-review/civilian (Blender); native headset review pending"
+  },
+  {
+    "asset_id": "character.base.civilian_03",
+    "source_url": "https://kenney.nl/assets/animated-characters-protagonists",
+    "source_archive_sha256": "ec3787de70fa2200256848d74201b10f6b6c3126594e9857bf989753312c2b84",
+    "source_file": "Model/characterMedium.fbx",
+    "license": "CC0-1.0",
+    "author": "Kenney",
+    "sha256": "67556478086b43d3673e9f923d3289da2720f5e5193a536b15b30b5ec58201b2",
+    "generation_enabled": true,
+    "derivation": "Original mesh/weights/UVs; omitted unweighted controls; app-owned rig clips; plain civilian vector skin variants.",
+    "visual_evidence": "docs/asset-review/civilian (Blender); native headset review pending"
+  },
+  {
+    "asset_id": "character.base.civilian_04",
+    "source_url": "https://kenney.nl/assets/animated-characters-protagonists",
+    "source_archive_sha256": "ec3787de70fa2200256848d74201b10f6b6c3126594e9857bf989753312c2b84",
+    "source_file": "Model/characterMedium.fbx",
+    "license": "CC0-1.0",
+    "author": "Kenney",
+    "sha256": "2d3030c78002558ff72a30bb325999c757c5951d18724ce549491089dbbc3a7b",
+    "generation_enabled": true,
+    "derivation": "Original mesh/weights/UVs; omitted unweighted controls; app-owned rig clips; plain civilian vector skin variants.",
+    "visual_evidence": "docs/asset-review/civilian (Blender); native headset review pending"
   }
 ]

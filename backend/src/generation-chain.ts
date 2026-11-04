@@ -9,6 +9,7 @@ import {dispatchTool} from './tool-dispatch.js';
 import {authorInstructions, editorInstructions, builderInstructions, repairInstructions} from './generation-prompts.js';
 import type {ModelRole} from './meta.js';
 import {automaticSceneRepairEnabled} from './recovery-policy.js';
+import {sceneCapabilities} from './scene-assets.js';
 
 export type ApprovedExperience = {plan:SessionPlan; scene:SceneSpec; audio:AudioPlan; experience?:ExperienceDraft};
 export interface GenerationDependencies {
@@ -68,9 +69,9 @@ export async function generateExperience(request:PlanRequest,job:Job,deps:Genera
  const previous=deps.previous&&(deps.previous.plan.session_id===source.session_id||
   source.chained_rerun&&deps.previous.plan.session_id===source.parent_session_id)?deps.previous:undefined;
  const planning={request:source,capabilities:planningCapabilities(),previous_plan:previous?.plan};
- // Planning (author/editor) and construction (builder) each own one repair:
-// an editorial correction must not starve scene construction, and vice versa.
- let repairsUsed={planning:false,construction:false};
+ // claimRepair in the owner shares one correction across planning,
+ // construction and native preflight, within the original wall-clock ceiling.
+ let repairUsed=false;
  const run=async<T>(stage:string,kind:'planning'|'construction',operation:(issues?:ValidationIssue[])=>Promise<T>):Promise<T>=>{
   let issues:ValidationIssue[]|undefined;
   for(;;){
@@ -78,8 +79,8 @@ export async function generateExperience(request:PlanRequest,job:Job,deps:Genera
    try {const value=await operation(issues);check();return value;}
    catch(error){
     check();
-    if(!(error instanceof AppError)||error.code!=='INVALID_MODEL_OUTPUT'||repairsUsed[kind]||!deps.consumeRepair(kind))throw error;
-    repairsUsed[kind]=true;
+    if(!(deps.automaticSceneRepair??automaticSceneRepairEnabled())||!(error instanceof AppError)||error.code!=='INVALID_MODEL_OUTPUT'||repairUsed||!deps.consumeRepair(kind))throw error;
+    repairUsed=true;
     issues=error.issues.length?error.issues:[{path:'/',rule:'validation',message:error.message}];
    }
   }
@@ -103,7 +104,7 @@ export async function generateExperience(request:PlanRequest,job:Job,deps:Genera
  let candidate:SceneSpec|undefined;
  const buildOnce=async(issues?:ValidationIssue[]):Promise<SceneSpec>=>{
   const input={request:source,plan,approved_experience:experience,audio,requirements:constructionRequirements(plan),
-   capabilities:deps.capabilities,previous_scene:authoredScene(candidate??previous?.scene),issues};
+   capabilities:sceneCapabilities(plan,deps.capabilities),previous_scene:authoredScene(candidate??previous?.scene),issues};
   try {
    const output=await dispatchTool(plan,'compose_scene',source.revision===1?'setup':'builder_revision',
     args=>deps.model('SceneSpec',structuredClone({...input,tool_arguments:args}),builderInstructions,signal,'scene_builder'));
@@ -147,7 +148,8 @@ export async function generateExperience(request:PlanRequest,job:Job,deps:Genera
  let scene:SceneSpec;
  try { scene=await buildOnce(); if(scene.construction_report)scene.construction_report.recovery=scene.construction_report.corrections?.length?'deterministic':'first_pass'; }
  catch(firstError){
-  if(!(deps.automaticSceneRepair??automaticSceneRepairEnabled())||!(firstError instanceof AppError)||firstError.code!=='INVALID_MODEL_OUTPUT'||!deps.consumeRepair('construction'))throw firstError;
+  if(!(deps.automaticSceneRepair??automaticSceneRepairEnabled())||repairUsed||!(firstError instanceof AppError)||firstError.code!=='INVALID_MODEL_OUTPUT'||!deps.consumeRepair('construction'))throw firstError;
+  repairUsed=true;
   const issues=firstError.issues;
   job.stage='Adjusting your practice…'; check();
   if(candidate&&patchEligible(issues)){

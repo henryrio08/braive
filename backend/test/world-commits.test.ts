@@ -1,21 +1,16 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {readFileSync} from 'node:fs';
-import {prepareWorldCommit,publishWorldCommit,type ApprovedWorld,type WorldCommitInput} from '../src/world-commits.js';
+import {readFileSync,mkdtempSync,rmSync,writeFileSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {prepareWorldCommit,publishWorldCommit,WorldStore,WorldTransactions,worldHash,type ApprovedWorld,type WorldCommitInput} from '../src/world-commits.js';
 import {assertCurrentDialogue} from '../src/dialogue.js';
 import {AppError} from '../src/contracts.js';
 import {parseImageInfo} from '../src/assets.js';
 import type {AudioPlan,DialogueRequest,SceneSpec,SessionPlan} from '../../docs/handoff/contracts.js';
 
-const SESSION='c36a8c25-43c2-46fc-b3bc-c48bb8d43192';
+import {SESSION,fixture} from './helpers/world-fixture.js';
 
-function fixture(revision:number){
- const plan={schema_version:'1',session_id:SESSION,revision,topic:'Work table',task_instruction:'Stand at the work table',setting_brief:'A quiet room with a table.',props:[],intensity:{summary:'Gentle',dimensions:[]},intensity_1_10:2,duration_sec:30,narrator_intro_8s:'Welcome. To stop at any time, just say STOP!',intro_target_seconds:8,narrator_beats:[],characters:[{id:'neighbor_1',name:'Maya',role:'neighbor',appearance_brief:'Friendly stylized adult with a warm appearance.',goal:'Help the participant settle in.',behavior_boundaries:['Keep conversation friendly.'],voice_id:'default',scene_node_id:'char_node',asset_id:'character.base.soft_adult_01'}],interaction_mode:'solo',tool_calls:[],topic_short:'Work table',stop_reminder:'To stop at any time, just say STOP!',audio_brief:'Quiet room ambience.',safety:{decision:'ok',reason:'Suitable for practice.',practice_preserving_alternative:''}} as unknown as SessionPlan;
- const node=(id:string,role:string,geometry:unknown,position:number[])=>({id,parent_id:null,role,geometry,position,rotation_radians:[0,0,0],scale:[1,1,1],material:{color:'#aabbcc',roughness:0.8},animation:'none',description:id,collision_role:'solid',support_node_id:null});
- const scene={schema_version:'1',session_id:SESSION,revision,description:'A quiet room.',nodes:[node('floor','environment',{kind:'box',size:[20,0.2,20]},[0,-0.1,0]),node('focus','task_focus',{kind:'asset',asset_id:'furniture.chair.classic_chair_01'},[0,0,-3]),{...node('char_node','character',{kind:'asset',asset_id:'character.base.soft_adult_01'},[2,0,-3]),material:{color:'#ffffff',roughness:0.8}}],viewpoints:[{id:'start',position:[0,1.6,0],description:'Start'}],initial_viewpoint_id:'start',lighting:{ambient_color:'#ffffff',ambient_intensity:0.5,key_direction:[0,-1,-1],key_intensity:0.7},atmosphere:{background_color:'#aabbcc',fog_density:0},interactions:[],events:[{at_active_second:1,operation:{type:'narrate',text:'Welcome'}}],stereo:{presentation:'stereographic',units:'meters',coordinate_system:'right_handed_y_up',eye_calibration:'device_viewer_profile',camera_control:'app_owned'},reveal:{black_intro_seconds:8,fade_seconds:1.5,blur_to_clear_seconds:1.5}} as unknown as SceneSpec;
- const audio={schema_version:'1',session_id:SESSION,revision,layers:[],transition_whoosh_asset_id:'whoosh',duck_gain_during_speech:0.25,rationale:'Quiet room.'} as unknown as AudioPlan;
- return {plan,scene,audio};
-}
 function input(revision:number,expected_revision:number):WorldCommitInput {
  const {plan,scene,audio}=fixture(revision);
  return {session_id:SESSION,expected_revision,revision,plan,scene,audio};
@@ -82,4 +77,67 @@ test('parseImageInfo scans JPEG SOF markers',()=>{
  const jpeg=Buffer.from([0xff,0xd8,0xff,0xc0,0x00,0x11,0x08,0x01,0x00,0x02,0x00,0x03,0x01,0x22,0x00,0x02,0x11,0x01,0x03,0x11,0x01,0xff,0xd9]);
  assert.deepEqual(parseImageInfo(jpeg),{format:'jpeg',width:512,height:256});
  assert.throws(()=>parseImageInfo(Buffer.from('not an image')),/Unsupported image format/);
+});
+
+test('an exact commit replay succeeds after its response is lost; a different same-revision world conflicts',()=>{
+ const {approved,revisions}=maps(),request=input(1,0);
+ publishWorldCommit(request,prepareWorldCommit(request,approved,revisions),approved,revisions);
+ assert.equal(worldHash(prepareWorldCommit(structuredClone(request),approved,revisions)),worldHash(approved.get(SESSION)!));
+ const changed=structuredClone(request);changed.scene.nodes[1].position[0]=4;
+ assert.throws(()=>prepareWorldCommit(changed,approved,revisions),(e:any)=>e.status===409);
+});
+
+test('saved approval survives restart with full validation and rejects corrupt records',()=>{
+ const directory=mkdtempSync(join(tmpdir(),'braive-world-store-'));
+ try{
+  const store=new WorldStore(directory),request=input(1,0),world=prepareWorldCommit(request,new Map(),new Map());
+  store.save(world);assert.equal(worldHash(store.loadAll()[0]),worldHash(world));
+  const invalid=structuredClone(world);delete (invalid.plan.characters[0] as any).voice_id;store.save(invalid);
+  assert.deepEqual(store.loadAll(),[]);
+ }finally{rmSync(directory,{recursive:true,force:true});}
+});
+
+test('cancel before preparation creates a durable tombstone and prevents a late commit',()=>{
+ const directory=mkdtempSync(join(tmpdir(),'braive-world-transaction-'));
+ try{
+  const {approved,revisions}=maps(),store=new WorldStore(join(directory,'worlds'));
+  const tx=new WorldTransactions(join(directory,'transactions'),store),id=crypto.randomUUID();
+  tx.cancel(id,approved,revisions);
+  const restarted=new WorldTransactions(join(directory,'transactions'),store);
+  assert.throws(()=>restarted.commit({...input(1,0),transaction_id:id},approved,revisions),(e:any)=>e.code==='CANCELLED');
+  assert.equal(approved.size,0);
+ }finally{rmSync(directory,{recursive:true,force:true});}
+});
+
+test('prepare does not publish; cancellation after a lost commit restores the exact prior world at a new revision',()=>{
+ const directory=mkdtempSync(join(tmpdir(),'braive-world-transaction-'));
+ try{
+  const {approved,revisions}=maps(),store=new WorldStore(join(directory,'worlds'));
+  const tx=new WorldTransactions(join(directory,'transactions'),store);
+  tx.commit(input(1,0),approved,revisions);
+  const id=crypto.randomUUID(),change={...input(2,1),transaction_id:id};
+  change.scene.nodes[1].position[0]=3;
+  tx.prepare(change,approved,revisions);assert.equal(revisions.get(SESSION),1);
+  tx.commit(change,approved,revisions);assert.equal(revisions.get(SESSION),2);
+  const restarted=new WorldTransactions(join(directory,'transactions'),store);
+  const restored=restarted.cancel(id,approved,revisions)!;
+  assert.equal(restored.plan.revision,3);assert.equal(restored.scene.revision,3);assert.equal(restored.audio.revision,3);
+  assert.equal(restored.scene.nodes[1].position[0],0);
+  assert.equal(restarted.cancel(id,approved,revisions)?.plan.revision,3,'duplicate cancellation is idempotent');
+  assert.throws(()=>restarted.commit(change,approved,revisions),(e:any)=>e.code==='CANCELLED');
+  assert.equal(store.loadAll()[0].plan.revision,3);
+ }finally{rmSync(directory,{recursive:true,force:true});}
+});
+
+test('cancelling an old transaction cannot overwrite a newer accepted edit',()=>{
+ const directory=mkdtempSync(join(tmpdir(),'braive-world-transaction-'));
+ try{
+  const {approved,revisions}=maps(),store=new WorldStore(join(directory,'worlds'));
+  const tx=new WorldTransactions(join(directory,'transactions'),store),id=crypto.randomUUID();
+  tx.commit(input(1,0),approved,revisions);
+  tx.commit({...input(2,1),transaction_id:id},approved,revisions);
+  const newer=input(3,2);newer.scene.nodes[1].position[0]=4;tx.commit(newer,approved,revisions);
+  assert.throws(()=>tx.cancel(id,approved,revisions),(e:any)=>e.status===409);
+  assert.equal(approved.get(SESSION)?.scene.nodes[1].position[0],4);
+ }finally{rmSync(directory,{recursive:true,force:true});}
 });

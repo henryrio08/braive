@@ -6,7 +6,7 @@ import SwiftUI
   enum Phase: String {
     case setup, lobby, headset, intake, ability, history, planning, intro, reveal, active,
       selfReport, readiness, reflectionPrompt, reflection, feedbackPrompt, feedback, saving,
-      repeatPrompt, error
+      repeatPrompt, repeatPreparation, error
   }
   @Published var phase: Phase = .setup
   @Published var message = "Welcome to Braive"
@@ -42,15 +42,24 @@ import SwiftUI
   @Published var scenarioActions: [String] = []
   var isSpeaking: Bool { audio.narrated || audio.speech.isSpeaking || audio.promptSpeech.isSpeaking }
   @Published var characterReplyPending = false
+  @Published var reviewRunning = false
+  @Published var reviewStatus = ""
+  @Published var reviewLastFrame: URL?
+  @Published var reviewReport: URL?
+  @Published var reviewFiles: [URL] = []
+  var reviewTask: Task<Void,Never>?
+  var captureResult: Result<URL,Error>?
+  var historyCleanupTask: Task<Void,Never>?
   var scenario: ScenarioRuntime?
   var scenarioCompletedAt: Double?
   var appliedOperations: [JSON] = []
   var lastCheckpoint = -Double.infinity
   var pendingRecovery: JSON?
+  var restorationToken = UUID()
   func requestRecovery() {
     guard let saved = store.recoverable else { audio.say("There is no interrupted practice to resume."); return }
     pendingRecovery = saved
-    go(.headset, "An interrupted practice is saved. Look forward and say yes to resume from its saved position.")
+    go(.headset,saved["outcome"].text == "prepared" ? "Your prepared world is saved. Look forward and say yes to start it when ready." : "An interrupted practice is saved. Look forward and say yes to resume from its saved position.")
   }
   func checkpoint(force: Bool = false) {
     guard phase == .active, record.object != nil, force || active - lastCheckpoint >= 5 else { return }
@@ -68,16 +77,45 @@ import SwiftUI
       try store.save(record,rebuild:false)
     } catch { setupNotice = "Practice checkpoint could not be saved: " + error.localizedDescription }
   }
-  func restorePractice(_ saved: JSON) throws {
+  func restorePractice(_ original: JSON, owner restoration: UUID) async throws {
+    try requireRestoration(restoration)
+    if original["outcome"].text == "prepared" { try await restorePreparedAttempt(original,owner:restoration);return }
+    var saved = original
     guard saved["checkpoint"]["version"].value == 1 else { throw world.failure("Saved practice version is unsupported") }
-    newSession()
+    let endpoint = api
+    if let transaction = saved["pending_world_transaction"].string {
+      let rolledBack = try await endpoint.call("/v1/world-transactions/" + transaction + "/cancel",JSON([:]),timeout:8)
+      try requireRestoration(restoration)
+      if rolledBack["scene"].object != nil {
+        saved["scene"] = rolledBack["scene"]; saved["plan"] = rolledBack["plan"]; saved["audio"] = rolledBack["audio"]
+        saved["scene_revision"] = rolledBack["plan"]["revision"]
+      }
+      saved.object?.removeValue(forKey:"pending_world_transaction")
+    }
     record=saved;plan=saved["plan"];scene=saved["scene"];audioPlan=saved["audio"]
     sessionID=saved["session_id"].text; revision=Int(saved["scene_revision"].value)
     deferredChanges=saved["deferred_changes"].list.map(\.text); builderEditing=false; revisionReady=false
-    try world.load(scene,plan:plan)
+    let registration = revisionBody(scene:scene,plan:plan,audio:audioPlan,expected:0)
+    do {
+      let registered = try await endpoint.call("/v1/worlds/" + sessionID,timeout:8)
+      try requireRestoration(restoration)
+      guard registered["plan"]["revision"] == plan["revision"] else { throw world.failure("This world has a newer revision on the practice server. Your saved attempt is kept.") }
+    } catch let error as NSError where error.domain == "Braive" && error.code == 404 {
+      try requireRestoration(restoration)
+      _ = try await endpoint.call("/v1/world-commits",registration,timeout:12)
+      try requireRestoration(restoration)
+    } catch {
+      try requireRestoration(restoration)
+      guard API.isTransientConnection(error) else { throw error }
+      setupNotice = "Your saved world is available offline. Online replies and changes need the practice computer."
+    }
+    try await prepareTextureAssets(scene)
+    try requireRestoration(restoration)
     let definition=try JSONDecoder().decode(ScenarioDefinition.self,from:JSONEncoder().encode(scene["scenario"]))
-    scenario=try ScenarioRuntime(definition)
-    try scenario?.restore(JSONDecoder().decode(ScenarioRuntime.Snapshot.self,from:JSONEncoder().encode(saved["checkpoint"]["scenario"])))
+    var restoredScenario=try ScenarioRuntime(definition)
+    try restoredScenario.restore(JSONDecoder().decode(ScenarioRuntime.Snapshot.self,from:JSONEncoder().encode(saved["checkpoint"]["scenario"])))
+    try world.load(scene,plan:plan)
+    scenario=restoredScenario
     appliedOperations=saved["applied_operations"].list
     // Motion is restored from its exact clock/origin snapshot, not restarted by
     // replaying old travel commands against the initial viewer position.
@@ -121,6 +159,9 @@ import SwiftUI
   var revision = 0
   var generation: Task<Void, Never>?
   var jobID = ""
+  var generationPauseSequence = 0
+  var generationPauseAcknowledged = -1
+  var generationPauseTask: Task<Void,Never>?
   var seen = Set<String>()
   var fear = "", ability = "", additions: [String] = [], history: [JSON] = []
   var answer = VoiceAnswer()
@@ -136,6 +177,11 @@ import SwiftUI
   var builder = false
   var builderEditing = false
   var revisionReady = false
+  var editOwner = UUID()
+  var editPreparing = false
+  var editTask: Task<Void, Never>?
+  var editSnapshot: FrozenWorldEdit?
+  var endAfterEditCancellation = false
   var deferredChanges: [String] = []
   var active = 0.0, lastTick = ProcessInfo.processInfo.systemUptime, introTime = 0.0, stopCount = 0
   var fired = Set<Int>(), beatFired = Set<Int>()
@@ -174,6 +220,7 @@ import SwiftUI
       self.world.pausePracticeClock();self.world.scene.isPaused=true
       self.fail(self.world.failure(reason))
     }
+    world.onCapture = { [weak self] result in self?.captureResult = result }
     world.onPortrait = { [weak self] portrait in self?.pause("portrait", enabled: portrait) }
     world.onTrackingAvailability = { [weak self] available in
       self?.pause("tracking_unavailable", enabled: !available)
@@ -325,6 +372,7 @@ import SwiftUI
           ])
         }
         connection = "Connected · Getting voice ready…"
+        flushHistoryDeletion()
         try await audio.start(api: api)
         setupNotice = ""
         connection = "Connected · Voice ready"
@@ -350,6 +398,7 @@ import SwiftUI
       defer { connecting = false }
       do {
         try await api.checkConnection()
+        flushHistoryDeletion()
         try await audio.start(api: api)
         audio.setCommandPhrases(scenario?.definition.steps.flatMap { $0.actions.flatMap(\.phrases) } ?? [])
         pause("command_channel_unavailable", enabled: false)
@@ -360,7 +409,9 @@ import SwiftUI
   func pause(_ reason: String, enabled: Bool) {
     if phase == .setup { pauses.remove(reason); return }
     let was = pauses.isEmpty
+    if !enabled, pauses.contains(reason), ["app_inactive","audio_interruption","command_channel_unavailable","tracking_unavailable"].contains(reason) { pauses.insert("recovery_resume") }
     if enabled { pauses.insert(reason) } else { pauses.remove(reason) }
+    syncGenerationPause(changed:true)
     if was && !pauses.isEmpty {
       speechFloor = SpeechFloor()
       world.pausePracticeClock()
@@ -377,25 +428,48 @@ import SwiftUI
     refreshHeadsetPanels()
   }
   var canStop: Bool {
-    [.planning, .intro, .reveal, .active].contains(phase) || (loading && pendingPhase == .planning)
+    [.headset,.intake,.ability,.history,.planning,.intro,.reveal,.active,.repeatPreparation].contains(pendingPhase ?? phase) || isPostSession || repeatPreparing
+  }
+  var isPostSession: Bool {
+    [.selfReport,.readiness,.reflectionPrompt,.reflection,.feedbackPrompt,.feedback,.saving,.repeatPrompt].contains(pendingPhase ?? phase)
   }
   func stop() {
-    repeatToken = UUID(); repeatPreparing = false
     guard canStop else { return }
     guard !pauses.contains("user_stop") else { return }
-    stopCount += 1
+    if phase == .active { stopCount += 1 }
     stopConfirmation.begin()
     pause("user_stop", enabled: true)
-    audio.confirmQuit { self.stopConfirmation.arm(at: ProcessInfo.processInfo.systemUptime + 0.35) }
+    let prompt = isPostSession ? "Return to the forest? Your saved practice will stay." + (reflectionDraft.text.isEmpty || phase != .reflection ? "" : " Your unfinished reflection will be discarded.") + " Say yes or no." : "Practice paused. Would you like to end it?"
+    audio.confirmQuit(prompt) { self.stopConfirmation.arm(at: ProcessInfo.processInfo.systemUptime + 0.35) }
     refreshHeadsetPanels()
   }
   func cancelBeforePractice() {
+    restorationToken = UUID()
+    pendingRecovery = nil
+    let transaction = editSnapshot?.transactionID ?? record["pending_world_transaction"].string
+    let abandoned = sessionID, endpoint = api
+    let discardRemote = !attemptBegan && record["checkpoint"]["version"].number == nil
+    editTask?.cancel();editTask = nil;editOwner = UUID();editPreparing = false;editSnapshot = nil
+    endAfterEditCancellation = false;builderEditing = false;revisionReady = false
+    pauses.remove("builder_edit")
+    if !attemptBegan {
+      do { try store.removeUnstartedAttempt(sessionID) }
+      catch { setupNotice = "Your cancelled draft could not be removed: " + error.localizedDescription }
+    }
+    if transaction != nil || discardRemote {
+      Task {
+        // Cancel first so a late preparation cannot revive this discarded draft.
+        if let transaction { _ = try? await endpoint.call("/v1/world-transactions/"+transaction+"/cancel",JSON([:]),timeout:8) }
+        if discardRemote { _ = try? await endpoint.call("/v1/worlds/"+abandoned,method:"DELETE",timeout:5) }
+      }
+    }
     generation?.cancel(); generation = nil
     if !jobID.isEmpty {
       let old = jobID, endpoint = api
       Task { _ = try? await endpoint.call("/v1/jobs/" + old, method: "DELETE", timeout: 3) }
     }
     jobID = ""
+    generationPauseTask?.cancel();generationPauseTask = nil
     repeatToken = UUID(); repeatPreparing = false; repeatAfterHeadset = false
     pauses.remove("user_stop")
     world.lobby(); world.scene.isPaused = !pauses.isEmpty
@@ -406,12 +480,17 @@ import SwiftUI
   func confirmStop(end: Bool) {
     guard pauses.contains("user_stop") else { return }
     stopConfirmation.begin()
-    repeatToken = UUID(); repeatPreparing = false
+    if isPostSession {
+      if end { leavePostSession() } else { pause("user_stop",enabled:false) }
+      refreshHeadsetPanels();return
+    }
     if end {
+      if repeatAfterHeadset || repeatPreparing { cancelBeforePractice();refreshHeadsetPanels();return }
+      repeatToken = UUID(); repeatPreparing = false
       pauses.remove("user_stop")
-      let beforePractice = phase == .planning || phase == .intro || phase == .reveal
+      let beforePractice = phase == .planning || phase == .intro || phase == .reveal || phase == .repeatPreparation || (phase == .lobby && adapting)
         || (loading && pendingPhase == .planning)
-      if !attemptBegan && beforePractice { cancelBeforePractice() }
+      if beforePractice && (!attemptBegan || adapting) { cancelBeforePractice() }
       else if !attemptBegan && !beforePractice && phase != .active {
         // No practice clock ever started (e.g. planning reached via loading).
         cancelBeforePractice()
@@ -425,7 +504,7 @@ import SwiftUI
     beginTips(for: next)
     transitionID = UUID()
     loading = true
-    transitionRemaining = 0.45
+    transitionRemaining = [.intake,.ability,.history,.selfReport,.readiness,.reflectionPrompt,.reflection,.feedbackPrompt,.feedback,.repeatPrompt].contains(next) ? 0 : 0.45
     pendingPhase = next
     pendingText = text
     audio.play("whoosh", loop: false, gain: 0.15)
@@ -468,7 +547,7 @@ import SwiftUI
     case .reflectionPrompt, .reflection: context = .reflection
     case .feedbackPrompt, .feedback: context = .feedback
     case .saving: context = .saving
-    case .repeatPrompt: context = .repeatPractice
+    case .repeatPrompt, .repeatPreparation: context = .repeatPractice
     case .error: context = .lobby
     }
     tips = LoadingTips(context)
@@ -499,11 +578,25 @@ import SwiftUI
       if let answer = stopConfirmation.answer(text,at:ProcessInfo.processInfo.systemUptime) { confirmStop(end:answer == .end) }
       return
     }
+    if pauses.contains("recovery_resume") {
+      guard ["resume","resume practice","continue"].contains(VoiceAnswer.normalized(text)) else { return }
+      pause("recovery_resume",enabled:false)
+      if !pauses.contains("builder_edit") { return }
+    }
     if pauses.contains("builder_edit") {
-      if VoiceAnswer.normalized(text).contains("resume") {
+      let command = VoiceAnswer.normalized(text)
+      if ["cancel","cancel change","cancel edit"].contains(command) {
+        cancelWorldEdit()
+      } else if command == "hey builder" || command == "revise" {
+        if editPreparing { cancelWorldEdit() }
+        else { editSnapshot = nil;beginActiveEdit(prefill:nil) }
+      } else if command == "resume" {
+        guard !editPreparing, editTask == nil else { message = "Your change is still being prepared. Say CANCEL to keep your original place."; audio.say(message); return }
         builderEditing = false
+        editSnapshot = nil
         pause("builder_edit", enabled: false)
         message = revisionReady ? "Your change is ready in this same place." : (scenario?.step.prompt ?? plan["task_instruction"].text)
+        if phase == .repeatPreparation { beginPreparedAttempt() }
       } else {
         collectActiveEdit(text)
       }
@@ -551,8 +644,19 @@ import SwiftUI
         world.recenter()
         headsetReady = true
         if let saved = pendingRecovery {
-          pendingRecovery=nil
-          do { try restorePractice(saved) } catch { fail(error) }
+          newSession()
+          let owner = restorationToken
+          loading = true
+          Task { [weak self] in
+            guard let self else { return }
+            do { try await restorePractice(saved,owner:owner) }
+            catch {
+              guard owner == restorationToken else { return }
+              if !(error is CancellationError) { fail(error) }
+            }
+            guard owner == restorationToken else { return }
+            if pendingPhase == nil { loading = false }
+          }
           return
         }
         world.lobby()
@@ -567,6 +671,9 @@ import SwiftUI
         generate()
       }
     case .active: perform(text)
+    case .repeatPreparation:
+      if VoiceAnswer.normalized(text) == "hey builder" { audio.silence(); beginActiveEdit(prefill:nil) }
+      else if ["start","resume"].contains(VoiceAnswer.normalized(text)) { beginPreparedAttempt() }
     case .selfReport:
       guard acceptRating(text, key: "reported_difficulty") else { return }
       persistPostSession { [weak self] in self?.go(.readiness, "How ready do you feel now, from zero to ten? You can skip.") }
@@ -707,6 +814,9 @@ import SwiftUI
     }
   }
   func newSession() {
+    restorationToken = UUID()
+    editTask?.cancel(); editTask = nil; editOwner = UUID(); editPreparing = false; editSnapshot = nil
+    endAfterEditCancellation = false
     repeatToken = UUID(); repeatPreparing = false; attemptBegan = false
     generation?.cancel(); generation = nil
     if !jobID.isEmpty {
@@ -714,6 +824,7 @@ import SwiftUI
       Task { _ = try? await endpoint.call("/v1/jobs/" + old, method: "DELETE", timeout: 3) }
     }
     jobID = ""
+    generationPauseTask?.cancel();generationPauseTask = nil
     pendingPostSave = nil
     cancelFeedback()
     sessionID = UUID().uuidString
@@ -749,14 +860,17 @@ import SwiftUI
     repeatAfterHeadset = false
   }
   func deleteHistory() throws {
+    try queueHistoryDeletion()
     try store.deleteAll()
+    try GeneratedTextures.removeUnreferenced(retaining:[])
+    flushHistoryDeletion()
     // Forget in-memory consent/history too, so a later repeat cannot send deleted rows.
     newSession()
     pause("user_stop", enabled: false)
     world.lobby(); world.scene.isPaused = !pauses.isEmpty
     audio.lobby()
     if !pauses.isEmpty { audio.pause() }
-    go(.lobby, "Your history and reflections are deleted. Say START when you’re ready.")
+    go(.lobby, "Your history and reflections are deleted from this phone. Say START when you’re ready.")
   }
   func request() -> JSON {
     var preferences: [String] = []
@@ -823,6 +937,7 @@ import SwiftUI
           return
         }
         jobID = job["job_id"].text
+        generationPauseAcknowledged = -1;syncGenerationPause(changed:true)
         message = "Getting your practice ready…"
         while !Task.isCancelled {
           guard ProcessInfo.processInfo.systemUptime < generationDeadline else {
@@ -832,6 +947,7 @@ import SwiftUI
             ])
           }
           try await Task.sleep(for: .milliseconds(600))
+          syncGenerationPause()
           let j = try await api.pollJob(jobID, deadline: generationDeadline) {
             self.message = "Reconnecting. We’re keeping your place."
           }
@@ -866,6 +982,7 @@ import SwiftUI
                 ])
             }
             result["plan"]["narrator_intro_8s"] = JSON(fittedIntro)
+            try await prepareTextureAssets(result["scene"])
             var nextScenario: ScenarioRuntime?
             do {
               if result["scene"]["scenario"].object != nil {
@@ -879,9 +996,7 @@ import SwiftUI
                 _ = try await api.call(
                   "/v1/jobs/" + jobID + "/validation", JSON(["message": error.localizedDescription]),
                   timeout: max(0.1, min(8, generationDeadline - ProcessInfo.processInfo.systemUptime)))
-                // The backend grants the repair its own bounded window; keep
-                // polling for its result instead of expiring mid-repair.
-                generationDeadline = max(generationDeadline, ProcessInfo.processInfo.systemUptime + 300)
+                // A correction shares the original ten-minute wall-clock ceiling.
               } catch {
                 // The repair may already be running if its acknowledgement was lost.
                 // Poll its existing job; never blindly repeat a paid repair request.
@@ -902,13 +1017,14 @@ import SwiftUI
             beatFired = []
             record = JSON([
               "schema_version": "1", "session_id": sessionID,
-              "started_at": ISO8601DateFormatter().string(from: Date()), "outcome": "running",
+              "started_at": ISO8601DateFormatter().string(from: Date()), "outcome": "prepared","world_id":sessionID,
               "scene": scene.raw, "audio": audioPlan.raw,
               "plan": plan.raw, "topic_short": plan["topic_short"].raw,
               "intensity_1_10": plan["intensity_1_10"].raw, "use_history": useHistory,
               "chained_rerun": parent != nil, "scene_revision": revision,
               "reported_difficulty": NSNull(), "reported_readiness": NSNull(),
               "generation_provenance": ["mode": "live", "model_ids": [], "request_ids": []],
+              "setup_context":["fear":fear,"ability":ability,"use_history":useHistory,"history_ids":useHistory ? history.map { $0["session_id"].text } : []],
             ])
             if let parent { record["parent_session_id"] = JSON(parent) }
             record["adaptation"] = adaptation
@@ -937,6 +1053,7 @@ import SwiftUI
     }
   }
   func tick() {
+    if reviewRunning { return }
     refreshHeadsetPanels()
     let now = ProcessInfo.processInfo.systemUptime
     if !speechFeedback.isEmpty && now >= speechFeedbackExpiresAt { speechFeedback = "" }
@@ -988,6 +1105,7 @@ import SwiftUI
       if reveal >= 1 {
         phase = .active
         attemptBegan = true
+        record["outcome"] = JSON("running")
         world.beginPracticeClock()
         audio.apply(audioPlan)
         message = plan["task_instruction"].text
@@ -1036,47 +1154,6 @@ import SwiftUI
     if update.terminal { scenarioCompletedAt = active }
     checkpoint(force:true)
   }
-  func commitWorld(expectedRevision: Int, worldID: String? = nil) async throws {
-    scene["revision"] = JSON(revision); plan["revision"] = JSON(revision); audioPlan["revision"] = JSON(revision)
-    scene["session_id"] = JSON(sessionID); plan["session_id"] = JSON(sessionID); audioPlan["session_id"] = JSON(sessionID)
-    var body: [String: Any] = [
-      "session_id": sessionID, "expected_revision": expectedRevision, "revision": revision,
-      "plan": plan.raw, "scene": scene.raw, "audio": audioPlan.raw,
-    ]
-    if let worldID { body["world_id"] = worldID }
-    let result = try await api.call("/v1/world-commits", JSON(body))
-    guard result["status"].text == "committed" else {
-      throw NSError(domain: "Braive", code: 1, userInfo: [NSLocalizedDescriptionKey: "World commit was not confirmed."])
-    }
-  }
-  /// Adds delta seconds to plan duration and, when the final non-terminal
-  /// step is after_seconds-based, to that step's completion timing in scene.
-  func extendDuration(scene: inout JSON, plan: inout JSON, delta: Double) {
-    plan["duration_sec"] = JSON((plan["duration_sec"].number ?? 0) + delta)
-    guard scene["scenario"].object != nil else { return }
-    var steps = scene["scenario"]["steps"].list
-    guard let index = steps.lastIndex(where: { !($0["terminal"].bool ?? false) }) else { return }
-    let completion = steps[index]["completion"]
-    guard completion.object != nil, completion["trigger"].text == "after_seconds",
-      let after = completion["after_seconds"].number else { return }
-    var step = steps[index]
-    var newCompletion = completion
-    newCompletion["after_seconds"] = JSON(after + delta)
-    step["completion"] = newCompletion
-    steps[index] = step
-    var scenario = scene["scenario"]
-    scenario["steps"] = JSON(steps.map(\.raw))
-    scene["scenario"] = scenario
-  }
-  func parsedDurationDelta(_ text: String) -> Double? {
-    let lower = text.lowercased()
-    guard lower.contains("longer") || lower.contains("more time") || lower.contains("extra") else { return nil }
-    let tokens = lower.split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map(String.init)
-    for token in tokens { if let minutes = Int(token) { return Double(minutes) * 60 } }
-    let words: [String: Double] = ["one":1,"two":2,"three":3,"four":4,"five":5,"six":6,"seven":7,"eight":8,"nine":9,"ten":10,"fifteen":15,"twenty":20,"thirty":30]
-    for token in tokens { if let minutes = words[token] { return minutes * 60 } }
-    return 60
-  }
   func persistEditRecord() {
     do { try store.save(record) }
     catch {
@@ -1087,6 +1164,7 @@ import SwiftUI
   }
   var builderPromptActive: String { "Your place is saved. Say what should change in this same place." }
   func beginActiveEdit(prefill: String?) {
+    guard editTask == nil, !editPreparing else { return }
     builderEditing = true
     revisionReady = false
     answer = VoiceAnswer()
@@ -1116,350 +1194,9 @@ import SwiftUI
       applyActiveEdit(value)
     }
   }
-  func applyActiveEdit(_ text: String) {
-    switch ScenePatch.parse(text, currentAudience: ScenePatch.audienceCount(plan: plan)) {
-    case .audience(let target):
-      let oldScene = scene, oldPlan = plan, oldAudio = audioPlan, oldRevision = revision
-      let savedCheckpoint = world.checkpoint()
-      let characterIDs = ((try? AssetLibrary.entries) ?? []).filter { $0.id.hasPrefix("character.base.") && $0.generation_enabled != false }.map(\.id)
-      let chairID = try? AssetLibrary.first(category: "furniture", subcategory: "chair")
-      guard let patchedRaw = ScenePatch.patchAudience(scene: scene, plan: plan, target: target, chairAssetID: chairID, characterAssetIDs: characterIDs) else {
-        message = "Your audience is already that size in this same place."
-        audio.say(message)
-        return
-      }
-      var patchedScene = patchedRaw.scene, patchedPlan = patchedRaw.plan, patchedAudio = oldAudio
-      let newRevision = oldRevision + 1
-      patchedScene["session_id"] = JSON(sessionID); patchedPlan["session_id"] = JSON(sessionID); patchedAudio["session_id"] = JSON(sessionID)
-      patchedScene["revision"] = JSON(newRevision); patchedPlan["revision"] = JSON(newRevision); patchedAudio["revision"] = JSON(newRevision)
-      let summary = patchedRaw.summary
-      Task { [weak self] in
-        guard let self else { return }
-        do {
-          try world.load(patchedScene, plan: patchedPlan)
-          do { try world.restore(savedCheckpoint) } catch {
-            try? world.load(oldScene, plan: oldPlan); try? world.restore(savedCheckpoint)
-            message = "I could not make that change in this same place. Your place is unchanged."
-            audio.say(message); return
-          }
-        } catch {
-          do { try world.load(oldScene, plan: oldPlan); try? world.restore(savedCheckpoint) } catch { }
-          message = "I could not make that change in this same place. Your place is unchanged."
-          audio.say(message); return
-        }
-        scene = patchedScene; plan = patchedPlan; audioPlan = patchedAudio; revision = newRevision
-        do { try await commitWorld(expectedRevision: oldRevision) } catch {
-          scene = oldScene; plan = oldPlan; audioPlan = oldAudio; revision = oldRevision
-          do { try world.load(oldScene, plan: oldPlan); try? world.restore(savedCheckpoint) } catch { }
-          message = "That change could not be saved, your place is unchanged."
-          audio.say(message); return
-        }
-        record["scene"] = JSON(scene.raw); record["plan"] = JSON(plan.raw); record["audio"] = JSON(audioPlan.raw)
-        record["scene_revision"] = JSON(revision)
-        revisionReady = true; builderEditing = false
-        message = summary; audio.say(message)
-        checkpoint(force: true)
-        persistEditRecord()
-      }
-    case .environment(let brighter):
-      let oldScene = scene, oldPlan = plan, oldAudio = audioPlan, oldRevision = revision
-      var patchedScene = ScenePatch.patchEnvironment(scene: scene, brighter: brighter)
-      var patchedPlan = oldPlan, patchedAudio = oldAudio
-      let newRevision = oldRevision + 1
-      patchedScene["session_id"] = JSON(sessionID); patchedPlan["session_id"] = JSON(sessionID); patchedAudio["session_id"] = JSON(sessionID)
-      patchedScene["revision"] = JSON(newRevision); patchedPlan["revision"] = JSON(newRevision); patchedAudio["revision"] = JSON(newRevision)
-      Task { [weak self] in
-        guard let self else { return }
-        scene = patchedScene; plan = patchedPlan; audioPlan = patchedAudio; revision = newRevision
-        do { try await commitWorld(expectedRevision: oldRevision) } catch {
-          scene = oldScene; plan = oldPlan; audioPlan = oldAudio; revision = oldRevision
-          message = "That change could not be saved, your place is unchanged."
-          audio.say(message); return
-        }
-        operation(JSON(["type": "set_environment", "environment": patchedScene["environment"].raw]))
-        record["scene"] = JSON(scene.raw); record["plan"] = JSON(plan.raw); record["audio"] = JSON(audioPlan.raw)
-        record["scene_revision"] = JSON(revision)
-        revisionReady = true; builderEditing = false
-        message = brighter ? "This same place is brighter now." : "This same place is dimmer now."
-        audio.say(message)
-        checkpoint(force: true)
-        persistEditRecord()
-      }
-    case .material(let textureID):
-      let oldScene = scene, oldPlan = plan, oldAudio = audioPlan, oldRevision = revision
-      let savedCheckpoint = world.checkpoint()
-      guard let patchedRaw = ScenePatch.patchMaterial(scene: scene, textureID: textureID) else {
-        message = "I could not find a floor, ground, wall, or path surface to change in this same place."
-        audio.say(message)
-        return
-      }
-      var patchedScene = patchedRaw.scene, patchedPlan = oldPlan, patchedAudio = oldAudio
-      let newRevision = oldRevision + 1
-      patchedScene["session_id"] = JSON(sessionID); patchedPlan["session_id"] = JSON(sessionID); patchedAudio["session_id"] = JSON(sessionID)
-      patchedScene["revision"] = JSON(newRevision); patchedPlan["revision"] = JSON(newRevision); patchedAudio["revision"] = JSON(newRevision)
-      let summary = patchedRaw.summary
-      Task { [weak self] in
-        guard let self else { return }
-        do {
-          try world.load(patchedScene, plan: patchedPlan)
-          do { try world.restore(savedCheckpoint) } catch {
-            try? world.load(oldScene, plan: oldPlan); try? world.restore(savedCheckpoint)
-            message = "I could not make that change in this same place. Your place is unchanged."
-            audio.say(message); return
-          }
-        } catch {
-          do { try world.load(oldScene, plan: oldPlan); try? world.restore(savedCheckpoint) } catch { }
-          message = "I could not make that change in this same place. Your place is unchanged."
-          audio.say(message); return
-        }
-        scene = patchedScene; plan = patchedPlan; audioPlan = patchedAudio; revision = newRevision
-        do { try await commitWorld(expectedRevision: oldRevision) } catch {
-          scene = oldScene; plan = oldPlan; audioPlan = oldAudio; revision = oldRevision
-          do { try world.load(oldScene, plan: oldPlan); try? world.restore(savedCheckpoint) } catch { }
-          message = "That change could not be saved, your place is unchanged."
-          audio.say(message); return
-        }
-        record["scene"] = JSON(scene.raw); record["plan"] = JSON(plan.raw); record["audio"] = JSON(audioPlan.raw)
-        record["scene_revision"] = JSON(revision)
-        revisionReady = true; builderEditing = false
-        message = summary; audio.say(message)
-        checkpoint(force: true)
-        persistEditRecord()
-      }
-    case .decorative:
-      let oldScene = scene, oldPlan = plan, oldAudio = audioPlan, oldRevision = revision
-      let savedCheckpoint = world.checkpoint()
-      var nodeByID: [String: JSON] = [:]
-      for node in scene["nodes"].list { nodeByID[node["id"].text] = node }
-      let audienceNodes = plan["characters"].list.filter { ScenePatch.isAudience($0) }
-        .compactMap { nodeByID[$0["scene_node_id"].text] }
-      guard let patchedRaw = ScenePatch.patchDecorative(scene: scene, existingNodes: audienceNodes) else {
-        message = "I could not add planting in this same place."
-        audio.say(message)
-        return
-      }
-      var patchedScene = patchedRaw.scene, patchedPlan = oldPlan, patchedAudio = oldAudio
-      let newRevision = oldRevision + 1
-      patchedScene["session_id"] = JSON(sessionID); patchedPlan["session_id"] = JSON(sessionID); patchedAudio["session_id"] = JSON(sessionID)
-      patchedScene["revision"] = JSON(newRevision); patchedPlan["revision"] = JSON(newRevision); patchedAudio["revision"] = JSON(newRevision)
-      let summary = patchedRaw.summary
-      Task { [weak self] in
-        guard let self else { return }
-        do {
-          try world.load(patchedScene, plan: patchedPlan)
-          do { try world.restore(savedCheckpoint) } catch {
-            try? world.load(oldScene, plan: oldPlan); try? world.restore(savedCheckpoint)
-            message = "I could not make that change in this same place. Your place is unchanged."
-            audio.say(message); return
-          }
-        } catch {
-          do { try world.load(oldScene, plan: oldPlan); try? world.restore(savedCheckpoint) } catch { }
-          message = "I could not make that change in this same place. Your place is unchanged."
-          audio.say(message); return
-        }
-        scene = patchedScene; plan = patchedPlan; audioPlan = patchedAudio; revision = newRevision
-        do { try await commitWorld(expectedRevision: oldRevision) } catch {
-          scene = oldScene; plan = oldPlan; audioPlan = oldAudio; revision = oldRevision
-          do { try world.load(oldScene, plan: oldPlan); try? world.restore(savedCheckpoint) } catch { }
-          message = "That change could not be saved, your place is unchanged."
-          audio.say(message); return
-        }
-        record["scene"] = JSON(scene.raw); record["plan"] = JSON(plan.raw); record["audio"] = JSON(audioPlan.raw)
-        record["scene_revision"] = JSON(revision)
-        revisionReady = true; builderEditing = false
-        message = summary; audio.say(message)
-        checkpoint(force: true)
-        persistEditRecord()
-      }
-    case .behavior(let behavior):
-      guard ["idle", "listen", "speak", "gesture"].contains(behavior) else {
-        message = "I cannot do that gesture in this same place."
-        audio.say(message)
-        return
-      }
-      let audienceCharacters = plan["characters"].list.filter { ScenePatch.isAudience($0) }
-      guard !audienceCharacters.isEmpty else {
-        message = "There is no audience here to do that."
-        audio.say(message)
-        return
-      }
-      for character in audienceCharacters {
-        operation(JSON(["type": "character_action", "character_id": character["id"].text, "behavior": behavior]))
-      }
-      record["active_edit"] = JSON(["kind": "behavior", "behavior": behavior, "text": text] as [String: Any])
-      revisionReady = true; builderEditing = false
-      message = "The audience is waving in this same place."
-      audio.say(message)
-      checkpoint(force: true)
-      persistEditRecord()
-    case .deferred(let original):
-      deferredChanges.append(original)
-      record["deferred_changes"] = JSON(deferredChanges)
-      revisionReady = true
-      builderEditing = false
-      message = "That shapes your next attempt in this same place."
-      audio.say(message)
-      persistEditRecord()
-    case .ambiguous:
-      builderEditing = true
-      revisionReady = false
-      message = "Should the audience get bigger or smaller, or is there a number of people you would like?"
-      audio.say(message)
-    }
-  }
-  func adaptPreservingWorld(_ result: JSON) async -> Bool {
-    let oldSessionID = sessionID, oldScene = scene, oldPlan = plan, oldAudio = audioPlan, oldRevision = revision
-    let oldParent = parent, oldDeferred = deferredChanges
-    var newScene = oldScene, newPlan = oldPlan, newAudio = oldAudio
-    let newSessionID = UUID().uuidString
-    newScene["session_id"] = JSON(newSessionID)
-    newPlan["session_id"] = JSON(newSessionID)
-    newAudio["session_id"] = JSON(newSessionID)
-    newScene["revision"] = JSON(1)
-    newPlan["revision"] = JSON(1)
-    newAudio["revision"] = JSON(1)
-    let changes = result["changes"].list
-    let hasAudienceGroup = ScenePatch.audienceCount(plan: newPlan) > 0
-    let isSocial = newPlan["characters"].list.count > 1
-    if let intensity = result["intensity_1_10"].number {
-      newPlan["intensity_1_10"] = JSON(intensity)
-    }
-    if !changes.isEmpty {
-      for change in changes {
-        let dimension = change["dimension"].text.lowercased()
-        if dimension.contains("audience") || dimension.contains("crowd") || dimension.contains("people") {
-          guard hasAudienceGroup || isSocial else { continue }
-          let after = change["after"].text
-          if case .audience(let target) = ScenePatch.parse("make the audience " + after, currentAudience: ScenePatch.audienceCount(plan: newPlan)) {
-            let characterIDs = ((try? AssetLibrary.entries) ?? []).filter { $0.id.hasPrefix("character.base.") && $0.generation_enabled != false }.map(\.id)
-            let chairID = try? AssetLibrary.first(category: "furniture", subcategory: "chair")
-            if let patched = ScenePatch.patchAudience(scene: newScene, plan: newPlan, target: target, chairAssetID: chairID, characterAssetIDs: characterIDs) {
-              newScene = patched.scene; newPlan = patched.plan
-            }
-          }
-        } else if dimension.contains("light") || dimension.contains("bright") || dimension.contains("environment") {
-          let after = change["after"].text.lowercased()
-          if case .environment(let brighter) = ScenePatch.parse("make it " + after, currentAudience: ScenePatch.audienceCount(plan: newPlan)) {
-            newScene = ScenePatch.patchEnvironment(scene: newScene, brighter: brighter)
-          }
-        }
-      }
-    }
-    if let duration = result["duration_seconds"].number {
-      let delta = duration - (newPlan["duration_sec"].number ?? duration)
-      if delta != 0 { extendDuration(scene: &newScene, plan: &newPlan, delta: delta) }
-    }
-    var appliedDeferred: [String] = []
-    var remainingDeferred: [String] = []
-    for deferredText in deferredChanges {
-      switch ScenePatch.parse(deferredText, currentAudience: ScenePatch.audienceCount(plan: newPlan)) {
-      case .audience(let target):
-        let characterIDs = ((try? AssetLibrary.entries) ?? []).filter { $0.id.hasPrefix("character.base.") && $0.generation_enabled != false }.map(\.id)
-        let chairID = try? AssetLibrary.first(category: "furniture", subcategory: "chair")
-        if let patched = ScenePatch.patchAudience(scene: newScene, plan: newPlan, target: target, chairAssetID: chairID, characterAssetIDs: characterIDs) {
-          newScene = patched.scene
-          newPlan = patched.plan
-          appliedDeferred.append(deferredText)
-        } else { remainingDeferred.append(deferredText) }
-      case .environment(let brighter):
-        newScene = ScenePatch.patchEnvironment(scene: newScene, brighter: brighter)
-        appliedDeferred.append(deferredText)
-      case .material(let textureID):
-        if let patched = ScenePatch.patchMaterial(scene: newScene, textureID: textureID) {
-          newScene = patched.scene
-          appliedDeferred.append(deferredText)
-        } else { remainingDeferred.append(deferredText) }
-      case .decorative:
-        var nodeByID: [String: JSON] = [:]
-        for node in newScene["nodes"].list { nodeByID[node["id"].text] = node }
-        let audienceNodes = newPlan["characters"].list.filter { ScenePatch.isAudience($0) }
-          .compactMap { nodeByID[$0["scene_node_id"].text] }
-        if let patched = ScenePatch.patchDecorative(scene: newScene, existingNodes: audienceNodes) {
-          newScene = patched.scene
-          appliedDeferred.append(deferredText)
-        } else { remainingDeferred.append(deferredText) }
-      case .behavior:
-        remainingDeferred.append(deferredText)
-      case .deferred:
-        if let delta = parsedDurationDelta(deferredText) {
-          extendDuration(scene: &newScene, plan: &newPlan, delta: delta)
-          appliedDeferred.append(deferredText)
-        } else { remainingDeferred.append(deferredText) }
-      case .ambiguous:
-        remainingDeferred.append(deferredText)
-      }
-    }
-    parent = oldSessionID
-    sessionID = newSessionID
-    revision = 1
-    scene = newScene
-    plan = newPlan
-    audioPlan = newAudio
-    deferredChanges = remainingDeferred
-    do {
-      try await commitWorld(expectedRevision: 0, worldID: oldSessionID)
-    } catch {
-      sessionID = oldSessionID; revision = oldRevision; scene = oldScene; plan = oldPlan; audioPlan = oldAudio
-      parent = oldParent; deferredChanges = oldDeferred
-      try? world.load(oldScene, plan: oldPlan)
-      return false
-    }
-    do {
-      try world.load(newScene, plan: newPlan)
-    } catch {
-      sessionID = oldSessionID; revision = oldRevision; scene = oldScene; plan = oldPlan; audioPlan = oldAudio
-      parent = oldParent; deferredChanges = oldDeferred
-      try? world.load(oldScene, plan: oldPlan)
-      return false
-    }
-    adaptation = result
-    scenario = nil
-    scenarioCompletedAt = nil
-    scenarioActions = []
-    if scene["scenario"].object != nil,
-      let definition = try? JSONDecoder().decode(ScenarioDefinition.self, from: JSONEncoder().encode(scene["scenario"])) {
-      scenario = try? ScenarioRuntime(definition)
-      audio.setCommandPhrases(definition.steps.flatMap { $0.actions.flatMap(\.phrases) })
-    }
-    active = 0
-    introTime = 0
-    fired = []
-    beatFired = []
-    appliedOperations = []
-    turns = []
-    remaining = plan["duration_sec"].value
-    record = JSON([
-      "schema_version": "1", "session_id": sessionID,
-      "started_at": ISO8601DateFormatter().string(from: Date()), "outcome": "running",
-      "scene": scene.raw, "audio": audioPlan.raw,
-      "plan": plan.raw, "topic_short": plan["topic_short"].raw,
-      "intensity_1_10": plan["intensity_1_10"].raw, "use_history": useHistory,
-      "chained_rerun": true, "scene_revision": revision,
-      "reported_difficulty": NSNull(), "reported_readiness": NSNull(),
-      "generation_provenance": ["mode": "live", "model_ids": [], "request_ids": []] as [String: Any],
-      "deferred_applied": appliedDeferred,
-      "deferred_changes": remainingDeferred,
-    ])
-    if let parent { record["parent_session_id"] = JSON(parent) }
-    record["adaptation"] = result
-    attemptBegan = false
-    do { try store.save(record) } catch {
-      setupNotice = "Your change was made but could not be saved: " + error.localizedDescription
-    }
-    transitionID = UUID()
-    loading = false
-    pendingPhase = nil
-    phase = .intro
-    message = plan["narrator_intro_8s"].text
-    if remainingDeferred.isEmpty {
-      audio.say(message, intro: true)
-    } else {
-      let introText = message
-      audio.say("Some changes still need clarification: " + remainingDeferred.joined(separator: "; ")) { [weak self] in
-        self?.audio.say(introText, intro: true)
-      }
-    }
-    return true
+  func applyActiveEdit(_ text: String) { applyWorldEdit(text) }
+  func adaptPreservingWorld(_ result: JSON, token: UUID) async -> Bool {
+    await prepareSameWorldAttempt(result, token: token)
   }
   func perform(_ text: String) {
     observe("speech_excerpt", "transcript", text)
@@ -1470,7 +1207,7 @@ import SwiftUI
     }
     let imperatives = ["make", "add", "remove", "set", "change", "increase", "decrease", "brighten", "dim", "fewer", "place", "put", "cover"]
     let startsImperative = ["make ", "add ", "remove ", "change the ", "set ", "place ", "put ", "cover "].contains(where: { editLower.hasPrefix($0) })
-    if startsImperative || imperatives.contains(where: { editLower.contains($0) }) {
+    if startsImperative {
       switch ScenePatch.parse(text, currentAudience: ScenePatch.audienceCount(plan: plan)) {
       case .audience, .environment, .material, .decorative, .behavior:
         if imperatives.contains(where: { editLower.contains($0) }) {
@@ -1564,6 +1301,10 @@ import SwiftUI
   }
   func finish(early: Bool) {
     if !attemptBegan { cancelBeforePractice(); return }
+    if editPreparing, editSnapshot != nil { endAfterEditCancellation = true; cancelWorldEdit(); return }
+    editOwner = UUID(); editTask?.cancel(); editTask = nil; editSnapshot = nil
+    pauses.remove("builder_edit"); pauses.remove("user_stop")
+    if pauses.isEmpty { audio.resume() }
     generation?.cancel()
     turnTask?.cancel()
     turnTask = nil
@@ -1612,10 +1353,12 @@ import SwiftUI
           "/v1/feedback", JSON(["plan": plan.raw, "observations": observations]))
         guard !Task.isCancelled, nonce == feedbackNonce, owner == sessionID,
           rev == revision, phase == .feedback else { return }
+        try await waitForFeedbackDelivery(nonce:nonce,owner:owner,revision:rev)
         deliverFeedback(f, nonce: nonce)
       } catch {
         guard !Task.isCancelled, nonce == feedbackNonce, owner == sessionID,
           rev == revision, phase == .feedback else { return }
+        do { try await waitForFeedbackDelivery(nonce:nonce,owner:owner,revision:rev) } catch { return }
         message = "Feedback is unavailable. Your practice will still be saved."
         audio.say(message) { [weak self] in
           guard let self, self.feedbackNonce == nonce, self.phase == .feedback else { return }
@@ -1696,14 +1439,19 @@ import SwiftUI
           "/v1/adaptations",
           JSON([
             "previous_plan": plan.raw, "observations": observations,
-            "relevant_history": store.history(useHistory ? history : []), "user_preferences": [],
+            "relevant_history": store.history(useHistory ? history : []), "user_preferences": deferredChanges,
           ]))
         guard token == repeatToken, repeatPreparing, owner == sessionID else { return }
-        repeatPreparing = false
+        while !pauses.isEmpty {
+          try await Task.sleep(for:.milliseconds(100))
+          guard token == repeatToken, repeatPreparing, owner == sessionID else { return }
+        }
         if !scene["nodes"].list.isEmpty {
-          if await adaptPreservingWorld(result) {
+          if await adaptPreservingWorld(result,token:token) {
             return
           }
+          guard token == repeatToken, repeatPreparing, owner == sessionID else { return }
+          repeatPreparing = false
           // Preserving failed and restored the old session; stay in the lobby.
           repeatAfterHeadset = true
           phase = .lobby

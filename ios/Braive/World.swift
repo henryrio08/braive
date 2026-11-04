@@ -24,6 +24,9 @@ extension UIColor {
   var eyeAspect = 1.0
   let scene = SCNScene(), head = SCNNode(), motion = CMMotionManager()
   let headsetPanels = HeadsetPanels()
+  var captureRequest: URL?
+  var onCapture: ((Result<URL,Error>) -> Void)?
+  var reviewTrackingSuspended = false
   func setHeadsetText(title: String, detail: String, command: String, status: String, visible: Bool) {
     headsetPanels.update(title: title, detail: detail, command: command, status: status, visible: visible)
   }
@@ -115,6 +118,7 @@ extension UIColor {
   }
   #endif
   func track(_ data: CMDeviceMotion) {
+    if reviewTrackingSuspended { return }
     let q = data.attitude.quaternion
     // Match the actual rendered interface, including landscape-left. Keep the last
     // basis when the interface is not yet known; gravity still controls portrait pause.
@@ -136,6 +140,7 @@ extension UIColor {
     head.simdOrientation = pose.recenter()
   }
   func clear() {
+    materialOverrides = [:]; actorBehaviors = [:]; environmentOverride = JSON()
     surfaceMaterials=[]
     appearanceStyle=nil
     executionBlocked=false
@@ -149,6 +154,9 @@ extension UIColor {
     characters = [:]
   }
   private var textureCache: [String: UIImage] = [:]
+  private var materialOverrides: [String: JSON] = [:]
+  private var actorBehaviors: [String: String] = [:]
+  private var environmentOverride = JSON()
   private struct TextureEntry: Decodable {
     let id: String
     let relative_path: String
@@ -167,6 +175,7 @@ extension UIColor {
   /// bounded to 1024px and cached. Mesh assets keep their library materials;
   /// a texture ID never replaces finished geometry appearance on failure.
   func textureImage(_ assetID: String) -> UIImage? {
+    if assetID.hasPrefix("texture.generated.") { return GeneratedTextures.image(assetID) }
     if let cached = textureCache[assetID] { return cached }
     guard let entry = textureEntry(assetID), !entry.relative_path.contains(".."),
       ["png", "jpg", "jpeg"].contains((entry.relative_path as NSString).pathExtension.lowercased()),
@@ -204,12 +213,18 @@ extension UIColor {
     return m
   }
   func applyMaterial(_ value: JSON, to node: SCNNode, tint: Bool = true) {
+    let protectedCharacter = AssetLibrary.isCharacter(node)
     if AssetLibrary.isCharacter(node) { if tint { AssetLibrary.recolor(node,hex:value["color"].string) };return }
     func apply(_ n:SCNNode) {
       guard let geometry=n.geometry else { return }
       geometry.materials=geometry.materials.map { source in
         let m=source.copy() as! SCNMaterial
-        if tint, let color=value["color"].string { m.diffuse.contents=UIColor(hex:color) }
+        if !protectedCharacter, let id = value["texture_asset_id"].string, let image = textureImage(id) {
+          m.diffuse.contents = image
+          let scale = Float(value["texture_scale"].number ?? 1)
+          m.diffuse.contentsTransform = SCNMatrix4MakeScale(scale, scale, 1)
+          m.diffuse.wrapS = .repeat; m.diffuse.wrapT = .repeat
+        } else if tint, !protectedCharacter, let color=value["color"].string { m.diffuse.contents=UIColor(hex:color) }
         if let roughness=value["roughness"].number { m.roughness.contents=roughness }
         if let opacity=value["opacity"].number { m.transparency=CGFloat(opacity) }
         if let sided=value["double_sided"].bool { m.isDoubleSided=sided }
@@ -241,7 +256,7 @@ extension UIColor {
   func failure(_ text: String) -> NSError {
     NSError(domain: "Scene", code: 1, userInfo: [NSLocalizedDescriptionKey: text])
   }
-  func load(_ spec: JSON, plan: JSON) throws {
+  func load(_ spec: JSON, plan: JSON, install: Bool = true) throws {
     guard spec["revision"] == plan["revision"], spec["session_id"] == plan["session_id"],
       spec["stereo"]["presentation"].text == "stereographic", spec["nodes"].list.count <= 350
     else { throw failure("Scene revision or renderer budget invalid") }
@@ -434,6 +449,7 @@ extension UIColor {
     try StageAudit.check(spec:spec,root:root,nodes:built,characterNodeIDs:expectedCharacters,initial:initial,ipd:ipd,fov:fov,aspect:eyeAspect,applyMaterial:{ value,node in self.applyMaterial(value,to:node) })
     var estimatedSubmissions=0
     root.enumerateChildNodes { n,_ in estimatedSubmissions += n.geometry?.elements.count ?? 0 }
+    if !install { return }
     metrics=RenderMetrics()
     metrics.estimatedSubmissionsPerEye=estimatedSubmissions
     clear()
@@ -498,10 +514,17 @@ extension UIColor {
       try SceneAppearance.applyEnvironment(spec["environment"],to:scene,sunDirection:appearanceSunDirection,seed:appearanceSeed)
       appearanceStyle=spec["environment"]["style"]
     }
+    // Establish the authored opening appearance before its visual reveal.
+    // Travel, time, narration and sound begin only when practice actually starts.
+    let initialStep = spec["scenario"]["steps"].list.first { $0["id"].text == spec["scenario"]["initial_step_id"].text }
+    for op in initialStep?["start_operations"].list ?? [] where ["set_visible","set_material","character_action","set_environment"].contains(op["type"].text) {
+      operation(op,speak:{_ in},sound:{_ in})
+    }
     surfaceMaterials=SceneAppearance.animatedMaterials(scene.rootNode)
   }
   func animate(_ id: String, _ behavior: String) {
     guard let n = nodes[characters[id] ?? id] else { return }
+    actorBehaviors[id] = behavior
     AssetLibrary.animate(n, behavior: behavior)
   }
 
@@ -511,6 +534,7 @@ extension UIColor {
     case "set_visible": nodes[op["node_id"].text]?.isHidden = !(op["visible"].bool ?? true)
     case "set_material":
       if let node = nodes[op["node_id"].text] {
+        materialOverrides[op["node_id"].text] = op["material"]
         applyMaterial(op["material"],to:node)
         if let appearanceStyle { SceneAppearance.applyStyle(appearanceStyle,to:node) }
         surfaceMaterials=SceneAppearance.animatedMaterials(scene.rootNode)
@@ -557,6 +581,7 @@ extension UIColor {
         nodeMotions[nodeID] = (candidate, op["face_motion"].bool ?? false)
       }
     case "set_environment":
+      environmentOverride = op
       if op["environment"].object != nil {
         do {
           try SceneAppearance.applyEnvironment(op["environment"],to:scene,sunDirection:appearanceSunDirection,seed:appearanceSeed)
@@ -582,12 +607,15 @@ extension UIColor {
        "started_at": motion.startedAt, "frame": [motion.frame.imag.x,motion.frame.imag.y,motion.frame.imag.z,motion.frame.real]]
     }
     return JSON(["elapsed":activeElapsed,"animation_origin":animationOrigin,"position":[head.position.x,head.position.y,head.position.z],
-      "nodes":nodes.mapValues { n in ["position":[n.position.x,n.position.y,n.position.z], "rotation":[n.eulerAngles.x,n.eulerAngles.y,n.eulerAngles.z]] },
+      "nodes":nodes.mapValues { n -> [String: Any] in ["position":[n.position.x,n.position.y,n.position.z], "rotation":[n.eulerAngles.x,n.eulerAngles.y,n.eulerAngles.z], "scale":[n.scale.x,n.scale.y,n.scale.z], "hidden":n.isHidden] },
+      "materials":materialOverrides.mapValues(\.raw),"behaviors":actorBehaviors,"environment":environmentOverride.raw,
+      "postures":characters.mapValues { id in nodes[id].map { AssetLibrary.posture($0) } ?? "stand" },
       "viewer_motion": viewerMotion.map(motionJSON) as Any? ?? NSNull(),
       "node_motions":nodeMotions.mapValues { ["motion":motionJSON($0.motion),"face":$0.face] as [String:Any] },
       "fade":viewpointFade.map { ["destination":[$0.destination.x,$0.destination.y,$0.destination.z],"started_at":$0.startedAt] as [String:Any] } as Any? ?? NSNull()])
   }
-  func restore(_ saved: JSON) throws {
+  func restore(_ saved: JSON, allowingRemoved removed: Set<String> = [], changedTransforms: Set<String> = [], changedMaterials: Set<String> = [],
+    changedBehaviors: Set<String> = [], environmentChanged: Bool = false) throws {
     let elapsed = saved["elapsed"].value
     guard elapsed.isFinite, elapsed >= 0 else { throw failure("Invalid saved practice time") }
     func point(_ value: JSON) throws -> SIMD3<Float> {
@@ -601,16 +629,51 @@ extension UIColor {
       guard q.allSatisfy(\.isFinite), value["started_at"].value.isFinite else { throw failure("Invalid saved motion") }
       return ViewerMotion(path:path,origin:try point(value["origin"]),startedAt:value["started_at"].value,frame:simd_quatf(ix:q[0],iy:q[1],iz:q[2],r:q[3]))
     }
-    practiceClock.restore(elapsed:elapsed);animationOrigin=saved["animation_origin"].value
-    setViewerPosition(try point(saved["position"]))
+    // Validate the complete snapshot before changing any current runtime state.
+    let viewerPosition = try point(saved["position"])
     for (id,value) in saved["nodes"].object ?? [:] {
-      guard let node=nodes[id] else { throw failure("Saved scene node is unavailable") }
-      node.simdPosition=try point(value["position"]); node.simdEulerAngles=try point(value["rotation"])
+      if nodes[id] == nil {
+        guard removed.contains(id) else { throw failure("Saved scene node is unavailable: " + id) }
+        continue
+      }
+      _ = try point(value["position"]); _ = try point(value["rotation"])
+      if value["scale"].array != nil { _ = try point(value["scale"]) }
     }
-    viewerMotion=try motion(saved["viewer_motion"]);nodeMotions=[:]
+    let restoredViewerMotion = try motion(saved["viewer_motion"])
+    var restoredNodeMotions: [String: (motion: ViewerMotion, face: Bool)] = [:]
     for (id,value) in saved["node_motions"].object ?? [:] {
-      if let m=try motion(value["motion"]) { nodeMotions[id]=(m,value["face"].bool ?? false) }
+      if nodes[id] == nil {
+        guard removed.contains(id) else { throw failure("Saved moving node is unavailable: " + id) }
+        continue
+      }
+      if let m = try motion(value["motion"]) { restoredNodeMotions[id] = (m,value["face"].bool ?? false) }
     }
+    practiceClock.restore(elapsed:elapsed);animationOrigin=saved["animation_origin"].value
+    setViewerPosition(viewerPosition)
+    for (id,value) in saved["nodes"].object ?? [:] {
+      guard let node=nodes[id] else { continue }
+      if !changedTransforms.contains(id) {
+        node.simdPosition=try point(value["position"]);node.simdEulerAngles=try point(value["rotation"])
+        if value["scale"].array != nil { node.simdScale = try point(value["scale"]) }
+      }
+      if let hidden = value["hidden"].bool { node.isHidden = hidden }
+    }
+    for (id, material) in saved["materials"].object ?? [:] where !changedMaterials.contains(id) && nodes[id] != nil {
+      operation(JSON(["type":"set_material","node_id":id,"material":material.raw]),speak:{_ in},sound:{_ in})
+    }
+    for (id, posture) in saved["postures"].object ?? [:] where posture.text == "sit" {
+      let requested = changedBehaviors.contains(id) ? actorBehaviors[id] : nil
+      if let requested, ["walk","run","swim"].contains(requested) { continue }
+      animate(id,"sit")
+      if let requested { animate(id,requested) }
+    }
+    for (id, behavior) in saved["behaviors"].object ?? [:] where !changedBehaviors.contains(id) {
+      animate(id,behavior.text)
+    }
+    if !environmentChanged, saved["environment"].object != nil {
+      operation(saved["environment"],speak:{_ in},sound:{_ in})
+    }
+    viewerMotion=restoredViewerMotion;nodeMotions=restoredNodeMotions
     if saved["fade"].object != nil { viewpointFade=(try point(saved["fade"]["destination"]),saved["fade"]["started_at"].value) }
     renderMotion()
   }
@@ -740,124 +803,67 @@ extension UIColor {
     return count
   }
   func lobby() {
-    left.camera?.zFar = 150; right.camera?.zFar = 150
-    clear()
-    head.position = SCNVector3(0, 1.6, 0)
-    // Deterministic lobby: same composed forest on every launch, no paid call.
-    var lobbySeed: UInt32 = 20261104
-    func lobbyRandom() -> Float {
-      lobbySeed = lobbySeed &* 1664525 &+ 1013904223
-      return Float(lobbySeed >> 8) / Float(1 << 24)
+    left.camera?.zFar = 150;right.camera?.zFar = 150
+    clear();head.position = SCNVector3(0,1.6,0)
+    var seed: UInt32 = 20261104
+    func random() -> Float { seed = seed &* 1664525 &+ 1013904223;return Float(seed >> 8)/Float(1 << 24) }
+    let ambient = SCNNode();ambient.light = SCNLight();ambient.light?.type = .ambient
+    ambient.light?.color = UIColor(hex:"#d8d5bf");ambient.light?.intensity = 340;scene.rootNode.addChildNode(ambient)
+    let sun = SCNNode();sun.name = "braive_sun";sun.light = SCNLight();sun.light?.type = .directional
+    sun.light?.color = UIColor(hex:"#fff0d0");sun.light?.intensity = 850;sun.eulerAngles = SCNVector3(-0.7,-0.6,0)
+    sun.light?.castsShadow = true;sun.light?.shadowMapSize = CGSize(width:1024,height:1024)
+    sun.light?.shadowSampleCount = 4;sun.light?.shadowRadius = 4;sun.light?.shadowColor = UIColor.black.withAlphaComponent(0.26)
+    sun.light?.orthographicScale = 20;sun.light?.zFar = 65;scene.rootNode.addChildNode(sun)
+    let ground = SCNPlane(width:90,height:90),groundMaterial = SCNMaterial()
+    groundMaterial.lightingModel = .physicallyBased;groundMaterial.roughness.contents = 0.98
+    if let texture = textureImage("texture.surface.grass_01") {
+      groundMaterial.diffuse.contents = texture;groundMaterial.diffuse.wrapS = .repeat;groundMaterial.diffuse.wrapT = .repeat
+      groundMaterial.diffuse.contentsTransform = SCNMatrix4MakeScale(36,36,1);groundMaterial.diffuse.maxAnisotropy = 8
+      groundMaterial.multiply.contents = UIColor(hex:"#a5a783")
+    } else { groundMaterial.diffuse.contents = UIColor(hex:"#657450") }
+    ground.materials = [groundMaterial]
+    let floor = SCNNode(geometry:ground);floor.eulerAngles.x = -.pi/2;floor.position.y = -0.04;scene.rootNode.addChildNode(floor)
+    let clearing = SCNCylinder(radius:2.5,height:0.025);clearing.radialSegmentCount = 48
+    let soil = SCNMaterial();soil.lightingModel = .physicallyBased;soil.diffuse.contents = UIColor(hex:"#9c8c69");soil.roughness.contents = 1
+    clearing.materials = [soil];let clearingNode = SCNNode(geometry:clearing);clearingNode.position.y = -0.035;scene.rootNode.addChildNode(clearingNode)
+    func place(_ id: String,_ x: Float,_ z: Float,_ scale: Float) {
+      guard let node = try? AssetLibrary.make(id) else { return }
+      node.position = SCNVector3(x,0,z);node.eulerAngles.y = random()*Float.pi*2;node.scale = SCNVector3(scale,scale,scale)
+      scene.rootNode.addChildNode(node)
     }
-    scene.background.contents = UIColor(hex: "#9dbbb0")
-    scene.fogColor = UIColor(hex: "#75968a")
-    scene.fogStartDistance = 5
-    scene.fogEndDistance = 27
-    scene.fogDensityExponent = 1.4
-    let ambient = SCNNode()
-    ambient.light = SCNLight()
-    ambient.light?.type = .ambient
-    ambient.light?.color = UIColor(hex: "#a6c6c2")
-    ambient.light?.intensity = 220
-    scene.rootNode.addChildNode(ambient)
-    let sun = SCNNode()
-    sun.light = SCNLight()
-    sun.light?.type = .directional
-    sun.light?.color = UIColor(hex: "#ffe8bb")
-    sun.light?.intensity = 900
-    sun.eulerAngles = SCNVector3(-0.7, -0.6, 0)
-    sun.position = SCNVector3(8, 12, 6)
-    sun.light?.castsShadow = true
-    sun.light?.shadowMapSize = CGSize(width: 1024, height: 1024)
-    sun.light?.shadowSampleCount = 4
-    sun.light?.shadowRadius = 3
-    sun.light?.shadowColor = UIColor.black.withAlphaComponent(0.26)
-    sun.light?.orthographicScale = 17
-    sun.light?.zFar = 60
-    scene.rootNode.addChildNode(sun)
-    func finish(_ geometry: SCNGeometry, _ color: String) -> SCNGeometry {
-      let m = SCNMaterial()
-      m.diffuse.contents = UIColor(hex: color)
-      m.lightingModel = .physicallyBased
-      m.roughness.contents = 0.95
-      geometry.materials = [m]
-      return geometry
-    }
-    let ground = SCNNode(
-      geometry: finish(SCNBox(width: 90, height: 0.1, length: 90, chamferRadius: 0), "#58743F"))
-    ground.position.y = -0.1
-    scene.rootNode.addChildNode(ground)
-    let all = (try? AssetLibrary.entries) ?? []
-    if let grass = try? AssetLibrary.make("nature.ground_patch.nature_ground_grass_01") {
-      let bounds = grass.boundingBox
-      let span = max(bounds.max.x - bounds.min.x, bounds.max.z - bounds.min.z)
-      let scale: Float = 90 / max(0.01, span)
-      grass.scale = SCNVector3(scale, scale, scale)
-      grass.position.y = -0.035
-      grass.name = "lobby_grass_floor"
-      scene.rootNode.addChildNode(grass)
-    }
-    let trees = all.filter { $0.category == "nature" && $0.subcategory == "tree" }
-    let rocks = all.filter { $0.category == "nature" && $0.subcategory == "rock" }
-    let bushes = all.filter { $0.category == "nature" && ($0.subcategory == "bush" || $0.subcategory == "plant") }
-    func place(_ id: String, _ x: Float, _ z: Float, _ scale: Float) {
-      guard let n = try? AssetLibrary.make(id) else { return }
-      n.position = SCNVector3(x, 0, z)
-      n.eulerAngles.y = lobbyRandom() * Float.pi * 2
-      n.scale = SCNVector3(scale, scale, scale)
-      scene.rootNode.addChildNode(n)
-    }
-    func inCorridor(_ x: Float, _ z: Float) -> Bool { abs(x) < 1.3 && z < 0.5 }
-    // Foreground tufts frame a clear, comfortable area around the participant.
-    for _ in 0..<26 {
-      let angle = lobbyRandom() * Float.pi * 2
-      let radius = 2.4 + lobbyRandom() * 2.2
-      let x = sin(angle) * radius, z = cos(angle) * radius
-      if inCorridor(x, z) { continue }
-      place("nature.bush.nature_grass_large_01", x, z, 0.8 + lobbyRandom() * 0.5)
-    }
-    // Middle-ground clusters read as natural groupings, not a planted ring.
-    for cluster in 0..<5 where !trees.isEmpty {
-      let angle = Float(cluster) / 5 * Float.pi * 2 + lobbyRandom() * 0.7
-      let radius = 6 + lobbyRandom() * 4
-      let cx = sin(angle) * radius, cz = cos(angle) * radius
-      if inCorridor(cx, cz) { continue }
-      for _ in 0..<(3 + Int(lobbyRandom() * 3)) {
-        place(trees[Int(lobbyRandom() * Float(trees.count)) % trees.count].id,
-          cx + (lobbyRandom() - 0.5) * 4.4, cz + (lobbyRandom() - 0.5) * 4.4, 0.85 + lobbyRandom() * 0.4)
-      }
-      for _ in 0..<2 where !bushes.isEmpty {
-        place(bushes[Int(lobbyRandom() * Float(bushes.count)) % bushes.count].id,
-          cx + (lobbyRandom() - 0.5) * 3.4, cz + (lobbyRandom() - 0.5) * 3.4, 0.8 + lobbyRandom() * 0.4)
+    let trees = ["nature.tree.nature_tree_oak_01","nature.tree.nature_tree_detailed_01","nature.tree.nature_tree_default_01"]
+    // A temperate palette, layered canopy and distant trunks close the horizon.
+    // The first ten meters retain a clear view along a narrow woodland path.
+    for (ring,count) in [(0,12),(1,18),(2,22)] {
+      for index in 0..<count {
+        let angle = Float(index)/Float(count)*Float.pi*2+(random()-0.5)*0.22
+        let radius = Float([7.5,13.0,19.0][ring])+(random()-0.5)*2
+        let x = sin(angle)*radius,z = cos(angle)*radius
+        if ring == 0 && z < 0 && abs(x) < 2.4 { continue }
+        place(trees[(index+ring)%trees.count],x,z,0.96+random()*0.24)
       }
     }
-    // A denser background tree line supplies depth against the sky.
-    for _ in 0..<26 where !trees.isEmpty {
-      let angle = lobbyRandom() * Float.pi * 2
-      let radius = 13 + lobbyRandom() * 11
-      let x = sin(angle) * radius, z = cos(angle) * radius
-      if abs(x) < 2.2 && z < 0 { continue }
-      place(trees[Int(lobbyRandom() * Float(trees.count)) % trees.count].id, x, z, 1.0 + lobbyRandom() * 0.35)
+    for index in 0..<34 {
+      let angle = random()*Float.pi*2,radius = 3.2+random()*8.5,x = sin(angle)*radius,z = cos(angle)*radius
+      if z < 0 && abs(x) < 1.5 { continue }
+      place(index%3 == 0 ? "nature.bush.nature_grass_leafs_large_01" : "nature.bush.nature_plant_bush_detailed_01",x,z,0.65+random()*0.35)
     }
-    for _ in 0..<7 where !rocks.isEmpty {
-      let angle = lobbyRandom() * Float.pi * 2
-      let radius = 2.6 + lobbyRandom() * 6.4
-      let x = sin(angle) * radius, z = cos(angle) * radius
-      if inCorridor(x, z) { continue }
-      place(rocks[Int(lobbyRandom() * Float(rocks.count)) % rocks.count].id, x, z, 0.7 + lobbyRandom() * 0.6)
+    for _ in 0..<24 {
+      let angle = random()*Float.pi*2,radius = 2.6+random()*4.5,x = sin(angle)*radius,z = cos(angle)*radius
+      if z < 0 && abs(x) < 1.3 { continue }
+      place("nature.bush.nature_grass_large_01",x,z,0.35+random()*0.35)
     }
-    // Share the generated-scene sky, fog, lighting environment and gentle
-    // posterized style so the lobby and practice scenes stay one world.
-    let lobbyEnvironment = JSON([
-      "mode": "outdoor",
-      "sky": ["kind": "procedural", "horizon_color": "#dcead9", "zenith_color": "#6fa8c8",
-        "ground_color": "#4a6741", "sun_color": "#fff1cf", "sun_size_degrees": 7,
-        "haze": 0.25, "cloud_coverage": 0.22] as [String: Any],
-      "fog": ["color": "#cfdfd2", "start_meters": 16, "end_meters": 60] as [String: Any],
-      "lighting_environment_intensity": 0.85,
-      "style": ["light_bands": 6, "strength": 0.15] as [String: Any],
-    ])
-    try? SceneAppearance.applyEnvironment(
-      lobbyEnvironment, to: scene, sunDirection: SCNVector3(-0.5, -0.7, -0.3), seed: 20261104)
+    for index in 0..<12 {
+      let angle = random()*Float.pi*2,radius = 3.3+random()*9,x = sin(angle)*radius,z = cos(angle)*radius
+      if z < 0 && abs(x) < 1.5 { continue }
+      place(index%2 == 0 ? "nature.rock.nature_rock_small_flat_a_01" : "nature.rock.nature_rock_large_a_01",x,z,0.55+random()*0.35)
+    }
+    for index in 0..<5 { place("nature.ground_patch.nature_path_stone_01",sin(Float(index)*0.55)*0.8,-3.3-Float(index)*1.6,0.8) }
+    let environment = JSON(["mode":"outdoor",
+      "sky":["kind":"procedural","horizon_color":"#d4d9b7","zenith_color":"#90b6bd","ground_color":"#5b6550","sun_color":"#fff1ce","sun_size_degrees":5,"haze":0.22,"cloud_coverage":0.12] as [String:Any],
+      "fog":["color":"#b6c1a7","start_meters":10,"end_meters":34] as [String:Any],
+      "lighting_environment_intensity":0.45,"style":["light_bands":7,"strength":0.10] as [String:Any]])
+    try? SceneAppearance.applyEnvironment(environment,to:scene,sunDirection:SCNVector3(-0.5,-0.7,-0.3),seed:20261104)
+    metrics = RenderMetrics();scene.rootNode.enumerateChildNodes { node,_ in metrics.estimatedSubmissionsPerEye += node.geometry?.elements.count ?? 0 }
   }
 }

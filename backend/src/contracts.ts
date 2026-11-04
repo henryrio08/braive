@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import Ajv from 'ajv';
-import {assetIDs,characterIDs,generationCharacterIDs,assetManifest,allTextureIDs} from './assets.js';
+import {assetIDs,characterIDs,generationCharacterIDs,assetManifest,allTextureIDs,textureBudgetIssues} from './assets.js';
 import {scenarioGraphIssues} from './scenario-graph.js';
 import addFormats from 'ajv-formats';
 import type { ValidationIssue, SceneSpec, SessionPlan, AudioPlan, WorldOperation } from '../../docs/handoff/contracts.js';
@@ -34,6 +34,7 @@ export function validateProviderOutput(name:string,value:unknown) {
 export function sceneIssues(plan: SessionPlan, scene: SceneSpec, audio: AudioPlan): ValidationIssue[] {
  const issues: ValidationIssue[] = [];
  const fail = (path: string, rule: string, message: string) => issues.push({path,rule,message});
+ for(const message of textureBudgetIssues(scene))fail('/nodes','texture_budget',message);
  for (const [key, output] of Object.entries({scene,audio})) if(output.session_id !== plan.session_id || output.revision !== plan.revision) fail(`/${key}/revision`,'revision','Must match approved plan');
  for(const [i,l] of audio.layers.entries()) {
   if(audio.layers.findIndex(other=>other.id===l.id)!==i)fail(`/audio/layers/${i}/id`,'unique','Audio layer IDs must be unique');
@@ -198,7 +199,6 @@ export function planIssues(plan: SessionPlan): ValidationIssue[] {
   if(!stages.length||new Set(stages.map(s=>s.id)).size!==stages.length)fail('/experience/stages','unique','Unique executable stages required');
   if(plan.experience.kind==='action'&&plan.interaction_mode==='dialogue')fail('/experience','task_focus','An action experience cannot be replaced by a conversation');
   if(plan.experience.progression==='guided'&&stages.some(s=>s.action_ids.length))fail('/experience/stages','guided','The participant experiences movement and events automatically; no command checklist');
-  if(plan.experience.progression==='guided'&&plan.characters.some(c=>!generationCharacterIDs.has(c.asset_id??'')))fail('/characters','appearance','Use a currently approved comfortable character style');
  }
  return issues;
 }

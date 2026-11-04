@@ -78,16 +78,19 @@ test('characters require registered skinned bases and preserve coordinator appea
  s.nodes[0].animation='sit';assert.ok(sceneIssues(p,s,audio).some(i=>i.rule==='supported_pose'));
  p.characters[0].asset_id='character.base.casual_adult_02';s.nodes[0].geometry={kind:'asset',asset_id:p.characters[0].asset_id};assert.deepEqual(sceneIssues(p,s,audio),[]);
 });
-test('355 licensed IDs and byte-identical backend/iOS manifests',async()=>{
- const {readFileSync}=await import('node:fs');assert.equal(assetManifest.length,355);assert.ok(assetManifest.every(a=>a.license==='CC0-1.0'));
+test('361 licensed IDs retain original assets and byte-identical backend/iOS manifests',async()=>{
+ const {readFileSync}=await import('node:fs');assert.equal(assetManifest.length,361);assert.ok(assetManifest.every(a=>a.license==='CC0-1.0'));
  assert.equal(readFileSync(new URL('../assets/asset_manifest.json',import.meta.url),'utf8'),readFileSync(new URL('../../ios/Braive/Resources/asset_manifest.json',import.meta.url),'utf8'));
 });
-test('compact generation catalog preserves every licensed asset and its complexity',async()=>{
+test('curated generation catalog preserves complexity and excludes legacy defaults while keeping them registered',async()=>{
  const {meshCatalog}=await import('../src/assets.js');
  const entries=Object.values(meshCatalog).flat();
- assert.equal(entries.length,355);
- assert.equal(new Set(entries.map(([id])=>id)).size,355);
- for(const asset of assetManifest)assert.deepEqual(entries.find(([id])=>id===asset.id),[asset.id,asset.approx_tris]);
+ const eligible=assetManifest.filter(a=>a.generation_enabled!==false);
+ assert.equal(entries.length,eligible.length);
+ assert.equal(new Set(entries.map(([id])=>id)).size,eligible.length);
+ for(const asset of eligible)assert.deepEqual(entries.find(([id])=>id===asset.id),[asset.id,asset.approx_tris]);
+ assert(assetManifest.some(a=>a.id==='character.base.soft_adult_01'));
+ assert(!entries.some(([id])=>id.includes('blockout_')));
 });
 test('coordinator budgets real skeleton node costs before scene construction',()=>{
  const p={...plan,narrator_intro_8s:'To stop at any time, just say STOP!',stop_reminder:'To stop at any time, just say STOP!',narrator_beats:[],tool_calls:[],

@@ -18,7 +18,8 @@ export function dialogueContext(request:DialogueRequest,saved:{plan:SessionPlan,
  const {plan}=saved, character=plan.characters.find(c=>c.id===request.character_id)!;
  return {schema_version:request.schema_version,session_id:request.session_id,revision:request.revision,turn_id:request.turn_id,character_id:request.character_id,
   user_utterance:request.user_utterance.slice(-1800),recent_turns:request.recent_turns.slice(-6).map(t=>({...t,text:t.text.slice(-500)})),
-  character:{name:character.name,role:character.role,goal:character.goal.slice(0,350),behavior_boundaries:character.behavior_boundaries},
+  character:{name:character.name,role:character.role,goal:character.goal.slice(0,350),behavior_boundaries:character.behavior_boundaries,
+   ...(character.dialogue_style?{dialogue_style:character.dialogue_style}:{})},
   objective:(plan.experience?.objective??plan.task_instruction).slice(0,500),setting:plan.setting_brief.slice(0,700),
   context_summary:request.context_summary.slice(0,600),remaining_seconds:request.remaining_seconds};
 }

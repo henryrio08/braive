@@ -13,11 +13,88 @@ enum EditIntent {
 /// Canonical, persistent same-world scene revisions.
 /// Foundation only (no SceneKit) so it can be checked with swiftc on Linux.
 enum ScenePatch {
+  /// Scene node coordinates are local to their parent. Never infer a room's
+  /// floor or audience center by averaging local coordinates from different rigs.
+  static func worldFrame(_ nodeID: String, scene: JSON, visited: Set<String> = []) -> [Double]? {
+    guard !visited.contains(nodeID), let node = scene["nodes"].list.first(where: { $0["id"].text == nodeID }) else { return nil }
+    let p = node["position"].list.map(\.value)
+    let r = node["rotation_radians"].array == nil ? [0.0,0,0] : node["rotation_radians"].list.map(\.value)
+    let s = node["scale"].array == nil ? [1.0,1,1] : node["scale"].list.map(\.value)
+    guard p.count == 3, r.count == 3, s.count == 3 else { return nil }
+    let cx = cos(r[0]), sx = sin(r[0]), cy = cos(r[1]), sy = sin(r[1]), cz = cos(r[2]), sz = sin(r[2])
+    let rx: [Double] = [1,0,0,0, 0,cx,sx,0, 0,-sx,cx,0, 0,0,0,1]
+    let ry: [Double] = [cy,0,-sy,0, 0,1,0,0, sy,0,cy,0, 0,0,0,1]
+    let rz: [Double] = [cz,sz,0,0, -sz,cz,0,0, 0,0,1,0, 0,0,0,1]
+    var local = multiply(multiply(rx,ry),rz)
+    for col in 0..<3 { for row in 0..<3 { local[col * 4 + row] *= s[col] } }
+    local[12] = p[0]; local[13] = p[1]; local[14] = p[2]
+    if let parent = node["parent_id"].string {
+      guard let frame = worldFrame(parent,scene: scene,visited: visited.union([nodeID])) else { return nil }
+      return multiply(frame,local)
+    }
+    return local
+  }
+  private static func multiply(_ a: [Double], _ b: [Double]) -> [Double] {
+    (0..<16).map { index in (0..<4).reduce(0.0) { $0 + a[$1 * 4 + index % 4] * b[(index / 4) * 4 + $1] } }
+  }
+  static func worldPosition(_ node: JSON, scene: JSON) -> [Double]? {
+    guard let frame = worldFrame(node["id"].text,scene: scene) else { return nil }
+    return Array(frame[12...14])
+  }
+  static func protectedCharacterIDs(scene: JSON, plan: JSON? = nil) -> Set<String> {
+    var ids = Set<String>()
+    func visit(_ value: JSON) {
+      if value["type"].text == "character_action",
+         !["idle","sit","listen","gesture"].contains(value["behavior"].text) {
+        ids.insert(value["character_id"].text)
+      }
+      if value["type"].text == "move_node" {
+        let moved = value["node_id"].text
+        for actor in scene["nodes"].list where actor["role"].text == "character" {
+          var node = actor; var seen = Set<String>()
+          while !node["id"].text.isEmpty && seen.insert(node["id"].text).inserted {
+            if node["id"].text == moved {
+              if let character = plan?["characters"].list.first(where: { $0["scene_node_id"].text == actor["id"].text }) {
+                ids.insert(character["id"].text)
+              }
+              ids.insert(actor["id"].text); break
+            }
+            guard let parent = node["parent_id"].string,
+                  let next = scene["nodes"].list.first(where: { $0["id"].text == parent }) else { break }
+            node = next
+          }
+        }
+      }
+      for (key,child) in value.object ?? [:] {
+        if key == "conversation_target", !child.text.isEmpty { ids.insert(child.text) }
+        else { visit(child) }
+      }
+      value.list.forEach(visit)
+    }
+    visit(scene); return ids
+  }
+  /// Change only requested appearance fields in a current stage's overrides.
+  /// A timed scene's current lighting/material need not equal its opening state.
+  static func mergeAppearance(base: JSON, changed: JSON, current: JSON) -> JSON {
+    if base == changed { return current }
+    guard let changedObject = changed.object else { return changed }
+    var result = current.object ?? [:]
+    for key in Set((base.object ?? [:]).keys).union(changedObject.keys) {
+      let old = base[key], new = changed[key]
+      if old == new { continue }
+      if changedObject[key] == nil { result.removeValue(forKey:key); continue }
+      if key == "lighting_environment_intensity", let before=old.number, let after=new.number, let live=current[key].number {
+        result[key] = JSON(min(2,max(0,live+after-before)))
+      } else { result[key] = mergeAppearance(base:old,changed:new,current:current[key]) }
+    }
+    return JSON(result.mapValues(\.raw))
+  }
   static func parse(_ text: String, currentAudience: Int) -> EditIntent {
     let lower = text.lowercased()
     // 1. Task-scope words shape the next attempt, not this world.
     let taskWords = ["duration", "task", "route", "path", "longer", "shorter", "minutes"]
-    if taskWords.contains(where: { lower.contains($0) }) {
+    let surfaceChange = ["wood","stone","grass","fabric"].contains(where:lower.contains) && ["floor","wall","ground","path"].contains(where:lower.contains) && !lower.contains("task")
+    if taskWords.contains(where: { lower.contains($0) }) && !surfaceChange {
       return .deferred(text)
     }
     // 2. Preserved-clause handling: "keep/preserve/without changing X".
@@ -43,8 +120,8 @@ enum ScenePatch {
       return .decorative(kind: "plants")
     }
     // Behavior: a gesture word plus who should do it (or "make").
-    // Only registered behaviors are emitted; wave/nod/smile all map to gesture.
-    let behaviorWords = ["wave", "gesture", "smile", "nod"]
+    // Do not claim an unrelated wave can supply a nod or facial expression.
+    let behaviorWords = ["wave", "gesture"]
     let behaviorTargets = ["audience", "them", "people", "make"]
     if behaviorWords.contains(where: { lower.contains($0) })
       && behaviorTargets.contains(where: { lower.contains($0) }) {
@@ -55,7 +132,9 @@ enum ScenePatch {
     let audienceWords = ["audience", "people", "person", "crowd", "seats", "listeners", "members", "spectators"]
     if !preservedAudience && audienceWords.contains(where: { lower.contains($0) }) {
       if let explicit = explicitNumber(lower) {
-        return .audience(target: clamp(resolveCount(lower, explicit: explicit, current: currentAudience)))
+        let resolved = resolveCount(lower,explicit:explicit,current:currentAudience)
+        guard (0...16).contains(resolved) else { return .ambiguous("population_limit") }
+        return .audience(target:resolved)
       }
       let decreaseWords = ["fewer", "less", "smaller", "reduce", "remove", "down", "decrease"]
       let increaseWords = ["more", "larger", "bigger", "add", "increase"]
@@ -152,7 +231,8 @@ enum ScenePatch {
   static func isAudience(_ character: JSON) -> Bool {
     guard !character["id"].text.isEmpty else { return false }
     if character["id"].text.hasPrefix("audience_") { return true }
-    return character["role"].text.lowercased().contains("audience")
+    let role = character["role"].text.lowercased()
+    return ["audience","listener","spectator","crowd"].contains(where:role.contains)
   }
 
   static func audienceCount(plan: JSON) -> Int {
@@ -193,16 +273,16 @@ enum ScenePatch {
       var existingMaxDistance = 0.0
       var existingYaw = 0.0
       if useExistingAudience {
-        let positions = audienceNodes.map { $0["position"].list.map { $0.value } }
+        let positions = audienceNodes.compactMap { worldPosition($0,scene: scene) }
+        guard !positions.isEmpty else { return nil }
         existingFloorY = positions.map { $0[1] }.min() ?? (vy - 1.6)
         centerX = positions.map { $0[0] }.reduce(0, +) / Double(positions.count)
         centerZ = positions.map { $0[2] }.reduce(0, +) / Double(positions.count)
         existingMaxDistance = positions.map { sqrt(pow($0[0] - centerX, 2) + pow($0[2] - centerZ, 2)) }.max() ?? 0.0
-        let firstRotation = audienceNodes[0]["rotation_radians"].list.map { $0.value }
-        existingYaw = firstRotation.count >= 2 ? firstRotation[1] : 0.0
+        if let frame = worldFrame(audienceNodes[0]["id"].text,scene: scene) { existingYaw = atan2(frame[8],frame[10]) }
       }
       let characterYs = nodes.filter { $0["role"].text == "character" }.compactMap { node -> Double? in
-        let position = node["position"].list.map { $0.value }
+        let position = worldPosition(node,scene: scene) ?? []
         return position.count == 3 ? position[1] : nil
       }
       let fallbackFloorY = characterYs.min() ?? (vy - 1.6)
@@ -275,8 +355,7 @@ enum ScenePatch {
       return (newScene, newPlan, summary)
     } else {
       // Decrease: edit-added first (highest N), then other audience members.
-      let protected = Set(
-        scene["scenario"]["steps"].list.map { $0["conversation_target"].text }.filter { !$0.isEmpty })
+      let protected = protectedCharacterIDs(scene: scene,plan:plan)
       var characters = plan["characters"].list
       let audience = characters.filter { isAudience($0) && !protected.contains($0["id"].text) }
       func editIndex(_ character: JSON) -> Int? {
@@ -310,17 +389,17 @@ enum ScenePatch {
     }
   }
 
-  static func patchMaterial(scene: JSON, textureID: String) -> (scene: JSON, appliedNodeIDs: [String], summary: String)? {
-    let surfaceWords = ["floor", "ground", "wall", "path"]
+  static func patchMaterial(scene: JSON, textureID: String, target: String? = nil, nodeIDs: Set<String>? = nil) -> (scene: JSON, appliedNodeIDs: [String], summary: String)? {
+    let surfaceWords = target.map { [$0] } ?? ["floor", "ground", "wall", "path"]
     var nodes = scene["nodes"].list
     var applied: [String] = []
     for index in nodes.indices {
-      guard applied.count < 6 else { break }
       let node = nodes[index]
       guard node["role"].text.lowercased() == "environment" else { continue }
       let idText = node["id"].text.lowercased()
       let descriptionText = node["description"].text.lowercased()
-      guard surfaceWords.contains(where: { idText.contains($0) || descriptionText.contains($0) }) else { continue }
+      if let nodeIDs { guard nodeIDs.contains(node["id"].text) else { continue } }
+      else { guard surfaceWords.contains(where: { idText.contains($0) || descriptionText.contains($0) }) else { continue } }
       var material = node["material"]
       material["texture_asset_id"] = JSON(textureID)
       material["texture_scale"] = JSON(2)
@@ -394,7 +473,7 @@ enum ScenePatch {
         "position": [placement.x, placement.y, placement.z], "rotation_radians": [0.0, 0.0, 0.0], "scale": [1.0, 1.0, 1.0],
         "material": ["color": "#5d7a4a", "roughness": 0.9] as [String: Any],
         "animation": "none", "description": "Decorative planting",
-        "collision": "none", "collision_role": "none",
+        "collision_role": "none",
       ]))
     }
     var newScene = scene

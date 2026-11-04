@@ -5,8 +5,11 @@ import {cancelGeneration,releaseGeneration,supersedeGeneration,repeatedGeneratio
 import {PhoneTestWindow} from './phone-test-window.js';
 import {canonicalSceneReferences} from './scene-references.js';
 import {assertCurrentDialogue,dialogueContext} from './dialogue.js';
-import {meshCatalog,assetManifest,generationCharacterIDs,textureManifest,textureIDs,generatedTextures,registerGeneratedTexture,removeGeneratedTexture,parseImageInfo,generatedAssetsDir} from './assets.js';
-import {prepareWorldCommit,publishWorldCommit,type ApprovedWorld} from './world-commits.js';
+import {meshCatalog,assetManifest,generationCharacterIDs,textureManifest,textureIDs,generatedTextures,registerGeneratedTexture,removeGeneratedTexture,normalizeGeneratedTexture,referencedTextures,generatedAssetsDir} from './assets.js';
+import {WorldStore,WorldTransactions,worldHash,assertSessionID,type ApprovedWorld} from './world-commits.js';
+import {applyWorldEdits,editContext,editInstructions,type WorldEditPlan} from './world-edits.js';
+import {dataDirectory} from './paths.js';
+import {GenerationPause} from './generation-pause.js';
 import express from 'express';
 import {compileScene,constructionRequirements,deterministicCorrections} from './construction.js';
 import {dispatchTool} from './tool-dispatch.js';
@@ -48,14 +51,17 @@ app.use((req,_res,next)=>{
  next();
 });
 const approved=new Map<string,ApprovedExperience>();
+const worldStore=new WorldStore(join(dataDirectory,'worlds'));
+const worldTransactions=new WorldTransactions(join(dataDirectory,'world-transactions'),worldStore);
 // Read-only authenticated pairing check; it neither spends nor renews provider access.
 app.get('/v1/connection',(_req,res)=>res.json({status:'ok'}));
 const attempts=new Map<string,GenerationAttempt>();
 const requests=new Map<string,PlanRequest>();
 const generationLimitMs=10*60*1000;
 const jobs=new Map<string,Job>(); const running=new Map<string,AbortController>(); const revisions=new Map<string,number>();
+const jobPauses=new Map<string,GenerationPause>();
 
-const capabilities={version:'iphone-initial-1',nodes:350,resolved_nodes:1000,primitives:180000,geometry_bytes:24000000,resource_notes:'Draw-call, texture and resident-memory targets require physical-device profiling; they are not runtime-enforced caps.',units:'meters',eye_height:1.6,initial_forward:'negative Z',geometry:['box','plane','sphere','cylinder','asset'],characters:'Use approved soft_adult character.base assets with their original palette. These are intentionally simple, friendly stylized people. Keep comfortable personal space; default at least 2.5m from the viewer unless the user asks for closer contact. Do not use legacy neutral/casual models for new experiences.',voices:['default'],asset_catalog_format:'category.subcategory: [[asset_id, triangle_count], ...]. All assets normalized to meters, base y=0, forward -Z. Use each GLB intact; do not author its mesh or skeleton children.',assets:meshCatalog, audio_assets:['forest','piano','wind','room','crowd','whoosh']};
+const capabilities={version:'iphone-initial-1',nodes:350,resolved_nodes:1000,primitives:180000,geometry_bytes:24000000,resource_notes:'Draw-call, texture and resident-memory targets require physical-device profiling; they are not runtime-enforced caps.',units:'meters',eye_height:1.6,initial_forward:'negative Z',geometry:['box','plane','sphere','cylinder','asset'],characters:'Use the approved civilian character.base choices with their original palette. These are intentionally simple, friendly stylized people. Keep comfortable personal space; default at least 2.5m from the viewer unless the user asks for closer contact. Use only current character_choices for new experiences; historical IDs remain valid for saved scenes.',voices:['default'],asset_catalog_format:'category.subcategory: [[asset_id, triangle_count], ...]. Assets normalized to meters and base y=0. Their semantic fronts can differ: asset_placement.face_negative_z_yaw gives the root yaw to face -Z; add that correction to the intended facing yaw. Use each GLB intact; do not author its mesh or skeleton children.',assets:meshCatalog, audio_assets:['forest','piano','wind','room','crowd','whoosh']};
 capabilities.asset_catalog_format+=' Rest bounds in asset_bounds are authoritative for each asset\'s wide and thin axes (for example, window assets are thin in X and wide in Z at rest, facing sideways); a 90-degree yaw swaps the horizontal extents. Compute the transformed bounds from the rest bounds, your rotation and scale before placing any rotated asset.';
 capabilities.version='iphone-construction-visuals-5';
 Object.assign(capabilities,{construction_version:'1',asset_bounds:Object.fromEntries(assetManifest.map(a=>[a.id,a.bounds_meters])),surface_profiles:['matte','ground','water','glass','foliage'],sky:'App-owned procedural cubemap or solid background; explicit fog distances. No image-generation call or arbitrary shader source.'});
@@ -64,7 +70,7 @@ Object.assign(capabilities,{character_assets:assetManifest.filter(a=>generationC
 async function generate(request:PlanRequest, job:Job, signal:AbortSignal) {
  const previous=approved.get(request.session_id)??(request.parent_session_id?approved.get(request.parent_session_id):undefined);
  const result=await generateExperience(request,job,{
-  model,capabilities,previous,
+  model:async(...args)=>{await jobPauses.get(job.job_id)?.wait(signal);return model(...args);},capabilities,previous,
   isCurrent:()=>revisions.get(request.session_id)===request.revision,
   consumeRepair:(kind)=>claimRepair(attempts.get(job.job_id),kind),
   onRejected:(candidate,error)=>{
@@ -76,7 +82,9 @@ async function generate(request:PlanRequest, job:Job, signal:AbortSignal) {
  signal.throwIfAborted();
  if(revisions.get(request.session_id)!==request.revision)throw new AppError('CANCELLED','Superseded revision');
  const {experience,...wire}=result;
- job.result=wire;approved.set(request.session_id,result);job.status='succeeded';job.stage='Getting ready to begin…';
+ const world_id=(request.parent_session_id?approved.get(request.parent_session_id) as ApprovedWorld|undefined:undefined)?.world_id??request.parent_session_id??request.session_id;
+ const world={...result,world_id};worldStore.save(world);
+ job.result=wire;approved.set(request.session_id,world);job.status='succeeded';job.stage='Getting ready to begin…';
 }
 app.post(['/v1/session-plans','/v1/scene-revisions'],(req,res,next)=>{
  try {
@@ -90,7 +98,8 @@ app.post(['/v1/session-plans','/v1/scene-revisions'],(req,res,next)=>{
   supersedeGeneration(input.session_id,jobs,running);
   revisions.set(input.session_id,input.revision);
   const job:Job={job_id:randomUUID(),session_id:input.session_id,revision:input.revision,status:'running',stage:'Getting your practice ready…'};
-  attempts.set(job.job_id,{deadline:Date.now()+generationLimitMs,deadlineCap:Date.now()+generationLimitMs+5*60*1000,planningRepairUsed:false,constructionRepairUsed:false,deviceRepairUsed:false});
+  attempts.set(job.job_id,{deadline:Date.now()+generationLimitMs,deadlineCap:Date.now()+generationLimitMs,planningRepairUsed:false,constructionRepairUsed:false,deviceRepairUsed:false});
+  jobPauses.set(job.job_id,new GenerationPause());
   jobs.set(job.job_id,job); const controller=new AbortController(); running.set(job.job_id,controller);
   requests.set(job.job_id,structuredClone(input));
   const timer=setTimeout(()=>controller.abort(new Error('Ten-minute generation ceiling reached')),generationLimitMs);
@@ -124,6 +133,7 @@ app.post('/v1/jobs/:id/validation',async(req,res,next)=>{
   try {
    const {plan,audio,scene}=job.result;
    const experience=approved.get(job.session_id)?.experience;
+   await jobPauses.get(job.job_id)?.wait(controller.signal);
    const output=await model('SceneSpec',{plan,audio,approved_experience:experience,requirements:constructionRequirements(plan),previous_scene:authoredScene(scene),capabilities,issues:[{path:'/nodes',rule:'native_preflight',message:req.body.message}]},builderInstructions,controller.signal,'scene_builder');
    const authored=deterministicCorrections(canonicalSceneReferences(plan,output,audio)).scene;
    const staged=experience?materializeStageGraph(experience,plan,authored):{scene:authored,issues:[]};
@@ -132,7 +142,9 @@ app.post('/v1/jobs/:id/validation',async(req,res,next)=>{
    const repaired=compileScene(plan,staged.scene,audio);
    const errors=[...sceneIssues(plan,repaired,audio),...(experience?experienceSceneIssues(experience,plan,repaired):[])];if(errors.length) throw new AppError('INVALID_MODEL_OUTPUT','Native repair invalid',errors);
    controller.signal.throwIfAborted();if(revisions.get(job.session_id)!==job.revision)return;
-   job.result={plan,audio,scene:repaired};approved.set(job.session_id,{...job.result,experience});job.status='succeeded';job.stage='Getting ready to begin…';
+   job.result={plan,audio,scene:repaired};
+   const world={...job.result,experience,world_id:(approved.get(job.session_id) as ApprovedWorld|undefined)?.world_id??job.session_id};
+   worldStore.save(world);approved.set(job.session_id,world);job.status='succeeded';job.stage='Getting ready to begin…';
   }catch(e:any){if(jobs.get(job.job_id)?.status!=='cancelled'){
    if(!controller.signal.aborted&&(e.code==='PROVIDER_UNAVAILABLE'||e.code==='RATE_LIMITED')){
     // No candidate was produced; keep the scene and its repair for a later retry.
@@ -142,44 +154,93 @@ app.post('/v1/jobs/:id/validation',async(req,res,next)=>{
   finally{clearTimeout(timer);releaseGeneration(job.job_id,controller,running);}
  }catch(e){next(e);}
 });
-app.post('/v1/world-commits',(req,res,next)=>{
+app.post(['/v1/world-preparations','/v1/world-commits'],(req,res,next)=>{
  try {
   const body=req.body??{};
-  const {session_id,expected_revision,revision,plan,scene,audio,world_id}=body;
+  const {session_id,expected_revision,revision,plan,scene,audio,world_id,transaction_id}=body;
   if(typeof session_id!=='string'||!session_id||typeof expected_revision!=='number'||typeof revision!=='number'||!plan||!scene||!audio) throw new AppError('INVALID_INPUT','World commit requires session_id, expected_revision, revision, plan, scene and audio');
-  const priorExperience=approved.get(session_id)?.experience;
-  const input={session_id,expected_revision,revision,plan,scene,audio,world_id:typeof world_id==='string'?world_id:undefined};
-  const world=prepareWorldCommit(input,approved as unknown as Map<string,ApprovedWorld>,revisions);
-  const stored={...world,experience:priorExperience};
-  const dir=fileURLToPath(new URL('../data/worlds/',import.meta.url));
-  mkdirSync(dir,{recursive:true});
-  writeFileSync(join(dir,`${session_id}.json`),JSON.stringify({plan:stored.plan,scene:stored.scene,audio:stored.audio,revision,world_id:stored.world_id},null,2),{mode:0o600});
-  publishWorldCommit(input,world,approved as unknown as Map<string,ApprovedWorld>,revisions);
-  approved.set(session_id,stored as unknown as ApprovedExperience);
-  res.status(200).json({session_id,revision,world_id:stored.world_id,status:'committed'});
+  const input={session_id,expected_revision,revision,plan,scene,audio,world_id:typeof world_id==='string'?world_id:undefined,transaction_id:typeof transaction_id==='string'?transaction_id:undefined};
+  const map=approved as unknown as Map<string,ApprovedWorld>;
+  const world=req.path==='/v1/world-commits'?worldTransactions.commit(input,map,revisions):worldTransactions.prepare(input,map,revisions);
+  res.status(200).json({session_id,revision,world_id:world.world_id,status:req.path==='/v1/world-commits'?'committed':'prepared',
+   hash:worldHash(world),plan:world.plan,scene:world.scene,audio:world.audio});
  } catch(e){next(e);}
 });
-app.post('/v1/assets',(req,res,next)=>{
+app.post('/v1/world-edit-plans',async(req,res,next)=>{
+ const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),20_000);
+ res.on('close',()=>{if(!res.writableEnded)controller.abort();});
+ try{
+  validate('WorldEditRequest',req.body);
+  const {session_id,expected_revision,text,scope,candidate}=req.body;
+  const approvedWorld=approved.get(session_id);
+  if(!approvedWorld||revisions.get(session_id)!==expected_revision)throw new AppError('CONFLICT','The world changed before this edit could be interpreted',[],409);
+  let base:ApprovedWorld=approvedWorld;
+  if(candidate){
+   validate('SessionPlan',candidate.plan);validate('SceneSpec',candidate.scene);validate('AudioPlan',candidate.audio);
+   if(candidate.plan.session_id!==session_id||candidate.plan.revision!==expected_revision)throw new AppError('CONFLICT','Candidate belongs to another attempt or revision',[],409);
+   const scene=compileScene(candidate.plan,candidate.scene,candidate.audio),issues=sceneIssues(candidate.plan,scene,candidate.audio);
+   if(issues.length)throw new AppError('INVALID_INPUT','The next-attempt candidate is inconsistent',issues);
+   base={...base,...candidate,scene};
+  }
+  const interpreted:WorldEditPlan=await model('WorldEditPlan',editContext(base,text,scope),editInstructions,controller.signal);
+  controller.signal.throwIfAborted();
+  if(revisions.get(session_id)!==expected_revision)throw new AppError('CONFLICT','A newer world revision superseded this edit',[],409);
+  const result=applyWorldEdits(base,interpreted,scope);
+  res.json({status:interpreted.question?'clarify':result.changed?'ready':result.deferred.length?'deferred':'unchanged',question:interpreted.question,
+   summary:result.summary,deferred:result.deferred,plan:result.world.plan,scene:result.world.scene,audio:result.world.audio,expected_revision});
+ }catch(e){next(e);}finally{clearTimeout(timeout);}
+});
+app.post('/v1/world-edit-operations',(req,res,next)=>{
+ try{
+  validate('WorldEditOperationsRequest',req.body);
+  const {session_id,expected_revision,edit,scope,candidate}=req.body,stored=approved.get(session_id);
+  if(!stored||revisions.get(session_id)!==expected_revision)throw new AppError('CONFLICT','This edit belongs to an older world revision',[],409);
+  let base:ApprovedWorld=stored;
+  if(candidate){
+   validate('SessionPlan',candidate.plan);validate('SceneSpec',candidate.scene);validate('AudioPlan',candidate.audio);
+   if(candidate.plan.session_id!==session_id||candidate.plan.revision!==expected_revision)throw new AppError('CONFLICT','The candidate belongs to another world revision',[],409);
+   base={...base,...candidate};
+  }
+  const result=applyWorldEdits(base,edit,scope);
+  res.json({status:edit.question?'clarify':result.changed?'ready':result.deferred.length?'deferred':'unchanged',question:edit.question,summary:result.summary,deferred:result.deferred,
+   plan:result.world.plan,scene:result.world.scene,audio:result.world.audio,expected_revision});
+ }catch(e){next(e);}
+});
+app.post('/v1/world-transactions/:id/cancel',(req,res,next)=>{
+ try{const world=worldTransactions.cancel(req.params.id,approved as unknown as Map<string,ApprovedWorld>,revisions);
+  res.json({status:'cancelled',...(world?{plan:world.plan,scene:world.scene,audio:world.audio,world_id:world.world_id}:{})});
+ }catch(e){next(e);}
+});
+app.get('/v1/worlds/:id',(req,res,next)=>{
+ try{assertSessionID(req.params.id);const world=approved.get(req.params.id);
+  if(!world){res.status(404).json({code:'NOT_FOUND',message:'This saved world has not been registered on this server'});return;}
+  res.json({...world,hash:worldHash(world)});
+ }catch(e){next(e);}
+});
+app.get('/v1/review-worlds',(_req,res)=>res.json({worlds:[...approved.values()].slice(-6).map(world=>({plan:world.plan,scene:world.scene,audio:world.audio}))}));
+app.delete('/v1/worlds/:id',(req,res,next)=>{
+ try{assertSessionID(req.params.id);supersedeGeneration(req.params.id,jobs,running);approved.delete(req.params.id);revisions.delete(req.params.id);
+  worldStore.remove(req.params.id);worldTransactions.forgetSession(req.params.id);provenance.delete(req.params.id);
+  for(const [id,job] of jobs)if(job.session_id===req.params.id){jobs.delete(id);requests.delete(id);attempts.delete(id);}
+  res.sendStatus(204);
+ }catch(e){next(e);}
+});
+app.post('/v1/assets',async(req,res,next)=>{
  try {
   const body=req.body??{};
   if(typeof body.content_base64!=='string'||!body.content_base64) throw new AppError('INVALID_INPUT','content_base64 is required');
   if(body.format!==undefined&&body.format!=='png'&&body.format!=='jpeg') throw new AppError('INVALID_INPUT','format must be png or jpeg');
-  const buffer=Buffer.from(body.content_base64,'base64');
-  if(buffer.length>12*1024*1024) throw new AppError('INVALID_INPUT','Generated asset exceeds the 12MB plan limit');
-  let info:{format:'png'|'jpeg';width:number;height:number};
-  try { info=parseImageInfo(buffer); } catch(e:any) { throw new AppError('INVALID_INPUT',e?.message??'Invalid image data'); }
-  if(body.format&&body.format!==info.format) throw new AppError('INVALID_INPUT','Declared format does not match image contents');
-  if(info.width>2048||info.height>1024) throw new AppError('INVALID_INPUT','Generated asset exceeds the 2048x1024 distant imagery cap');
-  const sha256=createHash('sha256').update(buffer).digest('hex');
-  const id='texture.generated.'+sha256.slice(0,16);
-  const existing=generatedTextures().find(e=>e.sha256===sha256);
-  if(existing){res.status(201).json({id:existing.id,format:existing.format,bytes:existing.bytes,width:existing.width,height:existing.height});return;}
-  const ext=info.format==='png'?'png':'jpg';
-  const file=`${id}.${ext}`;
+  if(body.content_base64.length>16*1024*1024||!/^[A-Za-z0-9+/]*={0,2}$/.test(body.content_base64))throw new AppError('INVALID_INPUT','Invalid or oversized base64 image');
+  if(body.purpose!==undefined&&!['surface','distant'].includes(body.purpose))throw new AppError('INVALID_INPUT','Image purpose must be surface or distant');
+  let normalized:Awaited<ReturnType<typeof normalizeGeneratedTexture>>;
+  try{normalized=await normalizeGeneratedTexture(Buffer.from(body.content_base64,'base64'),body.purpose??'surface');}
+  catch(e){throw new AppError('INVALID_INPUT',(e as Error).message);}
+  const {data,entry}=normalized;
+  const existing=generatedTextures().find(e=>e.sha256===entry.sha256);
+  if(existing){res.status(200).json(existing);return;}
   mkdirSync(generatedAssetsDir,{recursive:true});
-  writeFileSync(join(generatedAssetsDir,file),buffer,{mode:0o600});
-  const entry=registerGeneratedTexture({id,file,format:info.format,bytes:buffer.length,sha256,width:info.width,height:info.height});
-  res.status(201).json({id:entry.id,format:entry.format,bytes:entry.bytes,width:entry.width,height:entry.height});
+  writeFileSync(join(generatedAssetsDir,entry.file),data,{mode:0o600});
+  registerGeneratedTexture(entry);res.status(201).json(entry);
  } catch(e){next(e);}
 });
 app.get('/v1/assets/:id',(req,res,next)=>{
@@ -190,16 +251,22 @@ app.get('/v1/assets/:id',(req,res,next)=>{
    const path=join(generatedAssetsDir,basename(generated.file));
    if(!existsSync(path)) {res.status(404).json({code:'NOT_FOUND',message:'Generated asset file is missing'});return;}
    res.type(generated.format==='png'?'image/png':'image/jpeg');
+   res.setHeader('X-Content-SHA256',generated.sha256);res.setHeader('Cache-Control','private, max-age=31536000, immutable');
    res.sendFile(path); return;
   }
   if(textureIDs.has(id)||textureManifest.some(t=>t.id===id)){res.status(404).json({code:'ASSET_BUNDLED',message:'Bundled texture is already on the device'});return;}
   res.status(404).json({code:'NOT_FOUND',message:'Asset not found'});
  } catch(e){next(e);}
 });
+app.get('/v1/assets/:id/metadata',(req,res)=>{
+ const entry=generatedTextures().find(item=>item.id===req.params.id);
+ entry?res.json(entry):res.status(404).json({code:'NOT_FOUND',message:'Generated texture not found'});
+});
 app.delete('/v1/assets/:id',(req,res,next)=>{
  try {
   const id=req.params.id;
   if(textureIDs.has(id)||textureManifest.some(t=>t.id===id)) throw new AppError('INVALID_INPUT','Bundled textures cannot be deleted');
+  if([...approved.values(),...worldTransactions.retainedWorlds()].some(world=>referencedTextures(world.scene).has(id)))throw new AppError('CONFLICT','This image is still referenced by a saved world or reversible edit',[],409);
   const removed=removeGeneratedTexture(id);
   if(!removed){res.status(404).json({code:'NOT_FOUND',message:'Asset not found'});return;}
   try{rmSync(join(generatedAssetsDir,basename(removed.file)),{force:true});}catch{}
@@ -207,6 +274,13 @@ app.delete('/v1/assets/:id',(req,res,next)=>{
  } catch(e){next(e);}
 });
 app.get('/v1/jobs/:id',(req,res)=>{const j=jobs.get(req.params.id); j?res.json(j):res.status(404).json({message:'Job not found'});});
+app.post('/v1/jobs/:id/pause',(req,res,next)=>{
+ try{
+  const gate=jobPauses.get(req.params.id);if(!gate)throw new AppError('NOT_FOUND','This preparation is no longer available',[],404);
+  if(typeof req.body.paused!=='boolean')throw new AppError('INVALID_INPUT','paused must be a boolean');
+  gate.set(req.body.paused,req.body.sequence);res.sendStatus(204);
+ }catch(e){next(e);}
+});
 app.delete('/v1/jobs/:id',(req,res)=>{cancelGeneration(req.params.id,jobs,running);res.sendStatus(204);});
 const routes=[['dialogue','DialogueRequest','DialogueResult','Respond as the specified character to the actual user answer. At most two short sentences, 35 words total. One speaker. Use character gestures only; scenario actions own movement and world changes. Never invent observations.'],['feedback','FeedbackRequest','FeedbackResult','Only cite supplied observation IDs. Maximum three positive did_well and three noticed. Include a quick improvement if supported. No diagnosis or inferred eye contact.'],['adaptations','AdaptationRequest','AdaptationResult','Use self-report, preferences, and supplied evidence IDs. Maintain if evidence is missing; ease or maintain after early quit/high difficulty. Preserve scenario identity.']] as const;
 for(const [path,requestSchema,resultSchema,instructions] of routes) app.post(`/v1/${path}`,async(req,res,next)=>{
@@ -239,20 +313,9 @@ for(const [path,requestSchema,resultSchema,instructions] of routes) app.post(`/v
 });
 app.get('/v1/provenance/:id',(req,res)=>res.json({mode:'live',model_ids:[process.env.SPARK_MODEL??'muse-spark-1.3',process.env.WONDER_MODEL??'muse-wonder-1.0'],request_ids:provenance.get(req.params.id)??[]}));
 app.use((e:any,_req:express.Request,res:express.Response,_next:express.NextFunction)=>res.status(e.status??500).json({code:e.code??'INVALID_INPUT',message:e.message,issues:e.issues??[],request_id:randomUUID(),retryable:true}));
-try {
- const worldsDir=fileURLToPath(new URL('../data/worlds/',import.meta.url));
- if(existsSync(worldsDir)) for(const file of readdirSync(worldsDir)) {
-  if(!file.endsWith('.json'))continue;
-  try {
-   const data=JSON.parse(readFileSync(join(worldsDir,file),'utf8'));
-   const session_id=data?.plan?.session_id??data?.session_id??file.slice(0,-5);
-   const revision=data?.revision??data?.plan?.revision;
-   if(!data?.plan||!data?.scene||!data?.audio||typeof session_id!=='string'||typeof revision!=='number')continue;
-   approved.set(session_id,{plan:data.plan,scene:data.scene,audio:data.audio,experience:data.experience} as ApprovedExperience);
-   revisions.set(session_id,revision);
-  } catch {}
- }
-} catch {}
+for(const world of worldStore.loadAll()){
+ approved.set(world.plan.session_id,world as unknown as ApprovedExperience);revisions.set(world.plan.session_id,world.plan.revision);
+}
 const server=createServer(app); const wss=new WebSocketServer({noServer:true,maxPayload:100000});
 server.on('upgrade',(req,socket,head)=>{
  const diagnostic=req.url==='/v1/diagnostics/audio' && process.env.BRAIVE_TEST_MODE==='true';
@@ -285,7 +348,7 @@ wss.on('connection',(client:WebSocket)=>{
  client.on('close',close);client.on('error',close);upstream.on('close',(code,reason)=>{clearTimeout(audioTimer);clearTimeout(timeout);console.log('[voice] closed',JSON.stringify({code,reason:reason.toString().slice(0,200),audio_bytes:audioBytes,wall_seconds:(Date.now()-voiceStarted)/1000,audio_seconds:audioBytes/48000}));client.close(1011,('Transcription '+code+': '+reason.toString()).slice(0,110));});upstream.on('error',(error)=>{clearTimeout(audioTimer);clearTimeout(timeout);console.warn('[voice] transport error:',error.message);client.close(1011,'Transcription transport unavailable');});
 });
 // Bound completed jobs; never store raw audio.
-setInterval(()=>{if(jobs.size>100)for(const [id,j] of jobs){if(!running.has(id)){jobs.delete(id);requests.delete(id);attempts.delete(id);approved.delete(j.session_id);revisions.delete(j.session_id);provenance.delete(j.session_id);}if(jobs.size<=100)break;}},60000).unref();
+setInterval(()=>{if(jobs.size>100)for(const [id,j] of jobs){if(!running.has(id)){jobs.delete(id);requests.delete(id);attempts.delete(id);provenance.delete(j.session_id);}if(jobs.size<=100)break;}},60000).unref();
 server.listen(Number(process.env.PORT??8787),process.env.HOST??'127.0.0.1',()=>{
  const address=server.address();
  console.log(`Braive backend listening on ${typeof address==='object'&&address?address.port:process.env.PORT??8787}; Meta key ${process.env.MODEL_API_KEY?'configured':'missing'}`);

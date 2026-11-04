@@ -48,11 +48,11 @@ test('repair blocks are distinguished and provider failures release the claim',a
  assert.equal(claimRepair(expired,'device',201),true);
 });
 
-test('construction and native preflight each have one repair within the same deadline',()=>{
+test('construction and native preflight share one repair within the same deadline',()=>{
  const attempt={deadline:100,constructionRepairUsed:false,deviceRepairUsed:false};
  assert.equal(claimRepair(attempt,'construction',90),true);
  assert.equal(claimRepair(attempt,'construction',91),false);
- assert.equal(claimRepair(attempt,'device',92),true);
+ assert.equal(claimRepair(attempt,'device',92),false);
  assert.equal(claimRepair(attempt,'device',93),false);
  const expired={deadline:100,constructionRepairUsed:false,deviceRepairUsed:false};
  assert.equal(claimRepair(expired,'device',100),false);

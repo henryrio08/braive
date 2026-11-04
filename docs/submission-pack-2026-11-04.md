@@ -1,39 +1,44 @@
 # Braive submission pack — November 4, 2026
 
-Status: materials prepared; **not submitted**. Final submission requires the user's authorized submission action before 20:00 America/Chicago. No video is claimed finished until real device footage exists.
+Status: **not submitted; final video and submission receipt pending**. Official deadline: November 4, 20:00 America/Chicago. Use [requirement-ledger-2026-11-04.md](requirement-ledger-2026-11-04.md) for current evidence; old test totals are superseded. No raw private practice records, credentials or spending ledger belong in the public submission.
 
-## Capability statement
+## Product statement
 
-A person can enter a situation that matters to them, practice within it, and deliberately reshape that same world for their next attempt.
+A person can enter a situation that matters to them, practice within it, and deliberately reshape that same world for their next attempt. Braive is native, voice-first situational skill practice with stereoscopic environments, relevant character conversation, immediate STOP, reflection, evidence-grounded feedback and durable adapted repetition. It makes no clinical-treatment claim.
 
-Signature moment: "Make the audience larger, but keep the place." The room, viewpoint, task, and people persist while the requested difficulty changes. STOP works immediately; reflection, grounded feedback, durable saving, and adapted repetition complete the loop.
+Signature proof: “Make the audience larger, but keep the place.” Show the same generated room and stable task/viewpoint before and after the bounded change, with a frozen timer and deliberate RESUME. Use freeform intake and an actual generated practice scene; ingredient previews and saved fixtures cannot stand in for this evidence.
 
-## Three-minute video outline (record on the actual phone)
+## Three-minute edit plan
 
-| Time | Segment | Evidence to show |
+Record the full loop first, then edit to these latest completion points. Do not try to compress every spoken answer into three minutes in real time.
+
+| Video time | Segment | Required visual evidence |
 | --- | --- | --- |
-| 0:00–0:25 | Concrete upcoming situation | Person describes a real presentation/interview in their own words |
-| 0:25–0:55 | Forest clearing → START → voice intake | Bundled clearing (no generation), THAT'S ALL completion, ability/boundaries |
-| 0:55–1:25 | Preparation → 8-second black introduction → stereo reveal | Honest elapsed-time label if compressed; STOP reminder in intro |
-| 1:25–1:55 | Practice with natural relevant conversation | Participant's own words drive the interaction |
-| 1:55–2:20 | "Make the audience larger, but keep the place" → RESUME | Same scene resident and frozen; audience 8→16; short spoken description; deliberate resumption |
-| 2:20–2:40 | STOP → NO resume; STOP → YES end | Frozen timer under STOP; no unsolicited resumption |
-| 2:40–2:55 | Ratings, reflection, grounded feedback, saved record/CSV | Null vs zero ratings; feedback cites recorded evidence only |
-| 2:55–3:00 | Adapted repeat in the same place | Place identity visibly preserved; difficulty change explained |
+| 0:00–0:20 | Concrete upcoming situation and purpose | Participant describes a real practice need; no user-photo upload |
+| 0:20–0:45 | Headset check, forest, START and intake | Actual headset world and optical text; ability/boundaries; THAT'S ALL |
+| 0:45–1:05 | Preparation, eight-second introduction and reveal | Clearly label omitted waiting and measured generation duration; identify provider-generated world |
+| 1:05–1:35 | Short practice and relevant reply | Actual participant words and contextual character response; automatic progression |
+| 1:35–2:00 | “Change this, keep the place” | Same room before/after; successful audience/lighting change; explicit RESUME |
+| 2:00–2:15 | STOP and confirmation | Timer/motion frozen; NO resumes deliberately; early end if needed |
+| 2:15–2:45 | Ratings, reflection, feedback and saving | Show excerpts with clear time compression; quote real evidence; actual file/CSV verification |
+| 2:45–3:00 | Adapted repeat and breadth | Same-world next attempt, explained change; brief real outdoor/enclosed views if captured |
 
-Label time compression and any saved replay on screen. Keep nonclinical situational skill-practice framing. Position: Indie / Build for Your World.
+Use production-native footage, optionally paired with a view of the person using the viewer. Clearly label saved replays, fixture previews, time compression and performance test origins. A polished screenshot is not evidence of a complete interactive loop.
 
-## What is verified today (see rehearsal-worlds-evidence-2026-11-04.md)
+## Claims currently supported
 
-- Backend type check clean; 84/86 tests (2 sandbox loopback failures, environment class).
-- Offline Swift logic checks pass: sky, loading tips, post-session ratings/saving, speech coordination (29 checks), storage/CSV/recovery.
-- Native build complete; installed on the connected iPhone (Verifying 100%).
+- Native phone installation and production two-eye/Metal-compositor ingredient captures exist for builds 8/9; build 10 is reported installed.
+- Build 9's synthetic 16-person/8-chair/ground test ran 181.031 seconds at 59.2549 average fps with p95 presentation interval 16.689 ms. Label it **synthetic stress case**, not a generated-world benchmark.
+- A live-provider library candidate has passed backend compile/contracts after general fixes; native generated-world acceptance is pending in this snapshot.
+- Offline construction, lifecycle, world-commit and edit checks exist. Exact focused results are recorded in the ledger. These do not establish phone comfort or two complete live loops.
 
-## Still required from a person with the phone
+## Capture and submission checklist
 
-1. Wear the viewer: confirm forest clearing quality, in-world panel readability, and the generated-scene reveal in both eyes.
-2. Run two consecutive complete practice loops with the approved phone-test server (`node scripts/start-phone-test.mjs`), including STOP in preparation/introduction/practice/editing, one successful and one cancelled same-world edit, and an adapted repeat.
-3. Profile the 16-person scene for three sustained minutes.
-4. Record the video above; verify the submission form and upload; keep the receipt.
+1. Verify a convincing generated world, optical text, mic/speaker route, head tracking and STOP in the actual viewer.
+2. Finish two complete phone loops including a successful and cancelled same-world edit, reflection/feedback, saved CSV, recovery and adapted repeat.
+3. Capture the generated-world render gallery, including held-out descriptions across indoor/open/confined families. Keep missing breadth evidence explicit if still pending.
+4. Sustain the finished generated world for three minutes; record performance separately from the synthetic benchmark.
+5. Record the full loop and cut the video; annotate waits/replays honestly. Show actual Meta runtime roles and request provenance without exposing secrets. Apple handles normal speech recognition locally; do not claim live Muse Transcribe use.
+6. Check the actual portal's fields/video limits, enter Indie / Build for Your World, upload authorized materials, and verify receipt before 20:00. No upload or receipt is claimed here.
 
-Do not claim any of these until observed.
+Keep the full feature plan intact. Advance immediately when a task finishes; delivery times are deadlines, not scheduled waiting windows.
