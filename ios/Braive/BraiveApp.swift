@@ -34,8 +34,7 @@ struct ContentView: View {
           radius: s.phase == .setup ? 9 : s.phase == .reveal ? max(0, (1 - s.revealBlurProgress) * 7) : 0)
         if !s.headsetReady { Color.black.ignoresSafeArea() }
         if s.phase == .setup {
-          LinearGradient(colors: [ink.opacity(0.98), ink.opacity(0.8), ink.opacity(0.5)],
-            startPoint: .leading, endPoint: .trailing).ignoresSafeArea()
+          ink.opacity(0.97).ignoresSafeArea()
           ScrollView(.vertical) { welcome }.scrollIndicators(.hidden)
         } else {
           if [.intro, .planning, .error].contains(s.phase) || s.loading {
@@ -144,11 +143,11 @@ struct ContentView: View {
             .foregroundStyle(ink).background(accent, in: RoundedRectangle(cornerRadius: 12))
         }.buttonStyle(.plain).disabled(!s.remoteConsent || s.connecting)
           .opacity(s.remoteConsent ? 1 : 0.55)
+        Text(s.connection).font(.system(size: 10, weight: .medium)).foregroundStyle(.white.opacity(0.75))
         Text(s.setupNotice.isEmpty ? "Stay seated or stand still. Remove the viewer and hold the screen for phone controls." : s.setupNotice)
           .font(.system(size: 10)).foregroundStyle(.white.opacity(0.55)).fixedSize(horizontal: false, vertical: true)
       }.padding(22).frame(maxWidth: 340)
-        .background(.white.opacity(0.055), in: RoundedRectangle(cornerRadius: 22))
-        .overlay(RoundedRectangle(cornerRadius: 22).stroke(.white.opacity(0.12), lineWidth: 1))
+        .background(Color(red: 0.09, green: 0.13, blue: 0.115), in: RoundedRectangle(cornerRadius: 22))
     }.padding(.horizontal, 44).padding(.top, 50).padding(.bottom, 16).frame(maxWidth: 1050)
   }
   var eyeHUD: some View {
@@ -186,6 +185,9 @@ struct ContentView: View {
           if s.phase == .lobby {
             Button("Start practice") { panel = nil; send("start") }
             if s.store.recoverable != nil { Button("Resume interrupted practice") { panel=nil; s.requestRecovery() } }
+          }
+          if s.phase == .planning && !s.builder {
+            Button("Add details") { panel = nil; send("hey builder") }
           }
           if s.isCollectingAnswer {
             Button("Finish answer") { panel = nil; send("that's all") }

@@ -122,7 +122,7 @@ struct HeadsetHUD: View {
       return HeadsetCopy(title: "Your practice, reflected.", detail: message == "Reviewing your session…" ? loadingTip : record["feedback"].object != nil ? "Listen to your feedback." : "Listen to your session update.", hint: "CONTINUE to move on")
     case .saving: return HeadsetCopy(title: "Saving your practice…", detail: loadingTip)
     case .repeatPrompt: return HeadsetCopy(title: "Ready for another try?", detail: adapting ? loadingTip : "Build on what you just practiced.", command: adapting ? "" : "Say YES or NO")
-    case .error: return HeadsetCopy(title: "Let’s take a moment.", detail: "Listen to what happened.", command: pendingPostSave == nil ? "Say RETRY, REVISE or CANCEL" : "Say RETRY to save again", hint: "Full details in phone controls")
+    case .error: return HeadsetCopy(title: "Let’s take a moment.", detail: HeadsetCopy.excerpt(message), command: pendingPostSave == nil ? "Say RETRY, REVISE or CANCEL" : "Say RETRY to save again", hint: "Full details in phone controls")
     }
   }
   var pausedHeadsetCopy: HeadsetCopy {
