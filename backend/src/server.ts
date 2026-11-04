@@ -1,5 +1,5 @@
 import {activeBudget} from './budget.js';
-import {cancelGeneration,releaseGeneration,supersedeGeneration,repeatedGeneration} from './job-lifecycle.js';
+import {cancelGeneration,releaseGeneration,supersedeGeneration,repeatedGeneration,claimRepair,type GenerationAttempt} from './job-lifecycle.js';
 import {PhoneTestWindow} from './phone-test-window.js';
 import {canonicalSceneReferences} from './scene-references.js';
 import {assertCurrentDialogue,dialogueContext} from './dialogue.js';
@@ -45,7 +45,7 @@ app.use((req,_res,next)=>{
 const approved=new Map<string,ApprovedExperience>();
 // Read-only authenticated pairing check; it neither spends nor renews provider access.
 app.get('/v1/connection',(_req,res)=>res.json({status:'ok'}));
-const attempts=new Map<string,{deadline:number,repairs:number}>();
+const attempts=new Map<string,GenerationAttempt>();
 const requests=new Map<string,PlanRequest>();
 const generationLimitMs=10*60*1000;
 const jobs=new Map<string,Job>(); const running=new Map<string,AbortController>(); const revisions=new Map<string,number>();
@@ -60,11 +60,7 @@ async function generate(request:PlanRequest, job:Job, signal:AbortSignal) {
  const result=await generateExperience(request,job,{
   model,capabilities,previous,
   isCurrent:()=>revisions.get(request.session_id)===request.revision,
-  consumeRepair:()=>{
-   const attempt=attempts.get(job.job_id);
-   if(!attempt||attempt.repairs>=1||Date.now()>=attempt.deadline)return false;
-   attempt.repairs++;return true;
-  },
+  consumeRepair:()=>claimRepair(attempts.get(job.job_id),'construction'),
   onRejected:(candidate,error)=>{
    if(process.env.BRAIVE_TEST_MODE==='true'){
     try{writeFileSync(new URL('../data/last-rejected-scene.json',import.meta.url),JSON.stringify({...candidate,issues:error instanceof AppError?error.issues:[]},null,2),{mode:0o600});}catch{}
@@ -88,7 +84,7 @@ app.post(['/v1/session-plans','/v1/scene-revisions'],(req,res,next)=>{
   supersedeGeneration(input.session_id,jobs,running);
   revisions.set(input.session_id,input.revision);
   const job:Job={job_id:randomUUID(),session_id:input.session_id,revision:input.revision,status:'running',stage:'Starting generation'};
-  attempts.set(job.job_id,{deadline:Date.now()+generationLimitMs,repairs:0});
+  attempts.set(job.job_id,{deadline:Date.now()+generationLimitMs,constructionRepairUsed:false,deviceRepairUsed:false});
   jobs.set(job.job_id,job); const controller=new AbortController(); running.set(job.job_id,controller);
   requests.set(job.job_id,structuredClone(input));
   const timer=setTimeout(()=>controller.abort(new Error('Ten-minute generation ceiling reached')),generationLimitMs);
@@ -99,16 +95,17 @@ app.post(['/v1/session-plans','/v1/scene-revisions'],(req,res,next)=>{
   res.status(202).json(job);
  } catch(e){next(e);}
 });
-// Extension to the project contract: device preflight shares the original repair allowance/deadline.
+// Native geometry can reveal failures no schema or rest-bounds check can see.
+// It gets one repair of its own, still inside the original deadline and budget.
 app.post('/v1/jobs/:id/validation',async(req,res,next)=>{
  const job=jobs.get(req.params.id), attempt=attempts.get(req.params.id);
  try {
   if(!job?.result || !attempt || job.status!=='succeeded') throw new AppError('CONFLICT','No assembled generation to repair',[],409);
   if(revisions.get(job.session_id)!==job.revision)throw new AppError('CONFLICT','A newer scene revision has replaced this job',[],409);
   if(running.size>=3)throw new AppError('RATE_LIMITED','Too many active generation jobs',[],429);
-  if(attempt.repairs>=1 || Date.now()>=attempt.deadline) throw new AppError('TIMEOUT','Repair allowance or generation deadline exhausted. Retry, revise, or cancel.',[],408);
   if(typeof req.body.message!=='string' || req.body.message.length>2000) throw new AppError('INVALID_INPUT','Provide a bounded validation explanation');
-  attempt.repairs++;job.status='running';job.stage='Repairing device visibility checks';
+  if(!claimRepair(attempt,'device'))throw new AppError('TIMEOUT','Device repair allowance or generation deadline exhausted. Retry, revise, or cancel.',[],408);
+  job.status='running';job.stage='Repairing device visibility checks';
   const controller=new AbortController();running.set(job.job_id,controller);
   const timer=setTimeout(()=>controller.abort(),Math.max(1,attempt.deadline-Date.now()));
   res.status(202).json(job);

@@ -106,6 +106,7 @@ test('repair feedback identifies the disconnected assembly member and the unscal
  const {plan,scene}=setup();scene.nodes[1].scale=[20,1,20];
  scene.construction_plan!.anchors.push({id:'table_edge',node_id:'table',kind:'entry',position:[8,0,0],footprint:[1,1]});
  scene.construction_plan!.assemblies[0].member_node_ids.push('floor');
+ scene.events.push({at_active_second:1,operation:{type:'set_visible',node_id:'table',visible:true}});
  assert.throws(()=>compileConstruction(plan,scene),(e:any)=>{
   assert.ok(e.issues.some((i:any)=>i.path==='/construction_plan/anchors/1/position'&&i.message.includes('table_edge on table')&&i.message.includes('unscaled geometry bounds')));
   assert.ok(e.issues.some((i:any)=>i.path==='/construction_plan/assemblies/0/member_node_ids/1'&&i.message.includes('member floor')&&i.message.includes('table')));
@@ -116,11 +117,53 @@ test('repair feedback identifies the disconnected assembly member and the unscal
 test('the shared repair receives independent scene failures even when construction fails first',()=>{
  const {plan,scene}=setup();scene.nodes[1].parent_id='missing';scene.nodes[1].role='environment';
  const original=structuredClone(scene);
- assert.throws(()=>compileScene(plan,scene,{session_id:plan.session_id,revision:1,layers:[]} as unknown as AudioPlan),(e:any)=>{
+ assert.throws(()=>compileScene(plan,scene,{session_id:plan.session_id,revision:2,layers:[]} as unknown as AudioPlan),(e:any)=>{
   assert.ok(e.issues.some((i:any)=>i.path==='/nodes/1/parent_id'&&i.message.includes('table')));
-  assert.ok(e.issues.some((i:any)=>i.rule==='task_focus'));
+  assert.ok(e.issues.some((i:any)=>i.rule==='revision'&&i.path==='/audio/revision'));
   assert.equal(e.issues.filter((i:any)=>i.path==='/nodes/1/parent_id'&&i.rule==='reference').length,1);
   return true;
  });
  assert.deepEqual(scene,original);
+});
+
+test('static independent roots are partitioned without changing geometry or world transforms',()=>{
+ const {plan,scene}=setup();scene.nodes[1].position=[1,0.5,-3];scene.construction_plan!.relations=[];
+ scene.construction_plan!.assemblies[0].member_node_ids.push('floor');
+ const original=structuredClone(scene.nodes),compiled=compileConstruction(plan,scene);
+ assert.equal(compiled.construction_plan!.assemblies.length,2);
+ assert.deepEqual(compiled.nodes,original);
+ assert.ok(compiled.construction_plan!.assemblies.every(a=>a.member_node_ids.length===1&&a.member_node_ids[0]===a.root_node_id));
+ assert.deepEqual(compileConstruction(plan,compiled),compiled);
+ scene.events.push({at_active_second:1,operation:{type:'set_visible',node_id:'table',visible:false}});
+ assert.throws(()=>compileConstruction(plan,scene),(e:any)=>e.issues.some((i:any)=>i.rule==='hierarchy'));
+});
+
+test('anchor footprints use physical meters through parent scale while positions remain geometry-local',()=>{
+ const {plan,scene}=setup();scene.nodes[1].parent_id='floor';scene.nodes[0].scale=[2,1,3];
+ scene.construction_plan!.zones[0].size=[100,20,100];
+ scene.nodes[1].geometry={kind:'box',size:[1,1,1]};scene.nodes[1].scale=[14,0.6,9];
+ scene.construction_plan!.anchors.push({id:'table_surface',node_id:'table',kind:'support',position:[0,0.5,0],footprint:[3,3]});
+ scene.construction_plan!.relations=[];
+ assert.ok(compileConstruction(plan,scene));
+ scene.construction_plan!.anchors[1].footprint=[29,3];
+ assert.throws(()=>compileConstruction(plan,scene),(e:any)=>e.issues.some((i:any)=>i.rule==='fit'&&i.message.includes('28')));
+});
+
+test('explicit task realization supplies missing focal roles without inventing a target',()=>{
+ const {plan,scene}=setup();scene.nodes[1].role='environment';
+ assert.equal(compileConstruction(plan,scene).nodes[1].role,'task_focus');
+ assert.equal(scene.nodes[1].role,'environment');
+ scene.construction_plan!.requirements.find(r=>r.requirement_id==='task')!.node_ids=[];
+ assert.throws(()=>compileScene(plan,scene,{session_id:plan.session_id,revision:1,layers:[]} as unknown as AudioPlan),(e:any)=>e.issues.some((i:any)=>i.rule==='task_focus'));
+});
+
+test('open-air zones have no virtual ceiling, but enclosures and explicit containment still do',()=>{
+ const {plan,scene}=setup();scene.nodes[1].geometry={kind:'box',size:[2,8,1]};scene.nodes[1].position=[1,4,-3];
+ const cp=scene.construction_plan!;cp.relations=[];cp.zones[0].kind='outdoor';
+ assert.ok(compileConstruction(plan,scene));
+ cp.zones[0].kind='enclosure';
+ assert.throws(()=>compileConstruction(plan,scene),(e:any)=>e.issues.some((i:any)=>i.rule==='zone_fit'));
+ cp.zones[0].kind='outdoor';
+ cp.relations.push({id:'contain_table',kind:'inside',subject_id:'table',target_id:'room',offset:[0,0,0],clearance:0,tolerance:0.01,required:true});
+ assert.throws(()=>compileConstruction(plan,scene),(e:any)=>e.issues.some((i:any)=>i.rule==='fit'));
 });

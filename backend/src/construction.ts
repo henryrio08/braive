@@ -1,6 +1,6 @@
 import {createHash} from 'node:crypto';
 import {assetManifest} from './assets.js';
-import {AppError,sceneIssues} from './contracts.js';
+import {AppError,document,sceneIssues} from './contracts.js';
 import type {SceneSpec,SceneNode,SessionPlan,ValidationIssue,ConstructionPlan,AudioPlan} from '../../docs/handoff/contracts.js';
 import {identity,multiply,inverse,point,transform,transformedBounds,contains,distance,type Vec3,type Bounds} from './spatial-math.js';
 
@@ -28,14 +28,60 @@ export function geometryBounds(node:SceneNode):Bounds {
  return {min:half.map(v=>-v) as Vec3,max:half};
 }
 
+function constructionSource(source:SceneSpec):SceneSpec {
+ if(!source.construction_plan)return source;
+ const scene=structuredClone(source),cp=scene.construction_plan!,nodes=new Map(scene.nodes.map(n=>[n.id,n]));
+ // The task realization is the author-owned source of focal-object identity.
+ if(!scene.nodes.some(n=>n.role==='task_focus')){
+  const focus=new Set(cp.requirements.find(r=>r.requirement_id==='task')?.node_ids??[]);
+  for(const node of scene.nodes)if(focus.has(node.id)&&node.role!=='character')node.role='task_focus';
+ }
+ // Partition static collections along their actual hierarchy. This changes only
+ // assembly bookkeeping: never reparent or move geometry to satisfy metadata.
+ const operations=[...scene.events.map(e=>e.operation),...scene.interactions.flatMap(i=>i.choices.flatMap(c=>c.operations)),...(scene.scenario?.steps.flatMap(s=>[...s.start_operations,...s.actions.flatMap(a=>a.operations)])??[])];
+ const controlled=new Set([...(scene.viewer_attached_node_ids??[]),...operations.flatMap(o=>'node_id' in o?[o.node_id]:[])]);
+ const inheritsControl=(root:string)=>{
+  const seen=new Set<string>();let id:string|null=root;
+  while(id&&!seen.has(id)){if(controlled.has(id))return true;seen.add(id);id=nodes.get(id)?.parent_id??null;}
+  return false;
+ };
+ const assemblyIDs=new Set(cp.assemblies.map(a=>a.id));
+ const assemblyLimit=document.components.schemas.ConstructionPlan.properties.assemblies.maxItems;
+ let assemblyCount=cp.assemblies.length;
+ cp.assemblies=cp.assemblies.flatMap(assembly=>{
+  if(inheritsControl(assembly.root_node_id)||assembly.member_node_ids.some(id=>!nodes.has(id)))return [assembly];
+  const members=new Set(assembly.member_node_ids),groups=new Map<string,string[]>();
+  for(const id of assembly.member_node_ids){
+   let root=id;const seen=new Set<string>();
+   while(nodes.get(root)?.parent_id&&members.has(nodes.get(root)!.parent_id!)){
+    if(seen.has(root))return [assembly];seen.add(root);root=nodes.get(root)!.parent_id!;
+   }
+   if(root!==assembly.root_node_id&&nodes.get(root)?.parent_id!==null)return [assembly];
+   const group=groups.get(root)??[];group.push(id);groups.set(root,group);
+  }
+  if(groups.size<2||!groups.has(assembly.root_node_id)||assemblyCount+groups.size-1>assemblyLimit)return [assembly];
+  assemblyCount+=groups.size-1;
+  return [...groups].map(([root,member_node_ids])=>{
+   let id=assembly.id;
+   if(root!==assembly.root_node_id){
+    let salt=0;do{id='asm_'+createHash('sha256').update(assembly.id+'|'+root+'|'+salt++).digest('hex').slice(0,16);}while(assemblyIDs.has(id));
+    assemblyIDs.add(id);
+   }
+   return {...assembly,id,root_node_id:root,member_node_ids};
+  });
+ });
+ return scene;
+}
+
 /** A construction failure must not hide independent scene errors from the one repair. */
 export function compileScene(plan:SessionPlan,source:SceneSpec,audio:AudioPlan):SceneSpec {
+ const prepared=constructionSource(source);
  let compiled:SceneSpec;
- try {compiled=compileConstruction(plan,source);}
+ try {compiled=compileConstruction(plan,prepared);}
  catch(error){
   if(!(error instanceof AppError)||error.code!=='INVALID_MODEL_OUTPUT')throw error;
   const issues=new Map<string,ValidationIssue>();
-  for(const issue of [...error.issues,...sceneIssues(plan,source,audio)]){
+  for(const issue of [...error.issues,...sceneIssues(plan,prepared,audio)]){
    const key=issue.path+'|'+issue.rule;if(!issues.has(key))issues.set(key,issue);
   }
   throw new AppError(error.code,error.message,[...issues.values()],error.status);
@@ -49,7 +95,7 @@ export function compileScene(plan:SessionPlan,source:SceneSpec,audio:AudioPlan):
  * IDs, cast, stages, intensity and duration are never regenerated here. */
 export function compileConstruction(plan:SessionPlan,source:SceneSpec):SceneSpec {
  if(!source.construction_plan)return source; // Saved scenes predate this compiler.
- const scene=structuredClone(source),cp=scene.construction_plan!,issues:ValidationIssue[]=[],warnings:ValidationIssue[]=[];
+ const scene=constructionSource(source),cp=scene.construction_plan!,issues:ValidationIssue[]=[],warnings:ValidationIssue[]=[];
  const fail=(path:string,rule:string,message:string,required=true)=>(required?issues:warnings).push({path,rule,message});
  const map=<T extends {id:string}>(items:T[],path:string)=>{const result=new Map(items.map(i=>[i.id,i]));if(result.size!==items.length)fail(path,'unique','Duplicate construction IDs');return result;};
  const nodes=map(scene.nodes,'/nodes'),zones=map(cp.zones,'/construction_plan/zones'),anchors=map(cp.anchors,'/construction_plan/anchors');
@@ -108,8 +154,12 @@ export function compileConstruction(plan:SessionPlan,source:SceneSpec):SceneSpec
   const bounds=geometryBounds(n);
   if(!contains(bounds,{min:a.position,max:a.position},0.03))fail(`/construction_plan/anchors/${index}/position`,'bounds',`${a.id} on ${n.id}: local position ${JSON.stringify(a.position)} is outside unscaled geometry bounds ${JSON.stringify(bounds)}. Node scale ${JSON.stringify(n.scale)} is applied afterward; express the anchor in geometry-local coordinates. Do not guess a seat from standing height.`);
   const spans=bounds.max.map((v,i)=>v-bounds.min[i]);
-  const footprint=n.geometry.kind==='plane'?[spans[0],spans[1]]:[spans[0],spans[2]];
-  if(a.footprint[0]>footprint[0]+0.03||a.footprint[1]>footprint[1]+0.03)fail(`/construction_plan/anchors/${index}`,'fit','Anchor footprint exceeds its measured object');
+  let matrix:number[];
+  try {matrix=frames(n.id);}catch(error){if(error instanceof AppError){issues.push(...error.issues);continue;}throw error;}
+  const length=(column:number)=>Math.hypot(matrix[column],matrix[column+1],matrix[column+2]);
+  const second=n.geometry.kind==='plane'?1:2;
+  const footprint=[spans[0]*length(0),spans[second]*length(second*4)];
+  if(a.footprint[0]>footprint[0]+0.03||a.footprint[1]>footprint[1]+0.03)fail(`/construction_plan/anchors/${index}`,'fit',`${a.id} on ${n.id}: requested footprint ${JSON.stringify(a.footprint)}m exceeds transformed support dimensions ${JSON.stringify(footprint)}m`);
  }
  const assigned=new Set<string>();
  for(const [assemblyIndex,assembly] of cp.assemblies.entries()){
@@ -210,9 +260,13 @@ export function compileConstruction(plan:SessionPlan,source:SceneSpec):SceneSpec
  for(const assembly of cp.assemblies){
   const zone=zones.get(assembly.zone_id)!;
   const volume={min:zone.center.map((v,i)=>v-zone.size[i]/2) as Vec3,max:zone.center.map((v,i)=>v+zone.size[i]/2) as Vec3};
+  // Open air has no physical ceiling. Preserve real enclosures, explicit
+  // containment, water volumes, and every horizontal/lower bound.
+  const openTop=zone.kind==='outdoor'&&!regions.some(r=>r.zone_id===zone.id&&r.medium==='water')&&!cp.relations.some(r=>r.kind==='inside'&&r.target_id===zone.id);
   for(const id of assembly.member_node_ids){
    const bounds=worldBounds(id);
-   if(!contains(volume,bounds,0.2))fail('/construction_plan/assemblies/'+assembly.id,'zone_fit',`${id} world bounds ${JSON.stringify(bounds)} exceed zone ${zone.id} ${JSON.stringify(volume)} (0.2m boundary allowance). Child transforms are local to their parent, not world coordinates.`,assembly.requirement_ids.length>0||nodes.get(id)?.role!=='environment');
+   const measured:Bounds={min:volume.min,max:openTop?[volume.max[0],Math.max(volume.max[1],bounds.max[1]),volume.max[2]]:volume.max};
+   if(!contains(measured,bounds,0.2))fail('/construction_plan/assemblies/'+assembly.id,'zone_fit',`${id} world bounds ${JSON.stringify(bounds)} exceed zone ${zone.id} ${JSON.stringify(volume)} (0.2m boundary allowance). Child transforms are local to their parent, not world coordinates.`,assembly.requirement_ids.length>0||nodes.get(id)?.role!=='environment');
   }
  }
  // Recheck placement after all dependent placements resolve; a later relation

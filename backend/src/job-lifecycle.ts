@@ -2,6 +2,13 @@ import type {Job,PlanRequest} from '../../docs/handoff/contracts.js';
 import {isDeepStrictEqual} from 'node:util';
 import {AppError} from './contracts.js';
 
+export type GenerationAttempt={deadline:number;constructionRepairUsed:boolean;deviceRepairUsed:boolean};
+export function claimRepair(attempt:GenerationAttempt|undefined,kind:'construction'|'device',now=Date.now()):boolean {
+ const slot=kind==='construction'?'constructionRepairUsed':'deviceRepairUsed';
+ if(!attempt||now>=attempt.deadline||attempt[slot])return false;
+ attempt[slot]=true;return true;
+}
+
 /** A lost acknowledgement must not turn a network retry into another paid generation. */
 export function repeatedGeneration(input:PlanRequest,jobs:Map<string,Job>,requests:Map<string,PlanRequest>):Job|undefined {
  const job=[...jobs.values()].find(j=>j.session_id===input.session_id&&j.revision===input.revision);

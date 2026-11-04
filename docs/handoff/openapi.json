@@ -3838,6 +3838,7 @@
           },
           "footprint": {
             "type": "array",
+            "description": "Physical width and length in meters along the object's transformed local surface axes; position remains an unscaled local coordinate.",
             "items": {
               "type": "number",
               "minimum": 0.01,

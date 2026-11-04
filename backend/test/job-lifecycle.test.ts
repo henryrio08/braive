@@ -1,5 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
+import {claimRepair} from '../src/job-lifecycle.js';
 import type {Job} from '../../docs/handoff/contracts.js';
 import {supersedeGeneration,cancelGeneration,releaseGeneration} from '../src/job-lifecycle.js';
 function fixture(){
@@ -29,4 +30,15 @@ test('identical generation retries reuse the job while changed details conflict'
  assert.equal(repeatedGeneration({...input},jobs,requests),jobs.get('a'));
  assert.throws(()=>repeatedGeneration({...input,fear_description:'Changed situation'},jobs,requests),/different practice details/);
  assert.equal(repeatedGeneration({...input,revision:2},jobs,requests),undefined);
+});
+
+test('construction and native preflight each have one repair within the same deadline',()=>{
+ const attempt={deadline:100,constructionRepairUsed:false,deviceRepairUsed:false};
+ assert.equal(claimRepair(attempt,'construction',90),true);
+ assert.equal(claimRepair(attempt,'construction',91),false);
+ assert.equal(claimRepair(attempt,'device',92),true);
+ assert.equal(claimRepair(attempt,'device',93),false);
+ const expired={deadline:100,constructionRepairUsed:false,deviceRepairUsed:false};
+ assert.equal(claimRepair(expired,'device',100),false);
+ assert.equal(claimRepair(expired,'construction',101),false);
 });
