@@ -249,8 +249,14 @@ export function compileConstruction(plan:SessionPlan,source:SceneSpec):SceneSpec
   if(!path||route.stage_ids.some(id=>!stages.has(id))||route.requirement_ids.some(id=>!expected.has(id))){fail('/construction_plan/routes','reference','Route references an unknown path, stage or requirement');continue;}
   if((route.from_anchor_id||route.to_anchor_id)&&path.coordinate_space==='relative'){fail('/construction_plan/routes','frame','Anchored routes require world coordinates; relative routes are checked against the current heading on the phone');continue;}
   if(route.from_anchor_id&&!anchors.has(route.from_anchor_id)||route.to_anchor_id&&!anchors.has(route.to_anchor_id)){fail('/construction_plan/routes','reference','Route anchor is missing');continue;}
-  if(route.from_anchor_id){const start=anchorPoint(route.from_anchor_id);const viewer=scene.scenario?.steps.some(s=>s.start_operations.some(o=>o.type==='move_viewer'&&o.path_id===path.id));if(viewer)start[1]+=route.eye_height_meters;path.start_position=start;}
-  if(route.to_anchor_id){const end=anchorPoint(route.to_anchor_id);const viewer=scene.scenario?.steps.some(s=>s.start_operations.some(o=>o.type==='move_viewer'&&o.path_id===path.id));if(viewer)end[1]+=route.eye_height_meters;path.points[path.points.length-1].position=end;}
+  const viewer=scene.scenario?.steps.some(s=>s.start_operations.some(o=>o.type==='move_viewer'&&o.path_id===path.id));
+  // These optional links describe the route; they must not relocate its actual
+  // authored trajectory or break continuity between adjacent motion stages.
+  for(const [side,id,position] of [['from',route.from_anchor_id,path.start_position],['to',route.to_anchor_id,path.points.at(-1)?.position]] as [string,string|undefined,Vec3|undefined][]){
+   if(!id||!position)continue;
+   const expectedPoint=anchorPoint(id);if(viewer)expectedPoint[1]+=route.eye_height_meters;
+   if(distance(position,expectedPoint)>Math.max(0.35,route.clearance_radius_meters))fail('/construction_plan/routes/'+path.id+'/'+side+'_anchor_id','anchor_alignment',`Route ${path.id} ${side} anchor ${id} differs from the authored trajectory. The actual route is preserved and checked against native geometry.`,false);
+  }
   path.clearance_radius_meters=route.clearance_radius_meters;path.eye_height_meters=route.eye_height_meters;
  }
  if(new Set(cp.routes.map(r=>r.path_id)).size!==cp.routes.length)fail('/construction_plan/routes','unique','Duplicate route bindings');

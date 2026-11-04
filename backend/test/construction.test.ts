@@ -191,3 +191,16 @@ test('repair keeps every failing member of the same assembly and names its paren
   return true;
  });
 });
+
+test('route annotations cannot overwrite continuous authored world endpoints',()=>{
+ const {plan,scene}=setup(),cp=scene.construction_plan!;
+ cp.anchors.push({id:'elsewhere',node_id:'floor',kind:'entry',position:[4,0.1,4],footprint:[1,1]});
+ scene.motion_paths=[{id:'route',purpose:'walk',coordinate_space:'world',interpolation:'smooth',start_position:[0,1.6,0],points:[{at_seconds:10,position:[0,1.6,-4]}]}];
+ scene.scenario!.steps[0].start_operations=[{type:'move_viewer',path_id:'route'}];
+ cp.routes=[{path_id:'route',stage_ids:['look'],requirement_ids:[],clearance_radius_meters:0.3,eye_height_meters:1.6,from_anchor_id:'elsewhere',to_anchor_id:'elsewhere'}];
+ const compiled=compileConstruction(plan,scene),path=compiled.motion_paths![0];
+ assert.deepEqual(path.start_position,[0,1.6,0]);
+ assert.deepEqual(path.points,scene.motion_paths[0].points);
+ assert.equal(path.clearance_radius_meters,0.3);
+ assert.equal(compiled.construction_report!.warnings.filter(i=>i.rule==='anchor_alignment').length,2);
+});
