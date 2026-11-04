@@ -4,7 +4,7 @@ import {AppError,document,sceneIssues} from './contracts.js';
 import type {SceneSpec,SceneNode,SessionPlan,ValidationIssue,ConstructionPlan,AudioPlan} from '../../docs/handoff/contracts.js';
 import {identity,multiply,inverse,point,transform,transformedBounds,contains,distance,type Vec3,type Bounds} from './spatial-math.js';
 import {classifyVisual,evaluateAcceptance,zoneSeverity,visualStrictness,type ClassifiedIssue} from './acceptance.js';
-import {normalizePathOrigin} from './scene-references.js';
+import {normalizePathSamples} from './scene-references.js';
 
 export type ConstructionRequirement={id:string;kind:'task'|'cast'|'prop'|'stage'|'motion'|'boundary'|'outcome';target:string;description:string};
 export function constructionRequirements(plan:SessionPlan):ConstructionRequirement[]{
@@ -169,8 +169,11 @@ export function deterministicCorrections(source:SceneSpec):{scene:SceneSpec;corr
  if(cp){
   // An unambiguous time-zero waypoint IS the route origin: it becomes the
   // path start, preserving later waypoints, times, frame and destination.
-  for(const path of scene.motion_paths??[])if(normalizePathOrigin(path))
-   corrections.push(`Normalized time-zero waypoint of ${path.id} into its route origin; later waypoints and timing unchanged.`);
+  for(const path of scene.motion_paths??[]){
+   const {origin,duplicateCount}=normalizePathSamples(path);
+   if(origin)corrections.push(`Normalized time-zero waypoint of ${path.id} into its route origin; later waypoints and timing unchanged.`);
+   if(duplicateCount)corrections.push(`Removed ${duplicateCount} identical waypoint duplicates from ${path.id}; positions and timing unchanged.`);
+  }
   const nodeIds=new Set(scene.nodes.map(n=>n.id));
   const anchorIds=new Set((cp.anchors??[]).map(a=>a.id));
   const zoneIds=new Set((cp.zones??[]).map(z=>z.id));

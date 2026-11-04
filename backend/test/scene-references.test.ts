@@ -17,6 +17,15 @@ test('time-zero world and relative samples preserve the path origin and positive
  const conflicting={motion_paths:[{...path,start_position:[10,1,0]},{...relative,points:[{at_seconds:0,position:[1,0,0]},last]}]};
  assert.deepEqual(canonicalSceneMotion(conflicting),conflicting);
 });
+
+test('waypoint normalization removes exact duplicates and keeps holds and conflicting samples',()=>{
+ const end={at_seconds:8,position:[1,1,-4]};
+ const hold={...end,at_seconds:9};
+ const conflict={...end,position:[2,1,-4]};
+ const source={motion_paths:[{points:[end,{...end},hold]},{points:[end,conflict]}]};
+ assert.deepEqual(canonicalSceneMotion(source),{motion_paths:[{points:[end,hold]},{points:[end,conflict]}]});
+ assert.equal(source.motion_paths[0].points.length,3);
+});
 import type {SessionPlan,SceneSpec,AudioPlan} from '../../docs/handoff/contracts.js';
 const plan={characters:[{id:'maya',scene_node_id:'maya_root'}]} as SessionPlan;
 const audio={layers:[{id:'arrival',asset_id:'whoosh'}]} as AudioPlan;

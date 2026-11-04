@@ -1,25 +1,38 @@
 import type {AudioPlan,MotionPath,SceneSpec,SessionPlan} from '../../docs/handoff/contracts.js';
 
+const isPosition=(value:unknown):value is number[]=>Array.isArray(value)&&value.length===3&&value.every(Number.isFinite);
+
 /** A leading time-zero sample states the origin, not a second movement point. */
-export function normalizePathOrigin(path:Partial<MotionPath>):boolean {
+function normalizePathOrigin(path:Partial<MotionPath>):boolean {
  if(!Array.isArray(path.points)||path.points.length<2||path.points[0]?.at_seconds!==0)return false;
  const origin=path.points[0].position;
- if(!Array.isArray(origin)||origin.length!==3||!origin.every(Number.isFinite))return false;
+ if(!isPosition(origin))return false;
  if(path.coordinate_space===undefined||path.coordinate_space==='world'){
   const start=path.start_position;
-  if(start!==undefined&&(!Array.isArray(start)||start.length!==3||!start.every(Number.isFinite)||
-    Math.hypot(...origin.map((v,i)=>v-start[i]))>=1e-6))return false;
+  if(start!==undefined&&(!isPosition(start)||Math.hypot(...origin.map((v,i)=>v-start[i]))>=1e-6))return false;
   path.start_position=start??origin;
  }else if(path.coordinate_space!=='relative'||origin.some(v=>v!==0))return false;
  path.points.shift();
  return true;
 }
 
+export function normalizePathSamples(path:Partial<MotionPath>) {
+ if(!Array.isArray(path.points))return {origin:false,duplicateCount:0};
+ const count=path.points.length;
+ path.points=path.points.filter((sample,index,points)=>{
+  const previous=points[index-1];
+  return !previous||!sample||!Number.isFinite(sample.at_seconds)||sample.at_seconds!==previous.at_seconds||
+   !isPosition(sample.position)||!isPosition(previous.position)||!sample.position.every((value,axis)=>value===previous.position[axis]);
+ });
+ const duplicateCount=count-path.points.length;
+ return {origin:normalizePathOrigin(path),duplicateCount};
+}
+
 export function canonicalSceneMotion(value:unknown):unknown {
  if(!value||typeof value!=='object'||!Array.isArray((value as SceneSpec).motion_paths))return value;
  const scene=structuredClone(value) as SceneSpec;
  for(const path of scene.motion_paths!){
-  if(path&&typeof path==='object')normalizePathOrigin(path);
+  if(path&&typeof path==='object')normalizePathSamples(path);
  }
  return scene;
 }
