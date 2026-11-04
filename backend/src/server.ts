@@ -1,7 +1,7 @@
 import {activeBudget} from './budget.js';
 import {automaticSceneRepairEnabled} from './recovery-policy.js';
 import {materializeStageGraph} from './stage-compiler.js';
-import {cancelGeneration,releaseGeneration,supersedeGeneration,repeatedGeneration,claimRepair,repairBlock,releaseRepair,grantRepairWindow,type GenerationAttempt} from './job-lifecycle.js';
+import {cancelGeneration,releaseGeneration,supersedeGeneration,repeatedGeneration,pruneCompletedJobs,claimRepair,repairBlock,releaseRepair,grantRepairWindow,type GenerationAttempt} from './job-lifecycle.js';
 import {PhoneTestWindow} from './phone-test-window.js';
 import {canonicalSceneReferences} from './scene-references.js';
 import {assertCurrentDialogue,dialogueContext} from './dialogue.js';
@@ -106,7 +106,7 @@ app.post(['/v1/session-plans','/v1/scene-revisions'],(req,res,next)=>{
   void generate(input,job,controller.signal).catch(e=>{
    if(job.status==='cancelled') return;
    job.status='failed';job.error={code:controller.signal.aborted?'TIMEOUT':e.code??'PROVIDER_UNAVAILABLE',message:controller.signal.aborted?'Generation ended at ten minutes. Retry, revise, or cancel.':e.message,retryable:true,request_id:job.job_id,issues:e.issues};
-  }).finally(()=>{clearTimeout(timer);releaseGeneration(job.job_id,controller,running);console.log('[generation]',JSON.stringify({job_id:job.job_id,status:job.status,elapsed_seconds:(Date.now()-(attempts.get(job.job_id)!.deadline-generationLimitMs))/1000,error_code:job.error?.code,nodes:job.result?.scene.nodes.length}));});
+  }).finally(()=>{clearTimeout(timer);releaseGeneration(job.job_id,controller,running);console.log('[generation]',JSON.stringify({job_id:job.job_id,status:job.status,elapsed_seconds:(Date.now()-startedAt)/1000,error_code:job.error?.code,nodes:job.result?.scene.nodes.length}));});
   res.status(202).json(job);
  } catch(e){next(e);}
 });

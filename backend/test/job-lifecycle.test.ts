@@ -2,7 +2,7 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {claimRepair} from '../src/job-lifecycle.js';
 import type {Job} from '../../docs/handoff/contracts.js';
-import {supersedeGeneration,cancelGeneration,releaseGeneration} from '../src/job-lifecycle.js';
+import {supersedeGeneration,cancelGeneration,releaseGeneration,pruneCompletedJobs} from '../src/job-lifecycle.js';
 function fixture(){
  const jobs=new Map<string,Job>(),running=new Map<string,AbortController>();
  for(const id of ['a','b','c']){jobs.set(id,{job_id:id,session_id:id,revision:1,status:'running',stage:'test'});running.set(id,new AbortController());}
@@ -20,6 +20,22 @@ test('completed jobs remain succeeded; stale cleanup cannot remove a repair cont
  const {jobs,running}=fixture(),old=running.get('a')!,repair=new AbortController();running.set('a',repair);
  releaseGeneration('a',old,running);assert.equal(running.get('a'),repair);
  releaseGeneration('a',repair,running);jobs.get('a')!.status='succeeded';cancelGeneration('a',jobs,running);assert.equal(jobs.get('a')!.status,'succeeded');
+});
+
+test('pruning old jobs preserves session state for running and completed newer revisions',()=>{
+ const job=(id:string,session:string,revision:number,status:Job['status']):Job=>({job_id:id,session_id:session,revision,status,stage:'test'});
+ const jobs=new Map([
+  ['a1',job('a1','a',1,'cancelled')],['b1',job('b1','b',1,'succeeded')],
+  ['c1',job('c1','c',1,'succeeded')],['a2',job('a2','a',2,'running')],['b2',job('b2','b',2,'succeeded')],
+ ]);
+ const running=new Map([['a2',new AbortController()]]);
+ const first=pruneCompletedJobs(jobs,running,2);
+ assert.deepEqual(first.evicted,['a1','b1','c1']);
+ assert.deepEqual([...first.expiredSessions],['c']);
+ const next=pruneCompletedJobs(jobs,running,1);
+ assert.deepEqual(next.evicted,['b2']);
+ assert.deepEqual([...next.expiredSessions],['b']);
+ assert.deepEqual([...jobs.keys()],['a2']);
 });
 
 test('identical generation retries reuse the job while changed details conflict',async()=>{

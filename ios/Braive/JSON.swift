@@ -132,15 +132,20 @@ struct API {
     guard body == nil || ["/v1/session-plans", "/v1/scene-revisions"].contains(path) else {
       throw URLError(.unsupportedURL)
     }
+    try Task.checkCancellation()
+    let encoded = try body.map { try JSONEncoder().encode($0) }
     while true {
       try Task.checkCancellation()
       let remaining = deadline - ProcessInfo.processInfo.systemUptime
       guard remaining > 0 else { throw URLError(.timedOut) }
-      do { return try await call(path, body, timeout: min(8, remaining)) }
-      catch {
-        guard Self.isTransientConnection(error), ProcessInfo.processInfo.systemUptime < deadline else { throw error }
+      do { return try await send(path, body: encoded, method: nil, timeout: min(8, remaining)) }
+      catch where Self.isTransientConnection(error) {
+        try Task.checkCancellation()
+        guard ProcessInfo.processInfo.systemUptime < deadline else { throw URLError(.timedOut) }
         await onReconnect?()
-        try await Task.sleep(for: retryDelay)
+        let retryTime = deadline - ProcessInfo.processInfo.systemUptime
+        guard retryTime > 0 else { throw URLError(.timedOut) }
+        try await Task.sleep(for: min(max(.zero, retryDelay), .seconds(retryTime)))
       }
     }
   }
@@ -176,6 +181,10 @@ struct API {
   }
   func call(_ path: String, _ body: JSON? = nil, method: String? = nil, timeout: TimeInterval = 35) async throws -> JSON {
     try Task.checkCancellation()
+    return try await send(path, body: body.map { try JSONEncoder().encode($0) }, method: method, timeout: timeout)
+  }
+  private func send(_ path: String, body: Data?, method: String?, timeout: TimeInterval) async throws -> JSON {
+    try Task.checkCancellation()
     let address = base.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: #"/+$"#, with: "", options: .regularExpression)
     guard let components = URLComponents(string: address),
       ["http", "https"].contains(components.scheme?.lowercased() ?? ""),
@@ -188,7 +197,7 @@ struct API {
     req.httpMethod = method ?? (body == nil ? "GET" : "POST")
     req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
     if let body {
-      req.httpBody = try JSONEncoder().encode(body)
+      req.httpBody = body
       req.setValue("application/json", forHTTPHeaderField: "Content-Type")
     }
     req.timeoutInterval = timeout
