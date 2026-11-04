@@ -39,3 +39,12 @@ Chicago time at start: 2026-11-04 06:59 CST. Submission deadline: 20:00 CST.
 
 ## Budget
 No provider calls were started. Existing backend ledger preserved; do not reset. Project envelope ($69.77 reported remaining) unspent in this session apart from coding-model usage.
+
+
+## Correction pass (post-review, same day)
+
+- Merged origin/main 7fab391 (checkpoint c0c0dc7, merge 055c7b2). Backend: 308/310 tests (2 loopback-spawn sandbox failures). Construction 49/49 including macro idempotency and within/inside containment regressions.
+- Spatial text connected (refreshHeadsetPanels wired to tick/go/pause/stop), overlays gated when headsetReady, opening sequence corrected to setup -> headset confirmation -> visible forest -> START -> intake.
+- Canonical ScenePatch revisions (typed intent incl. decrease, deferred consumption, adaptPreservingWorld) verified by scripts/check-scene-patch.swift 17/17 in-container; xtool build EXIT:0; updated build installed on iPhone (Verifying 100%).
+- Typed texture registry with 4 real bundled PNGs; mesh IDs rejected as textures in backend tests.
+- Requirement ledger: docs/requirement-ledger-2026-11-04.md. Device-pending items remain honestly open.

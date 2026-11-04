@@ -5,7 +5,7 @@ import {cancelGeneration,releaseGeneration,supersedeGeneration,repeatedGeneratio
 import {PhoneTestWindow} from './phone-test-window.js';
 import {canonicalSceneReferences} from './scene-references.js';
 import {assertCurrentDialogue,dialogueContext} from './dialogue.js';
-import {meshCatalog,assetManifest,generationCharacterIDs} from './assets.js';
+import {meshCatalog,assetManifest,generationCharacterIDs,textureManifest} from './assets.js';
 import express from 'express';
 import {compileScene,constructionRequirements,deterministicCorrections} from './construction.js';
 import {dispatchTool} from './tool-dispatch.js';
@@ -57,7 +57,7 @@ capabilities.asset_catalog_format+=' Rest bounds in asset_bounds are authoritati
 capabilities.version='iphone-construction-visuals-5';
 Object.assign(capabilities,{construction_version:'1',asset_bounds:Object.fromEntries(assetManifest.map(a=>[a.id,a.bounds_meters])),surface_profiles:['matte','ground','water','glass','foliage'],sky:'App-owned procedural cubemap or solid background; explicit fog distances. No image-generation call or arbitrary shader source.'});
 Object.assign(capabilities,{scenario_engine:'Guided automatic stages: movement and events start on stage entry and advance by time or motion completion. No WALK/SIT/ASK or stage-advance commands. Natural user speech reaches the approved character only in authored conversation_target windows. Quiet scenes need no speaking.',movement:'move_viewer follows an authored motion_paths trajectory in meters; each path starts at the current camera position, points are absolute destinations at increasing positive seconds. Preserve head-tracked orientation. Paths can be interrupted by another path without teleporting; STOP freezes the active clock. walk, run, swim, climb, fall, glide, ride and other trajectories use the same generic system. move_node animates another actor/prop along a path, optionally facing its travel direction.',view_distance_meters:10000});
-Object.assign(capabilities,{character_assets:assetManifest.filter(a=>generationCharacterIDs.has(a.id)).map(a=>({asset_id:a.id,tags:a.tags,resolved_nodes:a.resolved_node_count,triangles:a.approx_tris,behaviors:['idle','listen','speak','walk','run','sit']}))});
+Object.assign(capabilities,{character_assets:assetManifest.filter(a=>generationCharacterIDs.has(a.id)).map(a=>({asset_id:a.id,tags:a.tags,resolved_nodes:a.resolved_node_count,triangles:a.approx_tris,behaviors:['idle','listen','speak','walk','run','sit']})),texture_assets:textureManifest.map(t=>({id:t.id,description:t.description}))});
 async function generate(request:PlanRequest, job:Job, signal:AbortSignal) {
  const previous=approved.get(request.session_id)??(request.parent_session_id?approved.get(request.parent_session_id):undefined);
  const result=await generateExperience(request,job,{

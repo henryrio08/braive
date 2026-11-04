@@ -12,5 +12,7 @@ resources:
   - ios/Braive/Audio/whoosh.wav
   - ios/Braive/Audio/wind.wav
   - ios/Braive/Resources/asset_manifest.json
+  - ios/Braive/Resources/texture_manifest.json
+  - ios/Braive/Resources/Textures
   - ios/Braive/Resources/GLTFKit2-LICENSE.txt
   - ios/Braive/Resources/LowPoly

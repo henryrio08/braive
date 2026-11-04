@@ -1,0 +1,24 @@
+# Requirement ledger — rehearsal-worlds, November 4, 2026
+
+Branch `rehearsal-worlds`: checkpoint `c0c0dc7`, merge of `origin/main` (`7fab391`) `055c7b2`, plus correction work. Status key: **Done** = implemented + evidence; **Device-pending** = implemented, needs human-in-viewer/device evidence; **Blocked-human** = requires the phone holder.
+
+| # | Requirement (source) | Implementation | Evidence | Status |
+| --- | --- | --- | --- | --- |
+| 1 | No feature sacrifices; no user-photo upload (correction) | No photo UI/routes added; full flow retained | Code search: no photo selection/upload in app | Done |
+| 2 | Reconcile with current main safely (review P1) | Checkpoint commit, normal merge, per-file reconciliation (upstream `within` containment adopted over duplicate `containment_behavior`; upstream connect/pollJob kept; my panels/edits re-implemented on top) | Merge commit `055c7b2`; backend 308/310 | Done |
+| 3 | Spatial text connected (P1) | `Session.refreshHeadsetPanels()` called from `tick()`, `go()`, `pause()`, `stop()`, `confirmStop()`; in-world `HeadsetPanels` through both eye cameras; SwiftUI black/pause layers gated off when `headsetReady`; builder collecting/ready pause copy | Build EXIT:0; panel texture rendering code | Device-pending (pixel/readability check) |
+| 4 | Canonical persistent revisions (P1) | `ScenePatch.patchAudience` mutates scene+plan JSON with stable `audience_edit_N`/`aud_edit_node_N` IDs; `world.load` validation → checkpoint restore → `record["scene"/"plan"/"scene_revision"]` persisted; failure reloads the frozen old world | `check-scene-patch.swift` 17/17 in container; build green | Done (logic), Device-pending (in-scene view) |
+| 5 | Correct edit intent (P1) | `ScenePatch.parse`: task-scope → deferred; environment before audience ("more light" ≠ people); increase AND decrease with counts/deltas, clamp 0–16; ambiguous → clarification | Check script cases pass | Done |
+| 6 | Deferred changes applied (P1) | `record["deferred_changes"]` persisted, restored on recovery, consumed in `request()` preferences and in `adaptPreservingWorld` | Code + check script deferred case | Done |
+| 7 | Repeat preserves world (P1) | `adaptPreservingWorld` reuses canonical scene/plan/seed/identities, applies intensity/duration/deferred patches, separate attempt record with parent link; regeneration only when no prior scene exists | Code path; build green | Device-pending (place-identity view) |
+| 8 | Real textures (P2) | Typed `texture_manifest.json` (4 original tileable PNGs in `Resources/Textures/`); backend rejects mesh IDs as textures; capabilities expose `texture_assets`; iOS bounded decode/cache from texture manifest; character palettes untouched | Backend texture tests pass; registry disjointness test | Done |
+| 9 | Idempotent macros (P2) | `expandAssemblyMacros` preserves a complete prior expansion; seating/enclosure/scatter lower into existing contracts | Construction tests 49/49 incl. recompile deep-equal | Done |
+| 10 | Opening sequence (P2) | setup → headset confirmation (black, spoken) → visible forest lobby → START → intake; repeats: headset → lobby → START → adapt in same place | Code flow; build green | Device-pending |
+| 11 | Full journey + STOP/pauses/recovery (plan §4) | Existing upstream state machine retained (STOP confirmation, stacked pauses, ratings null≠zero, reflection, grounded feedback, CSV, checkpoint restore, deletion) + builder_edit pause with explicit RESUME | Swift checks: post-session, speech-coordination (29), storage pass | Device-pending (two live loops) |
+| 12 | Containment island/cove (plan §2) | Upstream `within` (containment-only) vs `inside` (place by offset = intended − center); regression tests both, plus legacy placement | Construction tests pass | Done |
+| 13 | Visual breadth: 6 descriptions, 3 families (plan §2) | Macros for indoor/open/confined + general node path; upstream generation chain | Backend generation tests pass | Device-pending (native render gallery, held-out comparison) |
+| 14 | Performance: 16-person, 3 min, 60 fps (plan §5) | Audience cap 16; render metrics recorded in session record | — | Blocked-human |
+| 15 | Demo + submission (plan §5) | `docs/submission-pack-2026-11-04.md` shot list; app installed on iPhone (Verifying 100%) | Install log | Blocked-human (recording + authorized submission) |
+| 16 | Budget safeguards (handoff) | Ledger preserved ($50 cap; $17.98 of record; no Meta calls this session); bounded launcher only | `/health` ok, `meta_requests: 0` | Done |
+
+Policy reconciliation recorded: upstream permissive visual-annotation classification kept for backend construction annotations; hard executability (references, routes, scenario graph) and native phone preflight remain authoritative, per the approved plan's "native hard checks" clause. No required capability was cut; deadlines changed sequencing only.

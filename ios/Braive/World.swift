@@ -24,46 +24,8 @@ extension UIColor {
   var eyeAspect = 1.0
   let scene = SCNScene(), head = SCNNode(), motion = CMMotionManager()
   let headsetPanels = HeadsetPanels()
-  private var addedAudience: [SCNNode] = []
   func setHeadsetText(title: String, detail: String, command: String, status: String, visible: Bool) {
     headsetPanels.update(title: title, detail: detail, command: command, status: status, visible: visible)
-  }
-  /// Bounded same-world audience growth for active edits: adds seated
-  /// library characters in an arc facing the viewer without touching the
-  /// loaded scene, stage, timer, or conversation target. Returns total.
-  func growAudience(targetTotal: Int) -> Int {
-    let cap = 16
-    let target = min(cap, max(0, targetTotal))
-    let existing = audienceCount
-    guard target > existing else { return existing }
-    let ids = (try? AssetLibrary.entries.filter { $0.id.hasPrefix("character.base.") && $0.generation_enabled != false }.map(\.id)) ?? []
-    guard !ids.isEmpty else { return existing }
-    let chairID = try? AssetLibrary.first(category: "furniture", subcategory: "chair")
-    var added = 0
-    for index in existing..<target {
-      let slot = index - existing
-      let row = slot / 6, seat = slot % 6
-      let angle = Float(seat - 2) * 0.22 + Float(row) * 0.07
-      let radius: Float = 4.2 + Float(row) * 1.6
-      let position = SCNVector3(sin(angle) * radius, 0, -cos(angle) * radius)
-      if let chairID, let chair = try? AssetLibrary.make(chairID) {
-        chair.position = position
-        chair.eulerAngles.y = .pi + angle
-        scene.rootNode.addChildNode(chair)
-        addedAudience.append(chair)
-      }
-      guard let person = try? AssetLibrary.make(ids[index % ids.count], colorHex: ["#c98b69", "#7b9385", "#8d6e5d", "#a87f5f"][index % 4]) else { continue }
-      person.position = position
-      person.eulerAngles.y = .pi + angle
-      scene.rootNode.addChildNode(person)
-      AssetLibrary.animate(person, behavior: chairID == nil ? "idle" : "sit")
-      addedAudience.append(person)
-      added += 1
-    }
-    return existing + added
-  }
-  var audienceCount: Int {
-    nodes.values.filter { AssetLibrary.isCharacter($0) }.count + addedAudience.filter { AssetLibrary.isCharacter($0) }.count
   }
   let left = SCNNode(), right = SCNNode()
   var nodes: [String: SCNNode] = [:], viewpoints: [String: SCNVector3] = [:],
@@ -178,7 +140,6 @@ extension UIColor {
     executionBlocked=false
     motionPaths = [:]; viewerMotion = nil; viewpointFade = nil
     nodeMotions = [:]
-    addedAudience = []
     attachmentRig = nil
     practiceClock = PracticeClock()
     for child in scene.rootNode.childNodes where child !== head { child.removeFromParentNode() }
@@ -187,12 +148,26 @@ extension UIColor {
     characters = [:]
   }
   private var textureCache: [String: UIImage] = [:]
-  /// Registered texture delivery: only bundled image assets load, decoded
+  private struct TextureEntry: Decodable {
+    let id: String
+    let relative_path: String
+  }
+  private var textureEntries: [TextureEntry]?
+  private func textureEntry(_ assetID: String) -> TextureEntry? {
+    if textureEntries == nil {
+      guard let url = Bundle.main.url(forResource: "texture_manifest", withExtension: "json"),
+        let data = try? Data(contentsOf: url),
+        let entries = try? JSONDecoder().decode([TextureEntry].self, from: data) else { return nil }
+      textureEntries = entries
+    }
+    return textureEntries?.first(where: { $0.id == assetID })
+  }
+  /// Registered texture delivery: only bundled texture_manifest entries load, decoded
   /// bounded to 1024px and cached. Mesh assets keep their library materials;
   /// a texture ID never replaces finished geometry appearance on failure.
   func textureImage(_ assetID: String) -> UIImage? {
     if let cached = textureCache[assetID] { return cached }
-    guard let entry = (try? AssetLibrary.entries)?.first(where: { $0.id == assetID }),
+    guard let entry = textureEntry(assetID), !entry.relative_path.contains(".."),
       ["png", "jpg", "jpeg"].contains((entry.relative_path as NSString).pathExtension.lowercased()),
       let url = Bundle.main.resourceURL?.appendingPathComponent(entry.relative_path),
       let image = UIImage(contentsOfFile: url.path) else { return nil }

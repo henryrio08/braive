@@ -37,7 +37,7 @@ struct ContentView: View {
           ink.opacity(0.97).ignoresSafeArea()
           ScrollView(.vertical) { welcome }.scrollIndicators(.hidden)
         } else {
-          if [.intro, .planning, .error].contains(s.phase) || s.loading {
+          if ([.intro, .planning, .error].contains(s.phase) || s.loading) && !s.headsetReady {
             Color.black.opacity(s.phase == .intro ? 1 : 0.82).ignoresSafeArea()
           }
           if s.phase == .reveal { Color.black.opacity(max(0, 1 - s.revealFadeProgress)).ignoresSafeArea() }
@@ -50,7 +50,7 @@ struct ContentView: View {
             }
           }
         }
-        if !s.pauses.isEmpty {
+        if !s.pauses.isEmpty && !s.headsetReady {
           Color.black.opacity(0.91).ignoresSafeArea()
           if !s.headsetReady {
             HStack(spacing: 0) {

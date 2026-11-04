@@ -5,6 +5,12 @@ export interface AssetEntry {
 export const assetManifest:AssetEntry[]=JSON.parse(readFileSync(new URL('../assets/asset_manifest.json',import.meta.url),'utf8'));
 if(new Set(assetManifest.map(a=>a.id)).size!==assetManifest.length || assetManifest.some(a=>a.license!=='CC0-1.0'))throw Error('Invalid shared CC0 manifest');
 export const assetIDs=new Set(assetManifest.map(a=>a.id));
+export interface TextureEntry {
+ id:string;relative_path:string;kind:string;format:string;width:number;height:number;license:string;description:string;
+}
+export const textureManifest:TextureEntry[]=JSON.parse(readFileSync(new URL('../assets/texture_manifest.json',import.meta.url),'utf8'));
+if(new Set(textureManifest.map(t=>t.id)).size!==textureManifest.length || textureManifest.some(t=>t.kind!=='texture' || t.relative_path.includes('..') || !['png','jpg','jpeg'].includes(t.format.toLowerCase())))throw Error('Invalid texture manifest');
+export const textureIDs=new Set(textureManifest.map(t=>t.id));
 export const characterIDs=new Set(assetManifest.filter(a=>a.category==='character' && a.subcategory==='base' && a.character_rigged).map(a=>a.id));
 export const generationCharacterIDs=new Set(assetManifest.filter(a=>characterIDs.has(a.id)&&a.generation_enabled!==false).map(a=>a.id));
 export const meshAssets=assetManifest.map(a=>({id:a.id,kind:'mesh',origin:'bundled',description:`${a.tags.join(', ')}; scale normalized to meters, base y=0, forward -Z; ${a.approx_tris} triangles${characterIDs.has(a.id)?'; registered rigged character; skin and source materials retained; color tints registered clothing or the original solid mannequin':''}`}));

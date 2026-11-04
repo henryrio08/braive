@@ -1,5 +1,5 @@
 import {createHash} from 'node:crypto';
-import {assetManifest,assetIDs} from './assets.js';
+import {assetManifest,assetIDs,textureIDs} from './assets.js';
 import {AppError,document,sceneIssues} from './contracts.js';
 import type {SceneSpec,SceneNode,SessionPlan,ValidationIssue,ConstructionPlan,AudioPlan} from '../../docs/handoff/contracts.js';
 import {identity,multiply,inverse,point,transform,transformedBounds,contains,distance,type Vec3,type Bounds} from './spatial-math.js';
@@ -146,10 +146,10 @@ export function deterministicCorrections(source:SceneSpec):{scene:SceneSpec;corr
    node.role='environment';
    corrections.push(`Classified unnamed procedural scenery ${node.id} as environment; geometry and collision are unchanged.`);
   }
-  // The renderer registers no texture assets. When the authored material
+  // Unregistered texture references are unusable; registered textures are preserved. When the authored material
   // already carries a color, that color is the defined fallback: retain it
   // and drop the unusable optional reference instead of failing the scene.
-  if(node.material.texture_asset_id&&node.material.color){
+  if(node.material.texture_asset_id&&!textureIDs.has(node.material.texture_asset_id)&&node.material.color){
    corrections.push(`Removed unsupported texture reference ${node.material.texture_asset_id} from ${node.id}; retained its authored material color ${node.material.color}.`);
    delete node.material.texture_asset_id;
   }

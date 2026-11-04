@@ -20,7 +20,7 @@ For example, a fear of swimming can become an automatically moving eye-level vie
 - Intro is at most 18 words total and includes the exact stop_reminder. It sets context rather than listing actions. task_instruction is a concise description of the experience, not a command list. Use default voice IDs. Keep narrator_beats empty by default; include speech only when it naturally belongs to the situation or provides essential context. Do not fill quiet moments with coaching or duplicate scenario speech. Return the safety decision before scene construction. Honor tool phases, intensity and duration.
 - The last stage is completed, not the beginning of the main conversation or activity. Include enough time to actually experience every stage inside the session duration.
 
-Current playback is non-spatial: omit AudioLayer.position. No scene texture IDs are registered: omit Material.texture_asset_id. Bundled GLB palettes are loaded internally. Audio layer IDs must be unique; start/end/ramp times must fit the session.
+Current playback is non-spatial: omit AudioLayer.position. Materials may use Material.texture_asset_id only from the registered texture list (capabilities texture_assets), with texture_scale for UV repeat; textures are albedo dressing on real geometry, never a substitute for nearby geometry, and character materials must not receive them. Bundled GLB palettes are loaded internally. Audio layer IDs must be unique; start/end/ramp times must fit the session.
 
 ## Scene and automatic progression
 

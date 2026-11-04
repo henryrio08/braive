@@ -2,6 +2,7 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {sceneIssues,validate,outputSchema} from '../src/contracts.js';
+import {textureIDs,assetManifest} from '../src/assets.js';
 import type {SessionPlan,SceneSpec,AudioPlan} from '../../docs/handoff/contracts.js';
 const fixture=JSON.parse(readFileSync(new URL('../../tests/fixtures/motion-scenario.json',import.meta.url),'utf8'));
 function setup(){
@@ -41,9 +42,16 @@ test('a stage cannot wait for motion launched only in a future stage',()=>{
 
 test('unregistered texture output is rejected; registered texture references are accepted',()=>{
  const {plan,scene,audio}=setup();scene.nodes[0].material.texture_asset_id='invented';
- assert.ok(sceneIssues(plan,scene,audio).some(i=>i.rule==='asset'&&/registered/i.test(i.message)));
- const ok=setup();ok.scene.nodes[0].material.texture_asset_id='nature.ground_patch.nature_ground_grass_01';ok.scene.nodes[0].material.texture_scale=2;
+ assert.ok(sceneIssues(plan,scene,audio).some(i=>i.rule==='asset'&&/not a registered texture/i.test(i.message)));
+ const glb=setup();glb.scene.nodes[0].material.texture_asset_id='nature.ground_patch.nature_ground_grass_01';
+ assert.ok(sceneIssues(glb.plan,glb.scene,glb.audio).some(i=>i.path.includes('texture')&&i.rule==='asset'&&/not a registered texture/i.test(i.message)));
+ const ok=setup();ok.scene.nodes[0].material.texture_asset_id='texture.surface.wood_01';ok.scene.nodes[0].material.texture_scale=2;
  assert.deepEqual(sceneIssues(ok.plan,ok.scene,ok.audio).filter(i=>i.path.includes('texture')),[]);
+});
+test('texture registry contains registered textures and no mesh/GLB asset IDs',()=>{
+ assert.ok(textureIDs.has('texture.surface.wood_01'));
+ assert.ok(!textureIDs.has('nature.ground_patch.nature_ground_grass_01'));
+ assert.ok(assetManifest.every(a=>!textureIDs.has(a.id)));
 });
 test('solo scenarios and coherent viewer-carried equipment use the new action runtime',()=>{
  const {plan,scene,audio}=setup();plan.interaction_mode='solo';

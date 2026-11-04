@@ -126,6 +126,9 @@ struct HeadsetHUD: View {
     }
   }
   var pausedHeadsetCopy: HeadsetCopy {
+    if pauses.contains("builder_edit") {
+      return HeadsetCopy(title: "Your place is saved.", detail: builderEditing ? "Say what should change in this same place." : "Your change is ready in this same place.", command: "Say RESUME to continue · STOP to end")
+    }
     if pauses.contains("tracking_unavailable") {
       return HeadsetCopy(title: "Your practice is paused.", detail: "Head tracking is unavailable.", command: "Remove the viewer", hint: "Keep the app open or reopen it to restore tracking")
     }
