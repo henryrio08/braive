@@ -96,6 +96,49 @@ instructions on every poll.
   use the existing DEBUG audits (`PreflightAudit`, `StageAudit`,
   `--render-scenario-review`) for before/after captures.
 
+## November 4 continuation 2 (containment semantics, lobby, UX, live attempts)
+
+Branch `codex/wonder-ux-visual-revision` from integrated main (`9bbdcbd`).
+
+- Construction: `inside` (place-then-check, legacy behavior unchanged,
+  including zero-offset placement at a target center) is now distinct from
+  the new `within` kind (containment-only at the authored position, never
+  moves). Added to the OpenAPI enum, TS contracts, compiler, authoring
+  prompts and builder instructions; offsets are documented as intended world
+  position minus the resolved target origin/zone center. Zone failures name
+  the responsible relation and resolved origin. The attached island scene
+  reproduces the four `zone_fit` failures before the fix; Henry's offset
+  `[0,-1.9,-12]` and offshore waypoint `[0, 0.35, -20.5]` pass on the real
+  attached scene, as does the `within` variant. Regression tests also cover
+  doorway openings, scaled-parent geometry and relative routes. One partner
+  fixture that routed through a table edge was moved aside (assertions
+  unchanged); it was genuinely obstructed under native semantics too.
+- Lobby (`World.lobby()`): deterministic composed clearing — foreground
+  tufts, five clustered tree groups with undergrowth, a background tree
+  line, grounded rocks, a clear participant area and forward corridor —
+  sharing the generated-scene procedural sky, fog, lighting environment and
+  posterized style; its sun casts shadows. No paid call; blackout/reveal
+  behavior untouched.
+- UX: flat solid setup scrim/panel (no gradient/glass), connection readiness
+  always visible, discoverable "Add details" phone action during generation,
+  headset error cue excerpting what actually happened. Automatic progression,
+  STOP/pause, ratings, reflection/feedback, history/export and repeats are
+  unchanged in behavior.
+- Harness: live-generation deadline 125 s → 480 s (inside the product's
+  ten-minute ceiling) and reservation cap $1 → $3; request limit stays 5.
+- Live attempts (fresh synthetic library scenario, 4 model calls each):
+  run 1 failed final validation on one genuine 7 cm window/zone overflow
+  after its repair, with the new relation diagnostic in the message;
+  run 2 used the new `within` kind and was correctly rejected for oversized
+  windows authored outside the zone. Both are legitimate rejections with
+  actionable feedback, not compiler defects; end-to-end success is still
+  not demonstrated. Settled live spend this continuation: about $1.55.
+  Ledger (synced to the main checkout): 30 entries, $5.27 charged of $50,
+  $44.73 remaining, including the retained $1.104 unsettled reservation.
+- Backend suite: 139/139 passing, typecheck clean. Native compilation,
+  simulator/device journey checks and renderer captures remain unrun (no
+  Swift toolchain, simulator or device in this environment).
+
 ## Verification
 
 - Backend: `tsc --noEmit` clean; full suite 127/127 passing (123 baseline plus

@@ -180,11 +180,12 @@ export function compileConstruction(plan:SessionPlan,source:SceneSpec):SceneSpec
   if(relation.anchor_id&&anchors.get(relation.anchor_id)?.node_id!==targetNodeID)fail(at,'reference','Target anchor must belong to its target node');
   if(targetAnchor&&relation.anchor_id&&targetAnchor.id!==relation.anchor_id)fail(at,'reference','A relation cannot select two different target anchors');
   if(relation.subject_anchor_id&&anchors.get(relation.subject_anchor_id)?.node_id!==relation.subject_id)fail(at,'reference','Contact anchor must belong to its subject');
-  if(relation.kind==='inside'&&(targetAnchor||relation.anchor_id||relation.target_id==='viewer'))fail(at,'volume','Containment requires a node or zone volume, not a point anchor');
+  if(['inside','within'].includes(relation.kind)&&(targetAnchor||relation.anchor_id||relation.target_id==='viewer'))fail(at,'volume','Containment requires a node or zone volume, not a point anchor');
  }
  const boundaryNodes=new Set(cp.requirements.filter(f=>expected.get(f.requirement_id)?.kind==='boundary').flatMap(f=>f.node_ids));
  for(const relation of relations.values())if(!relation.required&&(nodes.get(relation.subject_id)?.role!=='environment'||boundaryNodes.has(relation.subject_id)))fail('/construction_plan/relations/'+relation.id,'priority','Task objects and explicit boundary constraints cannot be downgraded to optional decoration');
  const done=new Set<string>(),visiting=new Set<string>();
+ const placedBy=new Map<string,string>();
  const apply=(relation:ConstructionPlan['relations'][number])=>{
   if(done.has(relation.id))return;
   if(visiting.has(relation.id)){fail('/construction_plan/relations','cycle','Cyclic construction dependencies');return;}
@@ -212,10 +213,17 @@ export function compileConstruction(plan:SessionPlan,source:SceneSpec):SceneSpec
     const contact=subjectAnchor?point(frames(n.id),subjectAnchor.position):undefined;
     if(contact){const origin=point(frames(n.id),[0,0,0]);move(n.id,origin.map((v,i)=>v+destination[i]-contact[i]) as Vec3);n.support_contact=subjectAnchor!.position;}
     else {const bottom=worldBounds(n.id).min[1];const origin=point(frames(n.id),[0,0,0]);origin[1]+=destination[1]-bottom;move(n.id,origin);}
+    placedBy.set(n.id,relation.id);
     n.support_node_id=target.id;
    }
+  }else if(relation.kind==='within'){
+   // Containment-only: verify the authored position, never move the subject.
+   const box=zone?{min:zone.center.map((v,i)=>v-zone.size[i]/2) as Vec3,max:zone.center.map((v,i)=>v+zone.size[i]/2) as Vec3}:worldBounds(relation.target_id);
+   const available={min:box.min.map(v=>v+relation.clearance) as Vec3,max:box.max.map(v=>v-relation.clearance) as Vec3};
+   if(!contains(available,worldBounds(n.id),relation.tolerance))fail(at,'fit',`${n.id} bounds ${JSON.stringify(worldBounds(n.id))} is not within ${relation.target_id} usable bounds ${JSON.stringify(available)} at its authored position (within checks containment only; nothing was moved). Fix the authored position, or use inside with offset = intended world position minus the target origin/zone center to place it.`,relation.required);
   }else if(['near','attached_to','inside'].includes(relation.kind)){
    move(n.id,destination);
+   placedBy.set(n.id,relation.id);
    if(relation.kind==='attached_to'&&target&&n.parent_id!==target.id)fail(at,'hierarchy','Declare the attachment parent in the authored hierarchy; do not reparent a posed assembly implicitly',relation.required);
    if(relation.kind==='inside'){
     const box=zone?{min:zone.center.map((v,i)=>v-zone.size[i]/2) as Vec3,max:zone.center.map((v,i)=>v+zone.size[i]/2) as Vec3}:worldBounds(relation.target_id);
@@ -332,14 +340,15 @@ export function compileConstruction(plan:SessionPlan,source:SceneSpec):SceneSpec
   const volume={min:zone.center.map((v,i)=>v-zone.size[i]/2) as Vec3,max:zone.center.map((v,i)=>v+zone.size[i]/2) as Vec3};
   // Open air has no physical ceiling. Preserve real enclosures, explicit
   // containment, water volumes, and every horizontal/lower bound.
-  const openTop=zone.kind==='outdoor'&&!regions.some(r=>r.zone_id===zone.id&&r.medium==='water')&&!cp.relations.some(r=>r.kind==='inside'&&r.target_id===zone.id);
+  const openTop=zone.kind==='outdoor'&&!regions.some(r=>r.zone_id===zone.id&&r.medium==='water')&&!cp.relations.some(r=>['inside','within'].includes(r.kind)&&r.target_id===zone.id);
   for(const id of assembly.member_node_ids){
    const bounds=worldBounds(id);
    const measured:Bounds={min:volume.min,max:openTop?[volume.max[0],Math.max(volume.max[1],bounds.max[1]),volume.max[2]]:volume.max};
    if(!contains(measured,bounds,0.2)){
     const parent=nodes.get(id)?.parent_id;
+    const via=placedBy.get(id)?` Placed by relation ${placedBy.get(id)} at resolved origin ${JSON.stringify(point(frames(id),[0,0,0]))}.`:'';
     const frame=parent?` ${id} is a child of ${parent}, whose scale ${JSON.stringify(nodes.get(parent)?.scale)} also scales its geometry and local offset.`:'';
-    fail(`/nodes/${nodeIndices.get(id)}`,'zone_fit',`${id} world bounds ${JSON.stringify(bounds)} exceed zone ${zone.id} ${JSON.stringify(volume)} (0.2m boundary allowance).${frame} Use independent world roots for static objects, or correct local transforms for genuine children.`,requiredGeometry.has(id));
+    fail(`/nodes/${nodeIndices.get(id)}`,'zone_fit',`${id} world bounds ${JSON.stringify(bounds)} exceed zone ${zone.id} ${JSON.stringify(volume)} (0.2m boundary allowance).${frame}${via} Use independent world roots for static objects, or correct local transforms for genuine children.`,requiredGeometry.has(id));
    }
   }
  }
@@ -359,7 +368,7 @@ export function compileConstruction(plan:SessionPlan,source:SceneSpec):SceneSpec
    const yaw=Math.atan2(-(local[0]-n.position[0]),-(local[2]-n.position[2]));
    if(Math.abs(Math.atan2(Math.sin(yaw-n.rotation_radians[1]),Math.cos(yaw-n.rotation_radians[1])))>relation.tolerance)fail('/construction_plan/relations/'+relation.id,'orientation','Facing constraints did not converge after placement',relation.required);
   }
-  if(relation.kind==='inside'){
+  if(['inside','within'].includes(relation.kind)){
    const bounds=zone?{min:zone.center.map((v,i)=>v-zone.size[i]/2) as Vec3,max:zone.center.map((v,i)=>v+zone.size[i]/2) as Vec3}:worldBounds(relation.target_id);
    if(!contains({min:bounds.min.map(v=>v+relation.clearance) as Vec3,max:bounds.max.map(v=>v-relation.clearance) as Vec3},worldBounds(n.id),relation.tolerance))fail('/construction_plan/relations/'+relation.id,'fit','Later placement violates the required usable space',relation.required);
   }

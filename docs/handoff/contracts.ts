@@ -105,7 +105,7 @@ export type ConstructionPlan = {
  zones:Array<{id:string;center:[number,number,number];size:[number,number,number];kind:'interior'|'outdoor'|'enclosure'}>;
  assemblies:Array<{id:string;root_node_id:string;member_node_ids:string[];zone_id:string;requirement_ids:string[]}>;
  anchors:Array<{id:string;node_id:string;kind:'support'|'seat'|'attachment'|'entry'|'exit';position:[number,number,number];footprint:[number,number]}>;
- relations:Array<{id:string;kind:'on'|'inside'|'faces'|'attached_to'|'near'|'clear_of';subject_id:string;target_id:string;anchor_id?:string;subject_anchor_id?:string;offset:[number,number,number];clearance:number;tolerance:number;required:boolean}>;
+ relations:Array<{id:string;kind:'on'|'inside'|'within'|'faces'|'attached_to'|'near'|'clear_of';subject_id:string;target_id:string;anchor_id?:string;subject_anchor_id?:string;offset:[number,number,number];clearance:number;tolerance:number;required:boolean}>;
  routes:Array<{path_id:string;from_anchor_id?:string;to_anchor_id?:string;stage_ids:string[];requirement_ids:string[];clearance_radius_meters:number;eye_height_meters:number}>;
  medium_regions?:MediumRegion[];
 };

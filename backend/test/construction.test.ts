@@ -193,6 +193,86 @@ test('walking needs support under the route while swimming does not',()=>{
  assert.ok(compileConstruction(swim.plan,swim.scene).construction_report);
 });
 
+function islandSetup(kind:string,offset:number[]){
+ const {plan,scene}=setup();
+ scene.nodes[0].position=[0,-1.5,-16];scene.nodes[0].geometry={kind:'box',size:[70,0.4,70]};
+ const cp=scene.construction_plan!;
+ cp.relations[0].offset=[10,0,10];
+ cp.zones[0].center=[0,1,-16];cp.zones[0].size=[80,12,80];
+ cp.zones.push({id:'zone_cove',center:[0,1,-16],size:[70,12,70],kind:'outdoor'},{id:'zone_island',center:[0,1,-28],size:[18,10,16],kind:'outdoor'});
+ const box=(id:string,position:number[],size:number[],role:string):SceneNode=>({id,parent_id:null,role,geometry:{kind:'box',size},position,rotation_radians:[0,0,0],scale:[1,1,1],material:{color:'#c2b280',roughness:0.9},animation:'none',description:id} as unknown as SceneNode);
+ scene.nodes.push(box('island_sand',[0,-0.9,-28],[16,1.6,14],'prop'),box('palm_1',[-2.5,-0.1,-29],[0.4,4,0.4],'environment'));
+ cp.anchors.push({id:'anchor_island_top',node_id:'island_sand',kind:'support',position:[0,0.8,0],footprint:[10,10]});
+ cp.assemblies.push({id:'island_assembly',root_node_id:'island_sand',member_node_ids:['island_sand','palm_1'],zone_id:'zone_island',requirement_ids:[]});
+ cp.relations.push({id:'rel_palm_on_island',kind:'on',subject_id:'palm_1',target_id:'anchor_island_top',offset:[-2.5,0,-1],clearance:0,tolerance:0.5,required:true});
+ cp.relations.push({id:'rel_island_in_cove',kind:kind as never,subject_id:'island_sand',target_id:'zone_cove',offset:offset as never,clearance:0,tolerance:0.5,required:true});
+ return {plan,scene};
+}
+
+test('within checks containment at the authored position without moving the island or its dependents',()=>{
+ const {plan,scene}=islandSetup('within',[0,0,0]);
+ const compiled=compileConstruction(plan,scene);
+ assert.deepEqual(compiled.nodes.find(n=>n.id==='island_sand')!.position,[0,-0.9,-28]);
+ assert.ok(compiled.nodes.find(n=>n.id==='palm_1')!.position[2]<-25);
+});
+
+test('legacy inside with a zero offset still places at the target center, and the zone failure names the relation',()=>{
+ const {plan,scene}=islandSetup('inside',[0,0,0]);
+ assert.throws(()=>compileConstruction(plan,scene),(e:any)=>e.issues.some((i:any)=>i.rule==='zone_fit'&&i.message.includes('island_sand')&&i.message.includes('rel_island_in_cove')&&i.message.includes('[0,1,-16]')));
+});
+
+test('inside with the preserving offset keeps the island position and passes',()=>{
+ const {plan,scene}=islandSetup('inside',[0,-1.9,-12]);
+ const compiled=compileConstruction(plan,scene);
+ const pos=compiled.nodes.find(n=>n.id==='island_sand')!.position;
+ assert.ok(Math.abs(pos[0])<1e-9&&Math.abs(pos[1]+0.9)<1e-6&&Math.abs(pos[2]+28)<1e-9);
+});
+
+test('zero-offset inside at a zone center remains valid intentional placement',()=>{
+ const {plan,scene}=islandSetup('inside',[0,0,0]);
+ scene.construction_plan!.relations.find(r=>r.id==='rel_island_in_cove')!.target_id='zone_island';
+ const compiled=compileConstruction(plan,scene);
+ assert.deepEqual(compiled.nodes.find(n=>n.id==='island_sand')!.position,[0,1,-28]);
+});
+
+test('within rejects a subject authored outside the target volume',()=>{
+ const {plan,scene}=islandSetup('within',[0,0,0]);
+ scene.nodes.find(n=>n.id==='island_sand')!.position=[0,-0.9,-10];
+ scene.construction_plan!.relations.find(r=>r.id==='rel_island_in_cove')!.target_id='zone_island';
+ assert.throws(()=>compileConstruction(plan,scene),(e:any)=>e.issues.some((i:any)=>i.rule==='fit'&&i.message.includes('within checks containment only')));
+});
+
+test('a swim route ending inside the island remains rejected while an offshore endpoint passes',()=>{
+ const blocked=islandSetup('within',[0,0,0]);
+ blocked.scene.motion_paths=[{id:'path_swim',purpose:'swim',interpolation:'linear',coordinate_space:'world',points:[{at_seconds:10,position:[0,0.35,-18]},{at_seconds:20,position:[0,0.35,-21.5]}]}] as unknown as SceneSpec['motion_paths'];
+ blocked.scene.construction_plan!.routes=[{path_id:'path_swim',stage_ids:['look'],requirement_ids:['task'],clearance_radius_meters:0.25,eye_height_meters:1.45}];
+ blocked.scene.scenario!.steps[0].start_operations=[{type:'move_viewer',path_id:'path_swim'}] as never;
+ assert.throws(()=>compileConstruction(blocked.plan,blocked.scene),(e:any)=>e.issues.some((i:any)=>i.rule==='route_clearance'&&i.message.includes('island_sand')));
+ const clear=islandSetup('within',[0,0,0]);
+ clear.scene.motion_paths=[{id:'path_swim',purpose:'swim',interpolation:'linear',coordinate_space:'world',points:[{at_seconds:10,position:[0,0.35,-18]},{at_seconds:20,position:[0,0.35,-20.5]}]}] as unknown as SceneSpec['motion_paths'];
+ clear.scene.construction_plan!.routes=[{path_id:'path_swim',stage_ids:['look'],requirement_ids:['task'],clearance_radius_meters:0.25,eye_height_meters:1.45}];
+ clear.scene.scenario!.steps[0].start_operations=[{type:'move_viewer',path_id:'path_swim'}] as never;
+ assert.ok(compileConstruction(clear.plan,clear.scene).construction_report);
+});
+
+test('routes pass through genuine openings and respect transformed and relative geometry',()=>{
+ const doorway=routeSetup('walk',false);
+ const wall=(id:string,x:number):SceneNode=>({id,parent_id:null,role:'environment',geometry:{kind:'box',size:[1.7,3,0.2]},position:[x,1.5,-3],rotation_radians:[0,0,0],scale:[1,1,1],material:{color:'#8899aa',roughness:0.9},animation:'none',description:id} as unknown as SceneNode);
+ doorway.scene.nodes.push(wall('wall_l',-1.45),wall('wall_r',1.45));
+ doorway.scene.motion_paths![0].points.forEach(p=>{p.position[0]=0;});
+ assert.ok(compileConstruction(doorway.plan,doorway.scene).construction_report);
+ const scaled=routeSetup('walk',false);
+ const parent:SceneNode={id:'frame_root',parent_id:null,role:'environment',geometry:{kind:'box',size:[1,3,1]},position:[3,1.5,-3],rotation_radians:[0,0,0],scale:[2,1,2],material:{color:'#8899aa',roughness:0.9},animation:'none',description:'frame'} as unknown as SceneNode;
+ const child:SceneNode={id:'frame_child',parent_id:'frame_root',role:'environment',geometry:{kind:'box',size:[1,3,0.2]},position:[0,0,0],rotation_radians:[0,0,0],scale:[1,1,1],material:{color:'#8899aa',roughness:0.9},animation:'none',description:'child'} as unknown as SceneNode;
+ scaled.scene.nodes.push(parent,child);
+ scaled.scene.motion_paths![0].points.forEach(p=>{p.position[0]=3;});
+ assert.throws(()=>compileConstruction(scaled.plan,scaled.scene),(e:any)=>e.issues.some((i:any)=>i.rule==='route_clearance'));
+ const relative=routeSetup('walk',true);
+ (relative.scene.motion_paths![0] as {coordinate_space:string}).coordinate_space='relative';
+ relative.scene.motion_paths![0].points=[{at_seconds:2,position:[0,0,-2]},{at_seconds:5,position:[0,0,-5]}] as never;
+ assert.throws(()=>compileConstruction(relative.plan,relative.scene),(e:any)=>e.issues.some((i:any)=>i.rule==='route_clearance'&&i.message.includes('wall')));
+});
+
 test('open-air zones have no virtual ceiling, but enclosures and explicit containment still do',()=>{
  const {plan,scene}=setup();scene.nodes[1].geometry={kind:'box',size:[2,8,1]};scene.nodes[1].position=[1,4,-3];
  const cp=scene.construction_plan!;cp.relations=[];cp.zones[0].kind='outdoor';
@@ -230,6 +310,7 @@ test('repair keeps every failing member of the same assembly and names its paren
 
 test('route annotations cannot overwrite continuous authored world endpoints',()=>{
  const {plan,scene}=setup(),cp=scene.construction_plan!;
+ cp.relations[0].offset=[5,0,-3];
  cp.anchors.push({id:'elsewhere',node_id:'floor',kind:'entry',position:[4,0.1,4],footprint:[1,1]});
  scene.motion_paths=[{id:'route',purpose:'walk',coordinate_space:'world',interpolation:'smooth',start_position:[0,1.6,0],points:[{at_seconds:10,position:[0,1.6,-4]}]}];
  scene.scenario!.steps[0].start_operations=[{type:'move_viewer',path_id:'route'}];

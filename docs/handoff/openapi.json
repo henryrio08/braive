@@ -3870,6 +3870,7 @@
             "enum": [
               "on",
               "inside",
+              "within",
               "faces",
               "attached_to",
               "near",

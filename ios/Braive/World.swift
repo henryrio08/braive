@@ -687,6 +687,12 @@ extension UIColor {
     left.camera?.zFar = 150; right.camera?.zFar = 150
     clear()
     head.position = SCNVector3(0, 1.6, 0)
+    // Deterministic lobby: same composed forest on every launch, no paid call.
+    var lobbySeed: UInt32 = 20261104
+    func lobbyRandom() -> Float {
+      lobbySeed = lobbySeed &* 1664525 &+ 1013904223
+      return Float(lobbySeed >> 8) / Float(1 << 24)
+    }
     scene.background.contents = UIColor(hex: "#9dbbb0")
     scene.fogColor = UIColor(hex: "#75968a")
     scene.fogStartDistance = 5
@@ -696,7 +702,7 @@ extension UIColor {
     ambient.light = SCNLight()
     ambient.light?.type = .ambient
     ambient.light?.color = UIColor(hex: "#a6c6c2")
-    ambient.light?.intensity = 380
+    ambient.light?.intensity = 220
     scene.rootNode.addChildNode(ambient)
     let sun = SCNNode()
     sun.light = SCNLight()
@@ -704,6 +710,14 @@ extension UIColor {
     sun.light?.color = UIColor(hex: "#ffe8bb")
     sun.light?.intensity = 900
     sun.eulerAngles = SCNVector3(-0.7, -0.6, 0)
+    sun.position = SCNVector3(8, 12, 6)
+    sun.light?.castsShadow = true
+    sun.light?.shadowMapSize = CGSize(width: 1024, height: 1024)
+    sun.light?.shadowSampleCount = 4
+    sun.light?.shadowRadius = 3
+    sun.light?.shadowColor = UIColor.black.withAlphaComponent(0.26)
+    sun.light?.orthographicScale = 17
+    sun.light?.zFar = 60
     scene.rootNode.addChildNode(sun)
     func finish(_ geometry: SCNGeometry, _ color: String) -> SCNGeometry {
       let m = SCNMaterial()
@@ -727,35 +741,67 @@ extension UIColor {
       grass.name = "lobby_grass_floor"
       scene.rootNode.addChildNode(grass)
     }
-    for i in 0..<24 {
-      if let grass = try? AssetLibrary.make("nature.bush.nature_grass_large_01") {
-        let angle = Float(i) * 2.39996
-        let radius = Float(1.8 + Double(i % 5) * 0.8)
-        grass.position = SCNVector3(sin(angle) * radius, 0, cos(angle) * radius)
-        grass.eulerAngles.y = angle
-        scene.rootNode.addChildNode(grass)
-      }
-    }
     let trees = all.filter { $0.category == "nature" && $0.subcategory == "tree" }
     let rocks = all.filter { $0.category == "nature" && $0.subcategory == "rock" }
-    for i in 0..<45 where !trees.isEmpty {
-      let angle = Float(i) * 2.39996
-      let radius = Float(5 + i % 18)
-      let x = sin(angle) * radius
-      let z = cos(angle) * radius
-      if abs(x) < 2 && z < 0 { continue }
-      if let n = try? AssetLibrary.make(trees[i % trees.count].id) {
-        n.position = SCNVector3(x, 0, z)
-        n.eulerAngles.y = Float(i) * 0.7
-        scene.rootNode.addChildNode(n)
+    let bushes = all.filter { $0.category == "nature" && ($0.subcategory == "bush" || $0.subcategory == "plant") }
+    func place(_ id: String, _ x: Float, _ z: Float, _ scale: Float) {
+      guard let n = try? AssetLibrary.make(id) else { return }
+      n.position = SCNVector3(x, 0, z)
+      n.eulerAngles.y = lobbyRandom() * Float.pi * 2
+      n.scale = SCNVector3(scale, scale, scale)
+      scene.rootNode.addChildNode(n)
+    }
+    func inCorridor(_ x: Float, _ z: Float) -> Bool { abs(x) < 1.3 && z < 0.5 }
+    // Foreground tufts frame a clear, comfortable area around the participant.
+    for _ in 0..<26 {
+      let angle = lobbyRandom() * Float.pi * 2
+      let radius = 2.4 + lobbyRandom() * 2.2
+      let x = sin(angle) * radius, z = cos(angle) * radius
+      if inCorridor(x, z) { continue }
+      place("nature.bush.nature_grass_large_01", x, z, 0.8 + lobbyRandom() * 0.5)
+    }
+    // Middle-ground clusters read as natural groupings, not a planted ring.
+    for cluster in 0..<5 where !trees.isEmpty {
+      let angle = Float(cluster) / 5 * Float.pi * 2 + lobbyRandom() * 0.7
+      let radius = 6 + lobbyRandom() * 4
+      let cx = sin(angle) * radius, cz = cos(angle) * radius
+      if inCorridor(cx, cz) { continue }
+      for _ in 0..<(3 + Int(lobbyRandom() * 3)) {
+        place(trees[Int(lobbyRandom() * Float(trees.count)) % trees.count].id,
+          cx + (lobbyRandom() - 0.5) * 4.4, cz + (lobbyRandom() - 0.5) * 4.4, 0.85 + lobbyRandom() * 0.4)
+      }
+      for _ in 0..<2 where !bushes.isEmpty {
+        place(bushes[Int(lobbyRandom() * Float(bushes.count)) % bushes.count].id,
+          cx + (lobbyRandom() - 0.5) * 3.4, cz + (lobbyRandom() - 0.5) * 3.4, 0.8 + lobbyRandom() * 0.4)
       }
     }
-    for i in 0..<20 where !rocks.isEmpty {
-      if let n = try? AssetLibrary.make(rocks[i % rocks.count].id) {
-        let angle = Float(i) * 2.39996
-        n.position = SCNVector3(sin(angle) * 4, 0, cos(angle) * 4)
-        scene.rootNode.addChildNode(n)
-      }
+    // A denser background tree line supplies depth against the sky.
+    for _ in 0..<26 where !trees.isEmpty {
+      let angle = lobbyRandom() * Float.pi * 2
+      let radius = 13 + lobbyRandom() * 11
+      let x = sin(angle) * radius, z = cos(angle) * radius
+      if abs(x) < 2.2 && z < 0 { continue }
+      place(trees[Int(lobbyRandom() * Float(trees.count)) % trees.count].id, x, z, 1.0 + lobbyRandom() * 0.35)
     }
+    for _ in 0..<7 where !rocks.isEmpty {
+      let angle = lobbyRandom() * Float.pi * 2
+      let radius = 2.6 + lobbyRandom() * 6.4
+      let x = sin(angle) * radius, z = cos(angle) * radius
+      if inCorridor(x, z) { continue }
+      place(rocks[Int(lobbyRandom() * Float(rocks.count)) % rocks.count].id, x, z, 0.7 + lobbyRandom() * 0.6)
+    }
+    // Share the generated-scene sky, fog, lighting environment and gentle
+    // posterized style so the lobby and practice scenes stay one world.
+    let lobbyEnvironment = JSON([
+      "mode": "outdoor",
+      "sky": ["kind": "procedural", "horizon_color": "#dcead9", "zenith_color": "#6fa8c8",
+        "ground_color": "#4a6741", "sun_color": "#fff1cf", "sun_size_degrees": 7,
+        "haze": 0.25, "cloud_coverage": 0.22] as [String: Any],
+      "fog": ["color": "#cfdfd2", "start_meters": 16, "end_meters": 60] as [String: Any],
+      "lighting_environment_intensity": 0.85,
+      "style": ["light_bands": 6, "strength": 0.15] as [String: Any],
+    ])
+    try? SceneAppearance.applyEnvironment(
+      lobbyEnvironment, to: scene, sunDirection: SCNVector3(-0.5, -0.7, -0.3), seed: 20261104)
   }
 }
