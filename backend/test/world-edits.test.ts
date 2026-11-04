@@ -1,7 +1,11 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {applyWorldEdits,type EditOperation} from '../src/world-edits.js';
-import {prepareWorldCommit,type ApprovedWorld} from '../src/world-commits.js';
+import {prepareWorldCommit,WorldStore,WorldTransactions,type ApprovedWorld} from '../src/world-commits.js';
+import {mkdtempSync,rmSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {randomUUID} from 'node:crypto';
 import {fixture,SESSION} from './helpers/world-fixture.js';
 import {assetManifest} from '../src/assets.js';
 import {retimeAttempt} from '../src/attempt-timing.js';
@@ -11,6 +15,33 @@ function world():ApprovedWorld {
  return prepareWorldCommit({session_id:SESSION,expected_revision:0,revision:1,...docs},new Map(),new Map());
 }
 const apply=(base:ApprovedWorld,operations:EditOperation[],scope:'active'|'next_attempt'='active')=>applyWorldEdits(base,{operations,question:''},scope);
+
+test('optional audience survives zero, committed restart and a new same-world attempt',()=>{
+ const directory=mkdtempSync(join(tmpdir(),'braive-zero-audience-'));
+ try {
+  const base=world(),store=new WorldStore(directory),approved=new Map([[SESSION,base]]),revisions=new Map([[SESSION,1]]);
+  const zero=apply(base,[{op:'population',character_ids:['neighbor_1'],target_count:0}]).world;
+  assert.equal(zero.plan.characters.length,0);
+  const commit=(candidate:ApprovedWorld,id:string,expected:number,revision:number,parent?:string)=>{
+   const docs=structuredClone(candidate);for(const doc of [docs.plan,docs.scene,docs.audio]){doc.session_id=id;doc.revision=revision;}
+   return new WorldTransactions(join(directory,'transactions'),store).commit({session_id:id,expected_revision:expected,revision,plan:docs.plan,scene:docs.scene,audio:docs.audio,...(parent?{world_id:parent}:{})},approved,revisions);
+  };
+  commit(zero,SESSION,1,2);
+  approved.clear();revisions.clear();for(const saved of store.loadAll()){approved.set(saved.plan.session_id,saved);revisions.set(saved.plan.session_id,saved.plan.revision);}
+  const saved=approved.get(SESSION)!;assert.equal(saved.population_templates?.[0].character.id,'neighbor_1');
+  const nextID=randomUUID(),next=commit(saved,nextID,0,1,SESSION);
+  assert.equal(next.world_id,SESSION);assert.equal(next.plan.characters.length,0);
+  const restored=apply(next,[{op:'population',character_ids:['neighbor_1'],target_count:4}],'next_attempt').world;
+  assert.equal(restored.plan.characters.length,4);
+  assert.deepEqual(restored.plan.characters.find(c=>c.id==='neighbor_1'),base.plan.characters[0]);
+  assert.deepEqual(restored.scene.nodes.find(n=>n.id==='char_node')?.position,base.scene.nodes.find(n=>n.id==='char_node')?.position);
+  assert(restored.plan.characters.every(c=>c.asset_id===base.plan.characters[0].asset_id));
+  assert.deepEqual(restored.scene.viewpoints,base.scene.viewpoints);
+  const accepted=commit(restored,nextID,1,2);
+  assert.equal(store.loadAll().find(w=>w.plan.session_id===nextID)?.plan.characters.length,4);
+  assert.equal(accepted.world_id,SESSION);
+ } finally {rmSync(directory,{recursive:true,force:true});}
+});
 
 test('compound surface, light and role edits preserve source, character palette, role, goal and boundaries',()=>{
  const base=world(),copy=structuredClone(base),actor=base.plan.characters[0];
