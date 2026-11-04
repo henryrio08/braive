@@ -95,7 +95,7 @@ test('a planning repair does not consume the construction repair',async()=>{
  const h=harness({model:call=>{
   if(call.schema==='SceneRepairPatch')return {base_hash:call.input.base_hash,operations:[{op:'set_relation_offset',relation_id:'ground_focus',offset:[0,0,-3]}]};
   if(call.role==='experience_editor'&&!call.input.issues){const bad=draft();bad.experience.stages[0].duration_sec=30;return bad;}
-  if(call.role==='scene_builder'){builderCalls++;if(builderCalls===1){const bad=sceneFor(call.input.plan);bad.construction_plan!.relations[0].offset=[0,0,-30];return bad;}}
+  if(call.role==='scene_builder'){builderCalls++;if(builderCalls===1){const bad=sceneFor(call.input.plan);bad.construction_plan!.relations[0].offset=[0,0,-30];const subj=bad.nodes.find(n=>n.id===bad.construction_plan!.relations[0].subject_id)!;subj.position=[0,0,25];return bad;}}
  }});
  const result=await h.run();
  assert.ok(result.scene.construction_report);
@@ -107,7 +107,7 @@ test('a localized construction failure is repaired with a scoped patch, not a re
  let builderCalls=0;
  const h=harness({model:call=>{
   if(call.schema==='SceneRepairPatch')return {base_hash:call.input.base_hash,operations:[{op:'set_relation_offset',relation_id:'ground_focus',offset:[0,0,-3]}]};
-  if(call.role==='scene_builder'){builderCalls++;if(builderCalls===1){const bad=sceneFor(call.input.plan);bad.construction_plan!.relations[0].offset=[0,0,-30];return bad;}}
+  if(call.role==='scene_builder'){builderCalls++;if(builderCalls===1){const bad=sceneFor(call.input.plan);bad.construction_plan!.relations[0].offset=[0,0,-30];const subj=bad.nodes.find(n=>n.id===bad.construction_plan!.relations[0].subject_id)!;subj.position=[0,0,25];return bad;}}
  }});
  const result=await h.run();
  assert.ok(result.scene.construction_report);

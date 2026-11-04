@@ -4,6 +4,7 @@ import {assembleExperience, planningCapabilities, validateExperience, validateEx
 import {compileScene, constructionRequirements, deterministicCorrections} from './construction.js';
 import {applyScenePatch, computeRepairScope, patchEligible, sceneHash, type SceneRepairPatch} from './repair-patch.js';
 import {canonicalSceneReferences} from './scene-references.js';
+import {materializeStageGraph} from './stage-compiler.js';
 import {dispatchTool} from './tool-dispatch.js';
 import {authorInstructions, editorInstructions, builderInstructions, repairInstructions} from './generation-prompts.js';
 import type {ModelRole} from './meta.js';
@@ -105,9 +106,11 @@ export async function generateExperience(request:PlanRequest,job:Job,deps:Genera
    const output=await dispatchTool(plan,'compose_scene',source.revision===1?'setup':'builder_revision',
     args=>deps.model('SceneSpec',structuredClone({...input,tool_arguments:args}),builderInstructions,signal,'scene_builder'));
    check();candidate=output;
-   validate('SceneSpec',output);validateProviderOutput('SceneSpec',output);
    const corrected=deterministicCorrections(canonicalSceneReferences(plan,output,audio));
-   const compiled=compileScene(plan,corrected.scene,audio);
+   const staged=materializeStageGraph(experience,plan,corrected.scene);
+   if(staged.issues.length)throw new AppError('INVALID_MODEL_OUTPUT','Stage graph requires route geometry',staged.issues);
+   validate('SceneSpec',staged.scene);validateProviderOutput('SceneSpec',staged.scene);
+   const compiled=compileScene(plan,staged.scene,audio);
    if(compiled.construction_report&&corrected.corrections.length)compiled.construction_report.corrections=corrected.corrections;
    const errors=[...sceneIssues(plan,compiled,audio),...experienceSceneIssues(experience,plan,compiled)];
    if(errors.length)throw new AppError('INVALID_MODEL_OUTPUT','Scene requires repair',errors);
@@ -122,9 +125,10 @@ export async function generateExperience(request:PlanRequest,job:Job,deps:Genera
     const issues:ValidationIssue[]=[];
     try {
      validate('SceneSpec',candidate);
-     try {compileScene(plan,deterministicCorrections(canonicalSceneReferences(plan,candidate,audio)).scene,audio);}
+     const prepared=deterministicCorrections(canonicalSceneReferences(plan,candidate,audio)).scene;const staged=materializeStageGraph(experience,plan,prepared);if(staged.issues.length)issues.push(...staged.issues);
+     issues.push(...experienceSceneIssues(experience,plan,staged.scene));
+     try {compileScene(plan,staged.scene,audio);}
      catch(constructionError){if(constructionError instanceof AppError)issues.push(...constructionError.issues);else throw constructionError;}
-     issues.push(...experienceSceneIssues(experience,plan,candidate));
     } catch(shapeError){if(shapeError instanceof AppError)issues.push(...shapeError.issues);else throw shapeError;}
     const combined=new Map<string,ValidationIssue>();
     for(const issue of [...issues,...error.issues]){
@@ -152,7 +156,9 @@ export async function generateExperience(request:PlanRequest,job:Job,deps:Genera
    check();
    validateProviderOutput('SceneRepairPatch',patch);
    const patched=applyScenePatch(base,patch as SceneRepairPatch,scope);
-   const compiled=compileScene(plan,patched,audio);
+   const staged=materializeStageGraph(experience,plan,patched);
+   if(staged.issues.length)throw new AppError('INVALID_MODEL_OUTPUT','Stage graph requires route geometry',staged.issues);
+   const compiled=compileScene(plan,staged.scene,audio);
    const errors=[...sceneIssues(plan,compiled,audio),...experienceSceneIssues(experience,plan,compiled)];
    if(errors.length)throw new AppError('INVALID_MODEL_OUTPUT','Scene requires repair',errors);
    scene=compiled; if(scene.construction_report)scene.construction_report.recovery='patched';

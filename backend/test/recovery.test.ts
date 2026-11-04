@@ -27,10 +27,15 @@ function scene(): SceneSpec {
 test('acceptance: tolerable soft defects pass, severe and accumulated defects do not, dilution cannot hide severity', () => {
   const soft = (severity: number, rule = 'zone_fit') => ({ path: '/nodes/x', rule, message: 'm', classification: 'soft' as const, severity });
   assert.equal(evaluateAcceptance([soft(0.4), soft(0.5)]).acceptedSoft.length, 2);
-  assert.ok(evaluateAcceptance([soft(1.4)]).reasons.length > 0);
-  assert.ok(evaluateAcceptance([soft(0.9), soft(0.9), soft(0.9), soft(0.9)]).reasons.length > 0, 'category budget');
-  assert.ok(evaluateAcceptance([soft(0.9, 'zone_fit'), soft(0.9, 'zone_fit'), soft(0.9, 'zone_fit'), soft(0.8, 'other')]).reasons.length >= 0);
+  // Default permissive policy: moderate cosmetic defects and ANY count of
+  // small ones are diagnostics, not rejection; gross defects stay hard.
+  assert.equal(evaluateAcceptance([soft(1.4)]).acceptedSoft.length, 1, 'permissive default accepts moderate cosmetic defects');
+  assert.equal(evaluateAcceptance([soft(0.9), soft(0.9), soft(0.9), soft(0.9), soft(0.9), soft(0.9)]).acceptedSoft.length, 6, 'no arbitrary count budget');
+  assert.ok(evaluateAcceptance([soft(2.5)]).reasons.length > 0, 'gross defect exceeds the permissive severity cap');
   assert.ok(evaluateAcceptance([soft(3), ...Array.from({ length: 40 }, () => soft(0.01, 'other'))]).reasons.length > 0, 'valid content cannot dilute severity');
+  // The developer standard mode keeps the stricter historical budgets.
+  assert.ok(evaluateAcceptance([soft(1.4)], 'standard').reasons.length > 0);
+  assert.ok(evaluateAcceptance([soft(0.9), soft(0.9), soft(0.9), soft(0.9)], 'standard').reasons.length > 0, 'standard category budget');
   assert.ok(zoneSeverity([0.3], [20]) <= 1 && zoneSeverity([2], [20]) > 1);
 });
 
