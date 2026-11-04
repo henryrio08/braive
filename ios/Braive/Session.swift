@@ -757,7 +757,7 @@ import SwiftUI
             self.message = "Reconnecting to your Mac. Scene preparation will continue."
           }
           guard owner == sessionID, rev == revision, !Task.isCancelled else { return }
-          message = j["stage"].text + " · Say hey builder to add details"
+          message = j["stage"].text.isEmpty ? "Preparing your scene…" : j["stage"].text
           if j["status"].text == "failed" {
             throw NSError(
               domain: "Generation", code: 1,
@@ -798,6 +798,9 @@ import SwiftUI
                 _ = try await api.call(
                   "/v1/jobs/" + jobID + "/validation", JSON(["message": error.localizedDescription]),
                   timeout: max(0.1, min(8, generationDeadline - ProcessInfo.processInfo.systemUptime)))
+                // The backend grants the repair its own bounded window; keep
+                // polling for its result instead of expiring mid-repair.
+                generationDeadline = max(generationDeadline, ProcessInfo.processInfo.systemUptime + 300)
               } catch {
                 // The repair may already be running if its acknowledgement was lost.
                 // Poll its existing job; never blindly repeat a paid repair request.

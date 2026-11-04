@@ -403,7 +403,7 @@ extension UIColor {
     scene.background.contents = UIColor(hex: spec["atmosphere"]["background_color"].text)
     scene.fogColor = UIColor(hex: spec["atmosphere"]["background_color"].text)
     scene.fogStartDistance = 5
-    scene.fogEndDistance = max(8, (spec["view_distance_meters"].number == nil ? 70 : viewDistance) * (1 - spec["atmosphere"]["fog_density"].value))
+    scene.fogEndDistance = max(30, (spec["view_distance_meters"].number == nil ? 70 : viewDistance) * (1 - spec["atmosphere"]["fog_density"].value))
     let light = SCNNode()
     light.light = SCNLight()
     light.light?.type = .ambient

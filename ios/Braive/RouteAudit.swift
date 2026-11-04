@@ -7,6 +7,15 @@ import SceneKit
   static func setCollisionRole(_ role: String, for node: SCNNode) {
     collisionRoles.setObject(role as NSString, forKey: node)
   }
+  /// Nearest named ancestor identifies the authored node a repair should move.
+  static func blockerName(_ node: SCNNode) -> String {
+    var cursor: SCNNode? = node
+    while let n = cursor {
+      if let name = n.name, !name.isEmpty { return name }
+      cursor = n.parent
+    }
+    return "unnamed"
+  }
   static func check(root: SCNNode, points: [SCNVector3], walking: Bool,
     ignored: [SCNNode] = [], radius: Float = 0.25, eyeHeight: Float = 1.6) throws {
     guard points.count > 1 else { return }
@@ -32,8 +41,9 @@ import SceneKit
       // barriers between sample positions are not missed by point-only checks.
       for y in [Float(0.15)-eyeHeight, -eyeHeight/2, Float(0)] {
         for (x,z): (Float,Float) in [(0,0),(radius,0),(-radius,0),(0,radius),(0,-radius)] {
-          if !hits(SCNVector3(a.x+x,a.y+y,a.z+z),SCNVector3(b.x+x,b.y+y,b.z+z)).isEmpty {
-            throw ScenePreflight.error("Route clearance failed on segment \(i-1): body intersects solid geometry")
+          let blockers = hits(SCNVector3(a.x+x,a.y+y,a.z+z),SCNVector3(b.x+x,b.y+y,b.z+z))
+          if !blockers.isEmpty {
+            throw ScenePreflight.error("Route clearance failed on segment \(i-1): body intersects solid geometry (node \(blockerName(blockers[0].node)))")
           }
         }
       }
