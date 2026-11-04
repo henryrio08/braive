@@ -228,6 +228,10 @@ export function outputSchema(name: string): any {
  if(name==='SceneSpec'&&defs.ScenarioStep)defs.ScenarioStep.properties.actions={type:'array',maxItems:0};
  if(name==='SceneSpec')root.properties.interactions={type:'array',maxItems:0};
  if(name==='SceneSpec'&&defs.SceneNode)defs.SceneNode.required=[...new Set([...defs.SceneNode.required,'collision_role','support_node_id'])];
+ if(name==='SceneSpec'&&defs.Geometry){
+  const asset=(defs.Geometry.oneOf??defs.Geometry.anyOf)?.find((variant:any)=>variant.properties?.kind?.const==='asset');
+  if(asset)asset.properties.asset_id={type:'string',minLength:1,maxLength:100,enum:[...assetIDs]};
+ }
  if(name==='SceneSpec')delete root.properties.construction_report; // Compiler-owned output only.
  // Drop definitions that became unreachable after restricting newly authored
  // guided output. Legacy action/choice graphs remain in the saved wire schema.
