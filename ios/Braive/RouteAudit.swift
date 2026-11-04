@@ -32,8 +32,23 @@ import SceneKit
       return false
     }
     func hits(_ a: SCNVector3, _ b: SCNVector3) -> [SCNHitTestResult] {
-      root.hitTestWithSegment(from:a,to:b,options:[SCNHitTestOption.backFaceCulling.rawValue:false,SCNHitTestOption.ignoreHiddenNodes.rawValue:true,SCNHitTestOption.clipToZRange.rawValue:false,SCNHitTestOption.searchMode.rawValue:SCNHitTestSearchMode.all.rawValue])
-        .filter { !ignoredHit($0.node) }
+      let start = SIMD3<Float>(a.x, a.y, a.z)
+      let delta = SIMD3<Float>(b.x, b.y, b.z) - start
+      let length = simd_length(delta)
+      guard length > 0 else { return [] }
+      let direction = delta / length
+      // SceneKit clipping can miss nodes moved during stage review. Query
+      // without it, then keep only hits between the probe endpoints.
+      return root.hitTestWithSegment(from:a,to:b,options:[
+        SCNHitTestOption.backFaceCulling.rawValue:false,
+        SCNHitTestOption.ignoreHiddenNodes.rawValue:true,
+        SCNHitTestOption.clipToZRange.rawValue:false,
+        SCNHitTestOption.searchMode.rawValue:SCNHitTestSearchMode.all.rawValue
+      ]).filter { hit in
+        let point = root.convertPosition(hit.worldCoordinates, from:nil)
+        let distance = simd_dot(SIMD3<Float>(point.x, point.y, point.z) - start, direction)
+        return distance >= -0.0001 && distance <= length + 0.0001 && !ignoredHit(hit.node)
+      }
     }
     for i in 1..<points.count {
       let a=points[i-1], b=points[i]
@@ -81,9 +96,16 @@ import SceneKit
     let floor=SCNNode(geometry:SCNBox(width:6,height:0.1,length:8,chamferRadius:0));floor.position=SCNVector3(0,-0.05,-3);root.addChildNode(floor)
     let points=[SCNVector3(0,1.6,0),SCNVector3(0,1.6,-5)]
     try check(root:root,points:points,walking:true)
-    let wall=SCNNode(geometry:SCNBox(width:4,height:3,length:0.02,chamferRadius:0));wall.position=SCNVector3(0,1.5,-2);root.addChildNode(wall)
+    let wall=SCNNode(geometry:SCNBox(width:4,height:3,length:0.02,chamferRadius:0))
+    wall.name="route_audit_wall"
+    wall.position=SCNVector3(0,1.5,-7)
+    root.addChildNode(wall)
+    try check(root:root,points:points,walking:true)
+
+    wall.position=SCNVector3(0,1.5,-2)
     var rejected=false
-    do { try check(root:root,points:points,walking:true) } catch { rejected=true }
+    do { try check(root:root,points:points,walking:true) }
+    catch { rejected=error.localizedDescription.contains("node route_audit_wall") }
     guard rejected else { throw ScenePreflight.error("Route audit accepted a thin blocking wall") }
     wall.removeFromParentNode();floor.removeFromParentNode();rejected=false
     do { try check(root:root,points:points,walking:true) } catch { rejected=true }
