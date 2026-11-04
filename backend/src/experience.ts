@@ -87,6 +87,16 @@ export function validateExperience(value:unknown): asserts value is ExperienceDr
   if(motion!==draft.experience.requires_motion)fail('/experience/requires_motion','motion','Viewer movement intent must agree with requires_motion');
   let hasConversation=false;
   for(const [index,stage] of draft.experience.stages.entries()) {
+    // Only flag clear stationary cues. Let the editor reconcile the intent
+    // with the request rather than silently deleting travel from the plan.
+    const goal=stage.goal.trim();
+    const explicitlyStationary=/^(?:stay|remain) (?:stationary|in place)(?: throughout (?:this|the) stage)?[.!]?$/i.test(goal);
+    const settlingAfloat=/^settle while floating\b/i.test(goal)&&/\bstable floating viewpoint\b/i.test(stage.sensory_brief)&&
+      !/\b(?:then|before|swim|travel|drift|forward|towards?|across|along)\b/i.test(goal);
+    if(stage.movement!=='none'&&(explicitlyStationary||settlingAfloat)){
+      fail(`/experience/stages/${index}/movement`,'motion_intent',
+        'The goal and sensory brief describe staying in place, but movement specifies viewer travel. Use none for a stationary stage, or describe the actual intended travel in both fields. Preserve travel required by the request in the appropriate stages.');
+    }
     const target=stage.conversation_character_index;
     if(target!==null){
       hasConversation=true;

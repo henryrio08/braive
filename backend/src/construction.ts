@@ -28,9 +28,37 @@ export function geometryBounds(node:SceneNode):Bounds {
  return {min:half.map(v=>-v) as Vec3,max:half};
 }
 
+/** Size independent, zone-spanning slabs from the inset they declare. */
+function fitZoneSlabs(scene:SceneSpec,cp:ConstructionPlan,nodes:Map<string,SceneNode>,controlled:Set<string>) {
+ const zones=new Map(cp.zones.map(zone=>[zone.id,zone]));
+ const anchored=new Set(cp.anchors.map(anchor=>anchor.node_id));
+ const linked=new Set(scene.nodes.flatMap(node=>[node.parent_id,node.support_node_id]));
+ for(const relation of cp.relations){
+  const {kind,subject_id,target_id,clearance,tolerance,required}=relation;
+  if(kind!=='within'||!required||clearance<=tolerance)continue;
+  const node=nodes.get(subject_id),zone=zones.get(target_id);
+  if(!zone||node?.role!=='environment'||node.geometry.kind!=='box'||node.animation!=='none')continue;
+  if(node.parent_id!==null||node.support_node_id||node.rotation_radians.some(angle=>angle!==0)||
+    anchored.has(node.id)||linked.has(node.id)||controlled.has(node.id))continue;
+  if(cp.relations.some(other=>other!==relation&&(other.subject_id===node.id||other.target_id===node.id)))continue;
+
+  const [width,height,depth]=node.geometry.size.map((size,axis)=>size*node.scale[axis]);
+  const [insetWidth,insetDepth]=[zone.size[0]-2*clearance,zone.size[2]-2*clearance];
+  if(!(height>0&&height<Math.min(insetWidth,insetDepth)))continue;
+  // Only adjust boxes that match the original horizontal footprint. Leave
+  // arbitrary placements to the normal validator and keep thickness intact.
+  if(Math.abs(width-zone.size[0])>1e-6||Math.abs(depth-zone.size[2])>1e-6||
+    Math.abs(node.position[0]-zone.center[0])>1e-6||Math.abs(node.position[2]-zone.center[2])>1e-6)continue;
+  node.scale=[insetWidth/node.geometry.size[0],node.scale[1],insetDepth/node.geometry.size[2]];
+ }
+}
+
 function constructionSource(source:SceneSpec):SceneSpec {
  if(!source.construction_plan)return source;
  const scene=structuredClone(source),cp=scene.construction_plan!,nodes=new Map(scene.nodes.map(n=>[n.id,n]));
+ const operations=[...scene.events.map(e=>e.operation),...scene.interactions.flatMap(i=>i.choices.flatMap(c=>c.operations)),...(scene.scenario?.steps.flatMap(s=>[...s.start_operations,...s.actions.flatMap(a=>a.operations)])??[])];
+ const controlled=new Set([...(scene.viewer_attached_node_ids??[]),...operations.flatMap(o=>'node_id' in o?[o.node_id]:[])]);
+ fitZoneSlabs(scene,cp,nodes,controlled);
  // The task realization is the author-owned source of focal-object identity.
  if(!scene.nodes.some(n=>n.role==='task_focus')){
   const focus=new Set(cp.requirements.find(r=>r.requirement_id==='task')?.node_ids??[]);
@@ -38,8 +66,6 @@ function constructionSource(source:SceneSpec):SceneSpec {
  }
  // Partition static collections along their actual hierarchy. This changes only
  // assembly bookkeeping: never reparent or move geometry to satisfy metadata.
- const operations=[...scene.events.map(e=>e.operation),...scene.interactions.flatMap(i=>i.choices.flatMap(c=>c.operations)),...(scene.scenario?.steps.flatMap(s=>[...s.start_operations,...s.actions.flatMap(a=>a.operations)])??[])];
- const controlled=new Set([...(scene.viewer_attached_node_ids??[]),...operations.flatMap(o=>'node_id' in o?[o.node_id]:[])]);
  const inheritsControl=(root:string)=>{
   const seen=new Set<string>();let id:string|null=root;
   while(id&&!seen.has(id)){if(controlled.has(id))return true;seen.add(id);id=nodes.get(id)?.parent_id??null;}

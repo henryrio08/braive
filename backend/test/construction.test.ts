@@ -242,6 +242,30 @@ test('within rejects a subject authored outside the target volume',()=>{
  assert.throws(()=>compileConstruction(plan,scene),(e:any)=>e.issues.some((i:any)=>i.rule==='fit'&&i.message.includes('within checks containment only')));
 });
 
+test('zone-spanning environment slabs honor the requested inset without changing height or clearance',()=>{
+ const {plan,scene}=setup();
+ const cp=scene.construction_plan!;
+ const floor=scene.nodes[0];
+ cp.zones[0]={id:'room',center:[0,1,0],size:[20,6,20],kind:'interior'};
+ cp.anchors=[];
+ scene.nodes[1].position=[1,0.5,-3];
+ cp.relations=[{id:'floor_within',kind:'within',subject_id:floor.id,target_id:'room',offset:[0,0,0],clearance:0.5,tolerance:0.2,required:true}];
+
+ const compiled=compileConstruction(plan,scene);
+ assert.deepEqual(compiled.nodes[0].scale,[0.95,1,0.95]);
+ assert.deepEqual(compiled.nodes[0].position,floor.position);
+ assert.equal(compiled.construction_plan!.relations[0].clearance,0.5);
+ assert.deepEqual(compileConstruction(plan,compiled),compiled);
+ assert.deepEqual(floor.scale,[1,1,1]);
+
+ // Off-center and anchored slabs are independently authored placements.
+ floor.position[0]=0.1;
+ assert.throws(()=>compileConstruction(plan,scene),/constraints require repair/);
+ floor.position[0]=0;
+ cp.anchors.push({id:'floor_top',node_id:floor.id,kind:'support',position:[0,0.1,0],footprint:[10,10]});
+ assert.throws(()=>compileConstruction(plan,scene),/constraints require repair/);
+});
+
 test('a swim route ending inside the island remains rejected while an offshore endpoint passes',()=>{
  const blocked=islandSetup('within',[0,0,0]);
  blocked.scene.motion_paths=[{id:'path_swim',purpose:'swim',interpolation:'linear',coordinate_space:'world',points:[{at_seconds:10,position:[0,0.35,-18]},{at_seconds:20,position:[0,0.35,-21.5]}]}] as unknown as SceneSpec['motion_paths'];
