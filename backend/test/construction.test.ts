@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {compileConstruction,constructionRequirements} from '../src/construction.js';
+import {compileConstruction,compileScene,constructionRequirements} from '../src/construction.js';
 import {transform,inverse,point,multiply,identity} from '../src/spatial-math.js';
 import {sceneIssues} from '../src/contracts.js';
 import type {SessionPlan,SceneSpec,SceneNode,AudioPlan} from '../../docs/handoff/contracts.js';
@@ -89,4 +89,38 @@ test('water behavior needs a declared medium region and an actual visual surface
  assert.ok(compileConstruction(plan,scene).construction_report);
  plan.construction_brief.medium_behavior!.participant_motion='swim';
  assert.throws(()=>compileConstruction(plan,scene),(e:any)=>e.issues.some((i:any)=>i.rule==='motion'));
+});
+
+test('construction reports missing parent, support and medium references together with their owners',()=>{
+ const {plan,scene}=setup();scene.nodes[1].parent_id='.';scene.nodes[1].support_node_id='.';
+ scene.construction_plan!.medium_regions=[{id:'air',zone_id:'room',medium:'air',surface_node_id:'.',flow_visual:'none',viewer_path_ids:[]}];
+ assert.throws(()=>compileConstruction(plan,scene),(e:any)=>{
+  assert.ok(e.issues.some((i:any)=>i.path==='/nodes/1/parent_id'&&i.message.includes('table')&&i.message.includes('JSON null')));
+  assert.ok(e.issues.some((i:any)=>i.path==='/nodes/1/support_node_id'&&i.message.includes('table')));
+  assert.ok(e.issues.some((i:any)=>i.path.endsWith('/air/surface_node_id')&&i.message.includes('Omit')));
+  return true;
+ });
+});
+
+test('repair feedback identifies the disconnected assembly member and the unscaled anchor bounds',()=>{
+ const {plan,scene}=setup();scene.nodes[1].scale=[20,1,20];
+ scene.construction_plan!.anchors.push({id:'table_edge',node_id:'table',kind:'entry',position:[8,0,0],footprint:[1,1]});
+ scene.construction_plan!.assemblies[0].member_node_ids.push('floor');
+ assert.throws(()=>compileConstruction(plan,scene),(e:any)=>{
+  assert.ok(e.issues.some((i:any)=>i.path==='/construction_plan/anchors/1/position'&&i.message.includes('table_edge on table')&&i.message.includes('unscaled geometry bounds')));
+  assert.ok(e.issues.some((i:any)=>i.path==='/construction_plan/assemblies/0/member_node_ids/1'&&i.message.includes('member floor')&&i.message.includes('table')));
+  return true;
+ });
+});
+
+test('the shared repair receives independent scene failures even when construction fails first',()=>{
+ const {plan,scene}=setup();scene.nodes[1].parent_id='missing';scene.nodes[1].role='environment';
+ const original=structuredClone(scene);
+ assert.throws(()=>compileScene(plan,scene,{session_id:plan.session_id,revision:1,layers:[]} as unknown as AudioPlan),(e:any)=>{
+  assert.ok(e.issues.some((i:any)=>i.path==='/nodes/1/parent_id'&&i.message.includes('table')));
+  assert.ok(e.issues.some((i:any)=>i.rule==='task_focus'));
+  assert.equal(e.issues.filter((i:any)=>i.path==='/nodes/1/parent_id'&&i.rule==='reference').length,1);
+  return true;
+ });
+ assert.deepEqual(scene,original);
 });

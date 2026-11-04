@@ -1,7 +1,7 @@
 import {createHash} from 'node:crypto';
 import {assetManifest} from './assets.js';
-import {AppError} from './contracts.js';
-import type {SceneSpec,SceneNode,SessionPlan,ValidationIssue,ConstructionPlan} from '../../docs/handoff/contracts.js';
+import {AppError,sceneIssues} from './contracts.js';
+import type {SceneSpec,SceneNode,SessionPlan,ValidationIssue,ConstructionPlan,AudioPlan} from '../../docs/handoff/contracts.js';
 import {identity,multiply,inverse,point,transform,transformedBounds,contains,distance,type Vec3,type Bounds} from './spatial-math.js';
 
 export type ConstructionRequirement={id:string;kind:'task'|'cast'|'prop'|'stage'|'motion'|'boundary'|'outcome';target:string;description:string};
@@ -28,6 +28,23 @@ export function geometryBounds(node:SceneNode):Bounds {
  return {min:half.map(v=>-v) as Vec3,max:half};
 }
 
+/** A construction failure must not hide independent scene errors from the one repair. */
+export function compileScene(plan:SessionPlan,source:SceneSpec,audio:AudioPlan):SceneSpec {
+ let compiled:SceneSpec;
+ try {compiled=compileConstruction(plan,source);}
+ catch(error){
+  if(!(error instanceof AppError)||error.code!=='INVALID_MODEL_OUTPUT')throw error;
+  const issues=new Map<string,ValidationIssue>();
+  for(const issue of [...error.issues,...sceneIssues(plan,source,audio)]){
+   const key=issue.path+'|'+issue.rule;if(!issues.has(key))issues.set(key,issue);
+  }
+  throw new AppError(error.code,error.message,[...issues.values()],error.status);
+ }
+ const issues=sceneIssues(plan,compiled,audio);
+ if(issues.length)throw new AppError('INVALID_MODEL_OUTPUT','Scene requires repair',issues);
+ return compiled;
+}
+
 /** Lower the authored spatial relationships into the existing native scene.
  * IDs, cast, stages, intensity and duration are never regenerated here. */
 export function compileConstruction(plan:SessionPlan,source:SceneSpec):SceneSpec {
@@ -36,6 +53,10 @@ export function compileConstruction(plan:SessionPlan,source:SceneSpec):SceneSpec
  const fail=(path:string,rule:string,message:string,required=true)=>(required?issues:warnings).push({path,rule,message});
  const map=<T extends {id:string}>(items:T[],path:string)=>{const result=new Map(items.map(i=>[i.id,i]));if(result.size!==items.length)fail(path,'unique','Duplicate construction IDs');return result;};
  const nodes=map(scene.nodes,'/nodes'),zones=map(cp.zones,'/construction_plan/zones'),anchors=map(cp.anchors,'/construction_plan/anchors');
+ for(const [index,node] of scene.nodes.entries()){
+  if(node.parent_id!==null&&!nodes.has(node.parent_id))fail(`/nodes/${index}/parent_id`,'reference',`${node.id} names missing parent ${JSON.stringify(node.parent_id)}. Use JSON null for a world root, or an existing parent node ID with local child coordinates.`);
+  if(node.support_node_id!=null&&!nodes.has(node.support_node_id))fail(`/nodes/${index}/support_node_id`,'reference',`${node.id} names missing support ${JSON.stringify(node.support_node_id)}. Use JSON null when no support applies, or an existing node ID.`);
+ }
  const spatialIDs=[...nodes.keys(),...zones.keys(),...anchors.keys()];
  if(new Set(spatialIDs).size!==spatialIDs.length||spatialIDs.includes('viewer'))fail('/construction_plan','unique','Node, zone and anchor IDs must be distinct and cannot use the reserved viewer ID');
  const paths=new Map((scene.motion_paths??[]).map(p=>[p.id,p]));
@@ -47,7 +68,8 @@ export function compileConstruction(plan:SessionPlan,source:SceneSpec):SceneSpec
  if(new Set(regions.map(r=>r.id)).size!==regions.length)fail('/construction_plan/medium_regions','unique','Medium region IDs must be unique');
  for(const region of regions){
   const at='/construction_plan/medium_regions/'+region.id,node=region.surface_node_id?nodes.get(region.surface_node_id):undefined;
-  if(!zones.has(region.zone_id)||region.surface_node_id&&!node)fail(at,'reference','Medium zone or surface node is missing');
+  if(!zones.has(region.zone_id))fail(at+'/zone_id','reference',`${region.id} names missing zone ${JSON.stringify(region.zone_id)}`);
+  if(region.surface_node_id&&!node)fail(at+'/surface_node_id','reference',`${region.id} names missing surface node ${JSON.stringify(region.surface_node_id)}. Omit surface_node_id when no surface applies; do not use a placeholder.`);
   if(region.medium==='water'&&node?.material.surface?.profile!=='water')fail(at,'medium','Water surface node must select the water profile; this is a visual surface, not fluid physics');
   if(region.flow_visual==='ripples'&&(!node||region.medium!=='water'))fail(at,'medium','Ripples require an explicit water surface node');
   if(region.flow_visual==='foliage_flutter'&&region.medium!=='air')fail(at,'medium','Foliage flutter is an air visual cue');
@@ -84,19 +106,19 @@ export function compileConstruction(plan:SessionPlan,source:SceneSpec):SceneSpec
   const n=nodes.get(a.node_id);
   if(!n){fail(`/construction_plan/anchors/${index}`,'reference','Anchor node is missing');continue;}
   const bounds=geometryBounds(n);
-  if(!contains(bounds,{min:a.position,max:a.position},0.03))fail(`/construction_plan/anchors/${index}`,'bounds','Anchor lies outside measured local geometry bounds; do not guess a seat from standing height');
+  if(!contains(bounds,{min:a.position,max:a.position},0.03))fail(`/construction_plan/anchors/${index}/position`,'bounds',`${a.id} on ${n.id}: local position ${JSON.stringify(a.position)} is outside unscaled geometry bounds ${JSON.stringify(bounds)}. Node scale ${JSON.stringify(n.scale)} is applied afterward; express the anchor in geometry-local coordinates. Do not guess a seat from standing height.`);
   const spans=bounds.max.map((v,i)=>v-bounds.min[i]);
   const footprint=n.geometry.kind==='plane'?[spans[0],spans[1]]:[spans[0],spans[2]];
   if(a.footprint[0]>footprint[0]+0.03||a.footprint[1]>footprint[1]+0.03)fail(`/construction_plan/anchors/${index}`,'fit','Anchor footprint exceeds its measured object');
  }
  const assigned=new Set<string>();
- for(const assembly of cp.assemblies){
+ for(const [assemblyIndex,assembly] of cp.assemblies.entries()){
   if(!nodes.has(assembly.root_node_id)||!zones.has(assembly.zone_id)||assembly.requirement_ids.some(id=>!expected.has(id)))fail('/construction_plan/assemblies','reference','Assembly root, zone or requirement is missing');
-  for(const id of assembly.member_node_ids){
+  for(const [memberIndex,id] of assembly.member_node_ids.entries()){
    if(assigned.has(id))fail('/construction_plan/assemblies','unique','A node belongs to multiple assemblies');assigned.add(id);
    let current:string|null=id;const seen=new Set<string>();
    while(current!==null&&current!==assembly.root_node_id&&!seen.has(current)){seen.add(current);current=nodes.get(current)?.parent_id??null;}
-   if(current!==assembly.root_node_id)fail('/construction_plan/assemblies','hierarchy','Assembly members must be descendants of their stable root');
+   if(current!==assembly.root_node_id)fail(`/construction_plan/assemblies/${assemblyIndex}/member_node_ids/${memberIndex}`,'hierarchy',`${assembly.id}: member ${id} is not ${assembly.root_node_id} or its descendant. Actual parent is ${JSON.stringify(nodes.get(id)?.parent_id)}. Declare a real parent chain with local child transforms, or a separate assembly for an independent world root.`);
   }
  }
  for(const node of scene.nodes)if(node.role!=='environment'&&!assigned.has(node.id))fail('/construction_plan/assemblies','coverage','Task objects, props and characters need explicit assembly membership: '+node.id);

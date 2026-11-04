@@ -5,7 +5,7 @@ import {canonicalSceneReferences} from './scene-references.js';
 import {assertCurrentDialogue,dialogueContext} from './dialogue.js';
 import {meshCatalog,assetManifest,generationCharacterIDs} from './assets.js';
 import express from 'express';
-import {compileConstruction,constructionRequirements} from './construction.js';
+import {compileScene,constructionRequirements} from './construction.js';
 import {dispatchTool,plannedTool} from './tool-dispatch.js';
 import { createServer } from 'node:http';
 import { randomUUID, timingSafeEqual } from 'node:crypto';
@@ -77,7 +77,7 @@ async function generate(request:PlanRequest, job:Job, signal:AbortSignal) {
    audio??=await dispatchTool(plan!,'plan_audio',generationPhase,async args=>model('AudioPlan',{plan,available_assets:assets,tool_arguments:args},'Select only supplied audio assets. Required whoosh. Keep narrative speech audible. Match plan revision.',signal));
    scene=await dispatchTool(plan!,'compose_scene',generationPhase,async args=>model('SceneSpec',{plan,requirements:constructionRequirements(plan!),capabilities,audio,tool_arguments:args,previous_scene:authoredScene(scene??previous?.scene),issues},authoring+" Use registered GLBs for characters and props; primitives for environment/task geometry. Preserve each Character.asset_id exactly and copy Character.color_hex to Material.color. Use node animation sit for seated characters; match supporting chairs to the actual pose. Preserve the approved friendly style and comfortable spacing. Place normalized asset bases at floor height. No unregistered IDs. Neutral behavior uses app-owned joint motions, not invented GLB animation clips. Return compact JSON with concise descriptions. Prefer 30-60 scene nodes when sufficient for all approved participants, setting, depth and interactions; never remove task semantics to meet that guideline.",signal,true));
    scene=canonicalSceneReferences(plan!,scene!,audio!);
-   scene=compileConstruction(plan!,scene!);
+   scene=compileScene(plan!,scene!,audio!);
    const errors=sceneIssues(plan!,scene!,audio!);
    for(const l of audio!.layers) if(!capabilities.audio_assets.includes(l.asset_id)) errors.push({path:'/audio/layers',rule:'asset',message:'Unknown audio asset'});
    if(errors.length) throw new AppError('INVALID_MODEL_OUTPUT','Scene requires repair',errors);
@@ -131,7 +131,7 @@ app.post('/v1/jobs/:id/validation',async(req,res,next)=>{
   try {
    const {plan,audio,scene}=job.result;
    const authored=canonicalSceneReferences(plan,await model('SceneSpec',{plan,audio,requirements:constructionRequirements(plan),previous_scene:authoredScene(scene),capabilities,issues:[{path:'/nodes',rule:'native_preflight',message:req.body.message}]},authoring,controller.signal,true),audio);
-   const repaired=compileConstruction(plan,authored);
+   const repaired=compileScene(plan,authored,audio);
    const errors=sceneIssues(plan,repaired,audio);if(errors.length) throw new AppError('INVALID_MODEL_OUTPUT','Native repair invalid',errors);
    controller.signal.throwIfAborted();if(revisions.get(job.session_id)!==job.revision)return;
    job.result={plan,audio,scene:repaired};approved.set(job.session_id,job.result);job.status='succeeded';job.stage='Ready for device validation';

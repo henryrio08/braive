@@ -1,6 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {outputSchema,validate} from '../src/contracts.js';
+import {outputSchema,sceneOutputSchema,validate} from '../src/contracts.js';
+import type {SessionPlan,AudioPlan} from '../../docs/handoff/contracts.js';
 import {assetIDs} from '../src/assets.js';
 import Ajv from 'ajv';
 
@@ -39,4 +40,36 @@ test('repair feedback identifies the missing and unexpected schema fields',()=>{
  assert.throws(()=>validate('Material',{invented:1}),(e:any)=>
   e.issues.some((i:any)=>i.message.includes('missingProperty')&&i.message.includes('color'))&&
   e.issues.some((i:any)=>i.message.includes('additionalProperty')&&i.message.includes('invented')));
+});
+
+test('generated reference fields reject dot placeholders, including nested construction data',()=>{
+ const schema=outputSchema('SceneSpec');
+ const ajv=new (Ajv as any)({strict:false});
+ const parent=ajv.compile(schema.$defs.SceneNode.properties.parent_id);
+ assert.equal(parent(null),true);assert.equal(parent('assembly_root'),true);
+ assert.equal(parent('.'),false);assert.equal(parent(''),false);
+ const regions=ajv.compile({$defs:schema.$defs,...schema.$defs.ConstructionPlan.properties.medium_regions});
+ const air={id:'air',zone_id:'room',medium:'air',flow_visual:'none',viewer_path_ids:[]};
+ assert.equal(regions([air]),true);
+ assert.equal(regions([{...air,surface_node_id:'.'}]),false);
+ assert.equal(regions([{...air,viewer_path_ids:['.']}]),false);
+});
+
+test('scene output restricts known prop, character, cue and stage bindings to the approved plan',()=>{
+ const plan={session_id:'6c7aca92-2745-4207-bd82-2681981f873b',revision:3,props:['Work table'],characters:[{id:'host'}],experience:{stages:[{id:'approach'},{id:'done'}]}} as unknown as SessionPlan;
+ const audio={layers:[{id:'room_bed'}]} as unknown as AudioPlan;
+ const schema=sceneOutputSchema(plan,audio),ajv=new (Ajv as any)({strict:false});
+ for(const [property,valid] of [[schema.$defs.SceneNode.properties.prop_name,'Work table'],[schema.$defs.ScenarioStep.properties.conversation_target,'host'],[schema.$defs.ScenarioStep.properties.id,'approach']] as [any,string][]){
+  const check=ajv.compile(property);assert.equal(check(valid),true);assert.equal(check('.'),false);assert.equal(check('invented'),false);
+ }
+ const operations=ajv.compile({$defs:schema.$defs,$ref:'#/$defs/WorldOperation'});
+ assert.equal(operations({type:'play_sound',cue_id:'room_bed'}),true);
+ assert.equal(operations({type:'play_sound',cue_id:'forest'}),false);
+ assert.equal(operations({type:'character_action',character_id:'host',behavior:'speak'}),true);
+ assert.equal(operations({type:'character_action',character_id:'invented',behavior:'speak'}),false);
+ const solo=sceneOutputSchema({...plan,props:[],characters:[]},{...audio,layers:[]});
+ assert.equal(solo.$defs.SceneNode.properties.prop_name,undefined);
+ assert.equal(solo.$defs.ScenarioStep.properties.conversation_target,undefined);
+ assert.ok(solo.$defs.WorldOperation.oneOf.every((v:any)=>!['play_sound','character_action'].includes(v.properties.type.const)));
+ assert.ok(outputSchema('SceneSpec').$defs.SceneNode.properties.prop_name); // No mutation of saved or other request schemas.
 });

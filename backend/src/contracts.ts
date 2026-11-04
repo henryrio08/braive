@@ -232,6 +232,25 @@ export function outputSchema(name: string): any {
   const asset=(defs.Geometry.oneOf??defs.Geometry.anyOf)?.find((variant:any)=>variant.properties?.kind?.const==='asset');
   if(asset)asset.properties.asset_id={type:'string',minLength:1,maxLength:100,enum:[...assetIDs]};
  }
+ // Newly authored identifiers must name something. Nullable links use real null;
+ // omitted optional links must not become punctuation-only placeholder strings.
+ if(name==='SceneSpec'){
+  const identifier=(schema:any)=>{
+   if(!schema?.enum&&!schema?.format&&(schema?.type==='string'||Array.isArray(schema?.type)&&schema.type.includes('string'))){
+    schema.minLength=Math.max(1,schema.minLength??0);
+    schema.pattern='^[A-Za-z0-9_]';
+   }
+  };
+  const identifiers=(definition:any):void=>{
+   if(!definition||typeof definition!=='object')return;
+   for(const [key,property] of Object.entries(definition.properties??{}) as [string,any][]){
+    if(key==='id'||key.endsWith('_id')||key==='conversation_target')identifier(property);
+    if(key.endsWith('_ids'))identifier(property.items);
+   }
+   for(const child of Object.values(definition))identifiers(child);
+  };
+  identifiers(root);identifiers(defs);
+ }
  if(name==='SceneSpec')delete root.properties.construction_report; // Compiler-owned output only.
  // Drop definitions that became unreachable after restricting newly authored
  // guided output. Legacy action/choice graphs remain in the saved wire schema.
@@ -246,4 +265,30 @@ export function outputSchema(name: string): any {
  }
  visit(root);
  return {...root,$defs:Object.fromEntries([...reachable].map(id=>[id,defs[id]]))};
+}
+
+/** Bind references already owned by the approved plan instead of asking the builder to invent them. */
+export function sceneOutputSchema(plan:SessionPlan,audio:AudioPlan):any {
+ const schema=outputSchema('SceneSpec'),defs=schema.$defs;
+ schema.properties.session_id={type:'string',const:plan.session_id};
+ schema.properties.revision={type:'integer',const:plan.revision};
+ const bind=(properties:any,key:string,values:string[])=>{
+  if(values.length)properties[key]={type:'string',enum:[...new Set(values)]};
+  else delete properties[key];
+ };
+ bind(defs.SceneNode.properties,'prop_name',plan.props??[]);
+ const characters=plan.characters.map(c=>c.id);
+ bind(defs.ScenarioStep.properties,'conversation_target',characters);
+ if(plan.experience?.stages.length){
+  bind(defs.ScenarioStep.properties,'id',plan.experience.stages.map(s=>s.id));
+  defs.ScenarioSpec.properties.initial_step_id={type:'string',const:plan.experience.stages[0].id};
+ }
+ const operations=defs.WorldOperation.oneOf??defs.WorldOperation.anyOf;
+ for(const [kind,key,ids] of [['character_action','character_id',characters],['play_sound','cue_id',audio.layers.map(l=>l.id)]] as [string,string,string[]][]){
+  const index=operations.findIndex((variant:any)=>variant.properties?.type?.const===kind);
+  if(index<0)continue;
+  if(ids.length)bind(operations[index].properties,key,ids);
+  else operations.splice(index,1);
+ }
+ return schema;
 }
