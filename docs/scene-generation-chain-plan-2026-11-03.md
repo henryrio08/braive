@@ -1,5 +1,7 @@
 # Scene-generation chain revision plan — November 3, 2026
 
+Implementation follow-up: [scene-generation-chain.md](scene-generation-chain.md) describes the implemented three-call path and verification limits. The proposal below preserves the design rationale; inventory filtering and a new compact scene representation remain separate options.
+
 Proposal for the current native Braive product. The recommended default is **experience author → independent experience editor → spatial builder → deterministic compilation → native validation**. Use three generation calls: Spark, a fresh Spark call, then Wonder. The editor replaces the current standalone audio-selection call once local audio-plan assembly is implemented.
 
 This design separates authoring from evaluation. It does not assume that fewer calls mean less reasoning work. The editor adds review work before construction; improved first-pass quality and fewer downstream repairs are hypotheses to measure.

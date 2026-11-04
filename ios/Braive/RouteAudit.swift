@@ -7,6 +7,15 @@ import SceneKit
   static func setCollisionRole(_ role: String, for node: SCNNode) {
     collisionRoles.setObject(role as NSString, forKey: node)
   }
+  /// Nearest named ancestor identifies the authored node a repair should move.
+  static func blockerName(_ node: SCNNode) -> String {
+    var cursor: SCNNode? = node
+    while let n = cursor {
+      if let name = n.name, !name.isEmpty { return name }
+      cursor = n.parent
+    }
+    return "unnamed"
+  }
   static func check(root: SCNNode, points: [SCNVector3], walking: Bool,
     ignored: [SCNNode] = [], radius: Float = 0.25, eyeHeight: Float = 1.6) throws {
     guard points.count > 1 else { return }
@@ -23,8 +32,23 @@ import SceneKit
       return false
     }
     func hits(_ a: SCNVector3, _ b: SCNVector3) -> [SCNHitTestResult] {
-      root.hitTestWithSegment(from:a,to:b,options:[SCNHitTestOption.backFaceCulling.rawValue:false,SCNHitTestOption.ignoreHiddenNodes.rawValue:true,SCNHitTestOption.clipToZRange.rawValue:false,SCNHitTestOption.searchMode.rawValue:SCNHitTestSearchMode.all.rawValue])
-        .filter { !ignoredHit($0.node) }
+      let start = SIMD3<Float>(a.x, a.y, a.z)
+      let delta = SIMD3<Float>(b.x, b.y, b.z) - start
+      let length = simd_length(delta)
+      guard length > 0 else { return [] }
+      let direction = delta / length
+      // SceneKit clipping can miss nodes moved during stage review. Query
+      // without it, then keep only hits between the probe endpoints.
+      return root.hitTestWithSegment(from:a,to:b,options:[
+        SCNHitTestOption.backFaceCulling.rawValue:false,
+        SCNHitTestOption.ignoreHiddenNodes.rawValue:true,
+        SCNHitTestOption.clipToZRange.rawValue:false,
+        SCNHitTestOption.searchMode.rawValue:SCNHitTestSearchMode.all.rawValue
+      ]).filter { hit in
+        let point = root.convertPosition(hit.worldCoordinates, from:nil)
+        let distance = simd_dot(SIMD3<Float>(point.x, point.y, point.z) - start, direction)
+        return distance >= -0.0001 && distance <= length + 0.0001 && !ignoredHit(hit.node)
+      }
     }
     for i in 1..<points.count {
       let a=points[i-1], b=points[i]
@@ -32,8 +56,9 @@ import SceneKit
       // barriers between sample positions are not missed by point-only checks.
       for y in [Float(0.15)-eyeHeight, -eyeHeight/2, Float(0)] {
         for (x,z): (Float,Float) in [(0,0),(radius,0),(-radius,0),(0,radius),(0,-radius)] {
-          if !hits(SCNVector3(a.x+x,a.y+y,a.z+z),SCNVector3(b.x+x,b.y+y,b.z+z)).isEmpty {
-            throw ScenePreflight.error("Route clearance failed on segment \(i-1): body intersects solid geometry")
+          let blockers = hits(SCNVector3(a.x+x,a.y+y,a.z+z),SCNVector3(b.x+x,b.y+y,b.z+z))
+          if !blockers.isEmpty {
+            throw ScenePreflight.error("Route clearance failed on segment \(i-1): body intersects solid geometry (node \(blockerName(blockers[0].node)))")
           }
         }
       }
@@ -45,8 +70,19 @@ import SceneKit
           let t=Float(sample)/Float(count)
           let p=SCNVector3(a.x+(b.x-a.x)*t,a.y+(b.y-a.y)*t,a.z+(b.z-a.z)*t)
           let foot=p.y-eyeHeight
-          let support=hits(SCNVector3(p.x,foot+0.3,p.z),SCNVector3(p.x,foot-0.35,p.z))
-          guard support.contains(where: { $0.worldNormal.y > 0.5 }) else {
+          func supportAt(_ x: Float, _ z: Float) -> [SCNHitTestResult] {
+            hits(SCNVector3(x,foot+0.3,z),SCNVector3(x,foot-0.35,z))
+          }
+          let support=supportAt(p.x,p.z)
+          let centerSupported=support.contains { $0.worldNormal.y > 0.5 }
+          // The backend allows 2 cm of horizontal tolerance at a floor edge.
+          // SceneKit may miss the exact edge of a triangle, so retry nearby
+          // before rejecting the sample. Keep the same vertical support limits.
+          let edge:Float=0.02
+          let edgeSupported=centerSupported || [(edge,0),(-edge,0),(0,edge),(0,-edge)].contains { x,z in
+            supportAt(p.x+x,p.z+z).contains { $0.worldNormal.y > 0.5 }
+          }
+          guard edgeSupported else {
             throw ScenePreflight.error("Route support missing on segment \(i-1) near sample \(sample) (\(support.count) hits, Y normals \(support.map { $0.worldNormal.y }))")
           }
         }
@@ -71,9 +107,21 @@ import SceneKit
     let floor=SCNNode(geometry:SCNBox(width:6,height:0.1,length:8,chamferRadius:0));floor.position=SCNVector3(0,-0.05,-3);root.addChildNode(floor)
     let points=[SCNVector3(0,1.6,0),SCNVector3(0,1.6,-5)]
     try check(root:root,points:points,walking:true)
-    let wall=SCNNode(geometry:SCNBox(width:4,height:3,length:0.02,chamferRadius:0));wall.position=SCNVector3(0,1.5,-2);root.addChildNode(wall)
+    try check(root:root,points:[SCNVector3(0,1.6,1),points[1]],walking:true)
+    var unsupportedEdge=false
+    do { try check(root:root,points:[SCNVector3(0,1.6,1.05),points[1]],walking:true) }
+    catch { unsupportedEdge=error.localizedDescription.contains("Route support missing") }
+    guard unsupportedEdge else { throw ScenePreflight.error("Route audit accepted a start outside the floor edge") }
+    let wall=SCNNode(geometry:SCNBox(width:4,height:3,length:0.02,chamferRadius:0))
+    wall.name="route_audit_wall"
+    wall.position=SCNVector3(0,1.5,-7)
+    root.addChildNode(wall)
+    try check(root:root,points:points,walking:true)
+
+    wall.position=SCNVector3(0,1.5,-2)
     var rejected=false
-    do { try check(root:root,points:points,walking:true) } catch { rejected=true }
+    do { try check(root:root,points:points,walking:true) }
+    catch { rejected=error.localizedDescription.contains("node route_audit_wall") }
     guard rejected else { throw ScenePreflight.error("Route audit accepted a thin blocking wall") }
     wall.removeFromParentNode();floor.removeFromParentNode();rejected=false
     do { try check(root:root,points:points,walking:true) } catch { rejected=true }

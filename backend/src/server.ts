@@ -1,19 +1,23 @@
 import {activeBudget} from './budget.js';
-import {cancelGeneration,releaseGeneration,supersedeGeneration} from './job-lifecycle.js';
+import {automaticSceneRepairEnabled} from './recovery-policy.js';
+import {materializeStageGraph} from './stage-compiler.js';
+import {cancelGeneration,releaseGeneration,supersedeGeneration,repeatedGeneration,claimRepair,repairBlock,releaseRepair,grantRepairWindow,type GenerationAttempt} from './job-lifecycle.js';
 import {PhoneTestWindow} from './phone-test-window.js';
 import {canonicalSceneReferences} from './scene-references.js';
 import {assertCurrentDialogue,dialogueContext} from './dialogue.js';
 import {meshCatalog,assetManifest,generationCharacterIDs} from './assets.js';
 import express from 'express';
-import {compileConstruction,constructionRequirements} from './construction.js';
-import {dispatchTool,plannedTool} from './tool-dispatch.js';
+import {compileScene,constructionRequirements,deterministicCorrections} from './construction.js';
+import {dispatchTool} from './tool-dispatch.js';
+import {generateExperience,authoredScene,experienceSceneIssues,type ApprovedExperience} from './generation-chain.js';
+import {builderInstructions} from './generation-prompts.js';
 import { createServer } from 'node:http';
 import { randomUUID, timingSafeEqual } from 'node:crypto';
-import {writeFileSync} from 'node:fs';
+import {mkdirSync,writeFileSync} from 'node:fs';
 import { WebSocketServer, WebSocket } from 'ws';
-import { AppError, validate, sceneIssues, planIssues } from './contracts.js';
-import { authoring, model, provenance, requestCount, reservedCostUSD, usageLog } from './meta.js';
-import type { Job, PlanRequest, SessionPlan, SceneSpec, AudioPlan } from '../../docs/handoff/contracts.js';
+import { AppError, validate, validateProviderOutput, sceneIssues } from './contracts.js';
+import { model, provenance, requestCount, reservedCostUSD, usageLog } from './meta.js';
+import type { Job, PlanRequest } from '../../docs/handoff/contracts.js';
 const app=express(); app.use(express.json({limit:'2mb'})); app.disable('x-powered-by');
 const secret=process.env.BRAIVE_TOKEN;
 if(!secret || secret.length<20) throw new Error('Set BRAIVE_TOKEN to a random string of at least 20 characters');
@@ -40,68 +44,52 @@ app.use((req,_res,next)=>{
  }
  next();
 });
-const approved=new Map<string,{plan:SessionPlan,scene:SceneSpec,audio:AudioPlan}>();
-const attempts=new Map<string,{deadline:number,repairs:number}>();
+const approved=new Map<string,ApprovedExperience>();
+// Read-only authenticated pairing check; it neither spends nor renews provider access.
+app.get('/v1/connection',(_req,res)=>res.json({status:'ok'}));
+const attempts=new Map<string,GenerationAttempt>();
+const requests=new Map<string,PlanRequest>();
 const generationLimitMs=10*60*1000;
 const jobs=new Map<string,Job>(); const running=new Map<string,AbortController>(); const revisions=new Map<string,number>();
 
 const capabilities={version:'iphone-initial-1',nodes:350,resolved_nodes:1000,primitives:180000,geometry_bytes:24000000,resource_notes:'Draw-call, texture and resident-memory targets require physical-device profiling; they are not runtime-enforced caps.',units:'meters',eye_height:1.6,initial_forward:'negative Z',geometry:['box','plane','sphere','cylinder','asset'],characters:'Use approved soft_adult character.base assets with their original palette. These are intentionally simple, friendly stylized people. Keep comfortable personal space; default at least 2.5m from the viewer unless the user asks for closer contact. Do not use legacy neutral/casual models for new experiences.',voices:['default'],asset_catalog_format:'category.subcategory: [[asset_id, triangle_count], ...]. All assets normalized to meters, base y=0, forward -Z. Use each GLB intact; do not author its mesh or skeleton children.',assets:meshCatalog, audio_assets:['forest','piano','wind','room','crowd','whoosh']};
+capabilities.asset_catalog_format+=' Rest bounds in asset_bounds are authoritative for each asset\'s wide and thin axes (for example, window assets are thin in X and wide in Z at rest, facing sideways); a 90-degree yaw swaps the horizontal extents. Compute the transformed bounds from the rest bounds, your rotation and scale before placing any rotated asset.';
 capabilities.version='iphone-construction-visuals-5';
 Object.assign(capabilities,{construction_version:'1',asset_bounds:Object.fromEntries(assetManifest.map(a=>[a.id,a.bounds_meters])),surface_profiles:['matte','ground','water','glass','foliage'],sky:'App-owned procedural cubemap or solid background; explicit fog distances. No image-generation call or arbitrary shader source.'});
 Object.assign(capabilities,{scenario_engine:'Guided automatic stages: movement and events start on stage entry and advance by time or motion completion. No WALK/SIT/ASK or stage-advance commands. Natural user speech reaches the approved character only in authored conversation_target windows. Quiet scenes need no speaking.',movement:'move_viewer follows an authored motion_paths trajectory in meters; each path starts at the current camera position, points are absolute destinations at increasing positive seconds. Preserve head-tracked orientation. Paths can be interrupted by another path without teleporting; STOP freezes the active clock. walk, run, swim, climb, fall, glide, ride and other trajectories use the same generic system. move_node animates another actor/prop along a path, optionally facing its travel direction.',view_distance_meters:10000});
 Object.assign(capabilities,{character_assets:assetManifest.filter(a=>generationCharacterIDs.has(a.id)).map(a=>({asset_id:a.id,tags:a.tags,resolved_nodes:a.resolved_node_count,triangles:a.approx_tris,behaviors:['idle','listen','speak','walk','run','sit']}))});
-const assets=capabilities.audio_assets.map(id=>({id,kind:'audio',description:`Bundled synthesized ${id}`,origin:'bundled'}));
-function authoredScene(scene:SceneSpec|undefined):Omit<SceneSpec,'construction_report'>|undefined {
- if(!scene)return undefined;
- const {construction_report,...authored}=scene;
- return authored;
-}
 async function generate(request:PlanRequest, job:Job, signal:AbortSignal) {
- let plan:SessionPlan|undefined, scene:SceneSpec|undefined, audio:AudioPlan|undefined, issues:unknown;
- const generationPhase=request.revision===1?'setup':'builder_revision';
  const previous=approved.get(request.session_id)??(request.parent_session_id?approved.get(request.parent_session_id):undefined);
- for(let attempt=0;attempt<2;attempt++) {
-  try {
-   if(!plan) { job.stage='Coordinating your situation'; plan=await model('SessionPlan',{request,capabilities,issues,generation_phase:generationPhase,previous_plan:previous?.plan},`You coordinate Braive situational practice. ${authoring}\nUse current ability and explicit boundaries. Copy session_id/revision. Intro includes exact stop_reminder, at most 18 words total. Choose default voice IDs. Return safety decision before generating any scene. Prefer named registered GLB assets; generate layout and interactions. Choose Character.asset_id from the approved soft_adult IDs. Preserve the source palette. Plan automatic experiences with empty action_ids, natural speech where appropriate, and a separate completed final stage. Do not invent mesh IDs. Procedural primitives are environment/task geometry only; listed empty subcategories remain gaps.`,signal); }
-   if(plan!.safety.decision==='refuse') throw new AppError('INVALID_INPUT',plan!.safety.reason+' '+plan!.safety.practice_preserving_alternative);
-   if(plan!.session_id!==request.session_id || plan!.revision!==request.revision) throw new AppError('INVALID_MODEL_OUTPUT','Coordinator revision mismatch');
-   const pIssues=planIssues(plan!); if(pIssues.length) throw new AppError('INVALID_MODEL_OUTPUT','Invalid coordinator invariants',pIssues);
-   if(!plan!.experience)throw new AppError('INVALID_MODEL_OUTPUT','Coordinator must plan executable experience stages');
-   if(plan!.experience.progression!=='guided'){plan=undefined;throw new AppError('INVALID_MODEL_OUTPUT','New experiences must unfold automatically without voice-command actions');}
-   if(plan!.characters.some(c=>!c.asset_id))throw new AppError('INVALID_MODEL_OUTPUT','Coordinator must choose the registered asset_id for every character');
-   for(const tool of ['plan_audio','compose_scene'] as const)plannedTool(plan!,tool,generationPhase);
-   for(const tool of ['generate_feedback','adapt_session'] as const)plannedTool(plan!,tool,'after_session');
-   job.stage=attempt?'Repairing scene validation issues':'Authoring spatial scene and sound';
-   // Audio first supplies a stable cue manifest to scene authoring.
-   audio??=await dispatchTool(plan!,'plan_audio',generationPhase,async args=>model('AudioPlan',{plan,available_assets:assets,tool_arguments:args},'Select only supplied audio assets. Required whoosh. Keep narrative speech audible. Match plan revision.',signal));
-   scene=await dispatchTool(plan!,'compose_scene',generationPhase,async args=>model('SceneSpec',{plan,requirements:constructionRequirements(plan!),capabilities,audio,tool_arguments:args,previous_scene:authoredScene(scene??previous?.scene),issues},authoring+" Use registered GLBs for characters and props; primitives for environment/task geometry. Preserve each Character.asset_id exactly and copy Character.color_hex to Material.color. Use node animation sit for seated characters; match supporting chairs to the actual pose. Preserve the approved friendly style and comfortable spacing. Place normalized asset bases at floor height. No unregistered IDs. Neutral behavior uses app-owned joint motions, not invented GLB animation clips. Return compact JSON with concise descriptions. Prefer 30-60 scene nodes when sufficient for all approved participants, setting, depth and interactions; never remove task semantics to meet that guideline.",signal,true));
-   scene=canonicalSceneReferences(plan!,scene!,audio!);
-   scene=compileConstruction(plan!,scene!);
-   const errors=sceneIssues(plan!,scene!,audio!);
-   for(const l of audio!.layers) if(!capabilities.audio_assets.includes(l.asset_id)) errors.push({path:'/audio/layers',rule:'asset',message:'Unknown audio asset'});
-   if(errors.length) throw new AppError('INVALID_MODEL_OUTPUT','Scene requires repair',errors);
-   signal.throwIfAborted();
-   if(revisions.get(request.session_id)!==request.revision) throw new AppError('CANCELLED','Superseded revision');
-   job.result={plan:plan!,scene:scene!,audio:audio!};approved.set(request.session_id,job.result); job.status='succeeded'; job.stage='Ready for device validation'; return;
-  } catch(e) {
-   if(process.env.BRAIVE_TEST_MODE==='true' && plan && scene && audio){
-    try{writeFileSync(new URL('../data/last-rejected-scene.json',import.meta.url),JSON.stringify({plan,scene,audio,issues:e instanceof AppError?e.issues:issues??[]},null,2),{mode:0o600});}catch{}
+ const result=await generateExperience(request,job,{
+  model,capabilities,previous,
+  isCurrent:()=>revisions.get(request.session_id)===request.revision,
+  consumeRepair:(kind)=>claimRepair(attempts.get(job.job_id),kind),
+  onRejected:(candidate,error)=>{
+   if(process.env.BRAIVE_TEST_MODE==='true'){
+    try{const payload=JSON.stringify({...candidate,issues:error instanceof AppError?error.issues:[]},null,2);writeFileSync(new URL('../data/last-rejected-scene.json',import.meta.url),payload,{mode:0o600});mkdirSync(new URL('../data/rejected',import.meta.url),{recursive:true});writeFileSync(new URL(`../data/rejected/${job.job_id}-${Date.now()}.json`,import.meta.url),payload,{mode:0o600});}catch{}
    }
-   if(e instanceof AppError && e.code==='INVALID_MODEL_OUTPUT' && attempt===0) { attempts.get(job.job_id)!.repairs++;issues=e.issues.length?e.issues:[{message:e.message}]; if(e.issues.some(i=>i.path.startsWith('/audio/')))audio=undefined; if(plan && (planIssues(plan).length || e.issues.some(i=>i.rule==='tool_schedule'))) {plan=undefined;audio=undefined;scene=undefined;} continue; } throw e;
   }
- }
+ },signal);
+ signal.throwIfAborted();
+ if(revisions.get(request.session_id)!==request.revision)throw new AppError('CANCELLED','Superseded revision');
+ const {experience,...wire}=result;
+ job.result=wire;approved.set(request.session_id,result);job.status='succeeded';job.stage='Getting ready to begin…';
 }
 app.post(['/v1/session-plans','/v1/scene-revisions'],(req,res,next)=>{
  try {
   validate('PlanRequest',req.body); const input:PlanRequest=req.body;
   if(!input.use_history && input.relevant_history.length) throw new AppError('INVALID_INPUT','Declined history must be empty');
   if(input.chained_rerun && !input.parent_session_id) throw new AppError('INVALID_INPUT','Chained session needs parent');
-  if((revisions.get(input.session_id)??0)>=input.revision) throw new AppError('CONFLICT','Revision must increase',[],409);
+  if((revisions.get(input.session_id)??0)>input.revision) throw new AppError('CONFLICT','Revision must increase',[],409);
+  const repeated=repeatedGeneration(input,jobs,requests);
+  if(repeated){res.status(202).json(repeated);return;}
+  if(revisions.get(input.session_id)===input.revision)throw new AppError('CONFLICT','Revision must increase',[],409);
   supersedeGeneration(input.session_id,jobs,running);
   revisions.set(input.session_id,input.revision);
-  const job:Job={job_id:randomUUID(),session_id:input.session_id,revision:input.revision,status:'running',stage:'Starting generation'};
-  attempts.set(job.job_id,{deadline:Date.now()+generationLimitMs,repairs:0});
+  const job:Job={job_id:randomUUID(),session_id:input.session_id,revision:input.revision,status:'running',stage:'Getting your practice ready…'};
+  attempts.set(job.job_id,{deadline:Date.now()+generationLimitMs,deadlineCap:Date.now()+generationLimitMs+5*60*1000,planningRepairUsed:false,constructionRepairUsed:false,deviceRepairUsed:false});
   jobs.set(job.job_id,job); const controller=new AbortController(); running.set(job.job_id,controller);
+  requests.set(job.job_id,structuredClone(input));
   const timer=setTimeout(()=>controller.abort(new Error('Ten-minute generation ceiling reached')),generationLimitMs);
   void generate(input,job,controller.signal).catch(e=>{
    if(job.status==='cancelled') return;
@@ -110,27 +98,44 @@ app.post(['/v1/session-plans','/v1/scene-revisions'],(req,res,next)=>{
   res.status(202).json(job);
  } catch(e){next(e);}
 });
-// Extension to the project contract: device preflight shares the original repair allowance/deadline.
+// Native geometry can reveal failures no schema or rest-bounds check can see.
+// It gets one repair of its own, still inside the original deadline and budget.
 app.post('/v1/jobs/:id/validation',async(req,res,next)=>{
  const job=jobs.get(req.params.id), attempt=attempts.get(req.params.id);
  try {
   if(!job?.result || !attempt || job.status!=='succeeded') throw new AppError('CONFLICT','No assembled generation to repair',[],409);
   if(revisions.get(job.session_id)!==job.revision)throw new AppError('CONFLICT','A newer scene revision has replaced this job',[],409);
   if(running.size>=3)throw new AppError('RATE_LIMITED','Too many active generation jobs',[],429);
-  if(attempt.repairs>=1 || Date.now()>=attempt.deadline) throw new AppError('TIMEOUT','Repair allowance or generation deadline exhausted. Retry, revise, or cancel.',[],408);
   if(typeof req.body.message!=='string' || req.body.message.length>2000) throw new AppError('INVALID_INPUT','Provide a bounded validation explanation');
-  attempt.repairs++;job.status='running';job.stage='Repairing device visibility checks';
+  if(!automaticSceneRepairEnabled())throw new AppError('CONFLICT','Automatic scene repair is disabled. Your practice details and generated scene are preserved; revise or retry when ready.',[],409);
+  const block=repairBlock(attempt,'device');
+  if(block==='missing')throw new AppError('CONFLICT','This scene is no longer available for automatic repair. Your practice details are unchanged; start again to rebuild the scene.',[],409);
+  if(block==='deadline')throw new AppError('TIMEOUT','The time reserved for building this scene has ended, so its automatic fix cannot start. Your practice details are unchanged; start again when you are ready.',[],408);
+  if(block==='used')throw new AppError('CONFLICT','This scene already used its one automatic fix and still needs changes. Revise the scene or start again; your practice details are unchanged.',[],409);
+  grantRepairWindow(attempt!,Date.now(),240*1000);
+  if(!claimRepair(attempt,'device'))throw new AppError('TIMEOUT','The time reserved for building this scene has ended, so its automatic fix cannot start. Your practice details are unchanged; start again when you are ready.',[],408);
+  job.status='running';job.stage='Adjusting your view…';
   const controller=new AbortController();running.set(job.job_id,controller);
   const timer=setTimeout(()=>controller.abort(),Math.max(1,attempt.deadline-Date.now()));
   res.status(202).json(job);
   try {
    const {plan,audio,scene}=job.result;
-   const authored=canonicalSceneReferences(plan,await model('SceneSpec',{plan,audio,requirements:constructionRequirements(plan),previous_scene:authoredScene(scene),capabilities,issues:[{path:'/nodes',rule:'native_preflight',message:req.body.message}]},authoring,controller.signal,true),audio);
-   const repaired=compileConstruction(plan,authored);
-   const errors=sceneIssues(plan,repaired,audio);if(errors.length) throw new AppError('INVALID_MODEL_OUTPUT','Native repair invalid',errors);
+   const experience=approved.get(job.session_id)?.experience;
+   const output=await model('SceneSpec',{plan,audio,approved_experience:experience,requirements:constructionRequirements(plan),previous_scene:authoredScene(scene),capabilities,issues:[{path:'/nodes',rule:'native_preflight',message:req.body.message}]},builderInstructions,controller.signal,'scene_builder');
+   const authored=deterministicCorrections(canonicalSceneReferences(plan,output,audio)).scene;
+   const staged=experience?materializeStageGraph(experience,plan,authored):{scene:authored,issues:[]};
+   if(staged.issues.length)throw new AppError('INVALID_MODEL_OUTPUT','Stage graph requires route geometry',staged.issues);
+   validate('SceneSpec',staged.scene);validateProviderOutput('SceneSpec',staged.scene);
+   const repaired=compileScene(plan,staged.scene,audio);
+   const errors=[...sceneIssues(plan,repaired,audio),...(experience?experienceSceneIssues(experience,plan,repaired):[])];if(errors.length) throw new AppError('INVALID_MODEL_OUTPUT','Native repair invalid',errors);
    controller.signal.throwIfAborted();if(revisions.get(job.session_id)!==job.revision)return;
-   job.result={plan,audio,scene:repaired};approved.set(job.session_id,job.result);job.status='succeeded';job.stage='Ready for device validation';
-  }catch(e:any){if(jobs.get(job.job_id)?.status!=='cancelled'){job.status='failed';job.error={code:controller.signal.aborted?'TIMEOUT':e.code??'INVALID_MODEL_OUTPUT',message:e.message,retryable:true,request_id:job.job_id,issues:e.issues};}}
+   job.result={plan,audio,scene:repaired};approved.set(job.session_id,{...job.result,experience});job.status='succeeded';job.stage='Getting ready to begin…';
+  }catch(e:any){if(jobs.get(job.job_id)?.status!=='cancelled'){
+   if(!controller.signal.aborted&&(e.code==='PROVIDER_UNAVAILABLE'||e.code==='RATE_LIMITED')){
+    // No candidate was produced; keep the scene and its repair for a later retry.
+    releaseRepair(attempt,'device');job.status='succeeded';job.stage='Getting ready to begin…';
+   } else {job.status='failed';job.error={code:controller.signal.aborted?'TIMEOUT':e.code??'INVALID_MODEL_OUTPUT',message:e.message,retryable:true,request_id:job.job_id,issues:e.issues};}
+  }}
   finally{clearTimeout(timer);releaseGeneration(job.job_id,controller,running);}
  }catch(e){next(e);}
 });
@@ -199,7 +204,7 @@ wss.on('connection',(client:WebSocket)=>{
  client.on('close',close);client.on('error',close);upstream.on('close',(code,reason)=>{clearTimeout(audioTimer);clearTimeout(timeout);console.log('[voice] closed',JSON.stringify({code,reason:reason.toString().slice(0,200),audio_bytes:audioBytes,wall_seconds:(Date.now()-voiceStarted)/1000,audio_seconds:audioBytes/48000}));client.close(1011,('Transcription '+code+': '+reason.toString()).slice(0,110));});upstream.on('error',(error)=>{clearTimeout(audioTimer);clearTimeout(timeout);console.warn('[voice] transport error:',error.message);client.close(1011,'Transcription transport unavailable');});
 });
 // Bound completed jobs; never store raw audio.
-setInterval(()=>{if(jobs.size>100)for(const [id,j] of jobs){if(!running.has(id)){jobs.delete(id);attempts.delete(id);approved.delete(j.session_id);revisions.delete(j.session_id);provenance.delete(j.session_id);}if(jobs.size<=100)break;}},60000).unref();
+setInterval(()=>{if(jobs.size>100)for(const [id,j] of jobs){if(!running.has(id)){jobs.delete(id);requests.delete(id);attempts.delete(id);approved.delete(j.session_id);revisions.delete(j.session_id);provenance.delete(j.session_id);}if(jobs.size<=100)break;}},60000).unref();
 server.listen(Number(process.env.PORT??8787),process.env.HOST??'127.0.0.1',()=>{
  const address=server.address();
  console.log(`Braive backend listening on ${typeof address==='object'&&address?address.port:process.env.PORT??8787}; Meta key ${process.env.MODEL_API_KEY?'configured':'missing'}`);

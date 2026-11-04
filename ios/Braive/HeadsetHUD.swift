@@ -35,7 +35,7 @@ struct HeadsetHUD: View {
       VStack(spacing: 12) {
         HStack(spacing: 6) {
           Image(systemName: "waveform").font(.system(size: 10))
-          Text(status).font(.system(size: status == "Listening" ? 10 : 12, weight: .semibold))
+          Text(status).font(.system(size: 12, weight: .semibold))
           Spacer()
           if let remaining {
             Text(Duration.seconds(remaining).formatted(.time(pattern: .minuteSecond)))
@@ -53,7 +53,7 @@ struct HeadsetHUD: View {
             Text(copy.command).font(.system(size: 14, weight: .semibold)).foregroundStyle(accent)
           }
           if !copy.hint.isEmpty {
-            Text(copy.hint).font(.system(size: 11)).foregroundStyle(.white.opacity(0.65))
+            Text(copy.hint).font(.system(size: 12)).foregroundStyle(.white.opacity(0.85))
           }
         }.fixedSize(horizontal: false, vertical: true)
       }
@@ -109,10 +109,10 @@ struct HeadsetHUD: View {
     case .intake: return HeadsetCopy(title: "What would you like to practice?", detail: "Describe the moment, place and people.", command: "Say THAT’S ALL when finished", hint: "START OVER to replace your answer")
     case .ability: return HeadsetCopy(title: "What feels manageable?", detail: "Share your comfort level and boundaries.", command: "Say THAT’S ALL when finished", hint: "START OVER to replace your answer")
     case .history: return HeadsetCopy(title: "Build on past practice?", detail: "Include your previous sessions this time?", command: "Say YES or NO")
-    case .planning: return HeadsetCopy(title: "Shaping your practice…", detail: loadingTip, hint: "STOP to pause")
+    case .planning: return HeadsetCopy(title: "Getting your practice ready", detail: message.isEmpty ? loadingTip : HeadsetCopy.excerpt(message), hint: "Add something: say HEY BUILDER · STOP to pause")
     case .intro: return HeadsetCopy(title: "Listen. Picture yourself here.", hint: "STOP to pause")
     case .reveal: return HeadsetCopy(title: "Take a look around.", hint: "STOP to pause")
-    case .active: return HeadsetCopy(title: "", hint: "STOP to pause")
+    case .active: return HeadsetCopy(title: "", detail: scenarioActions.isEmpty ? "" : scenarioActions.prefix(3).joined(separator: " · "), hint: "STOP to pause")
     case .selfReport: return HeadsetCopy(title: "How difficult did it feel?", command: "Say a number from 0 to 10", hint: "Or say SKIP")
     case .readiness: return HeadsetCopy(title: "How ready do you feel now?", command: "Say a number from 0 to 10", hint: "Or say SKIP")
     case .reflectionPrompt: return HeadsetCopy(title: "Keep a spoken reflection?", command: "Say YES or NO")
@@ -122,10 +122,13 @@ struct HeadsetHUD: View {
       return HeadsetCopy(title: "Your practice, reflected.", detail: message == "Reviewing your session…" ? loadingTip : record["feedback"].object != nil ? "Listen to your feedback." : "Listen to your session update.", hint: "CONTINUE to move on")
     case .saving: return HeadsetCopy(title: "Saving your practice…", detail: loadingTip)
     case .repeatPrompt: return HeadsetCopy(title: "Ready for another try?", detail: adapting ? loadingTip : "Build on what you just practiced.", command: adapting ? "" : "Say YES or NO")
-    case .error: return HeadsetCopy(title: "Let’s take a moment.", detail: "Listen to what happened.", command: pendingPostSave == nil ? "Say RETRY, REVISE or CANCEL" : "Say RETRY to save again", hint: "Full details in phone controls")
+    case .error: return HeadsetCopy(title: "Let’s take a moment.", detail: HeadsetCopy.excerpt(message), command: pendingPostSave == nil ? "RETRY to try again · REVISE to change details" : "Say RETRY to save again", hint: pendingPostSave == nil ? "CANCEL to return to the forest" : "Your practice is kept while you retry")
     }
   }
   var pausedHeadsetCopy: HeadsetCopy {
+    if pauses.contains("tracking_unavailable") {
+      return HeadsetCopy(title: "Your practice is paused.", detail: "Head tracking is unavailable.", command: "Remove the viewer", hint: "Keep the app open or reopen it to restore tracking")
+    }
     if pauses.contains("command_channel_unavailable") || pauses.contains("audio_interruption") {
       return HeadsetCopy(title: "Your place is saved.", detail: "Voice needs reconnecting.", command: "Remove the viewer", hint: "Hold the screen for phone controls")
     }

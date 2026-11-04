@@ -1,6 +1,12 @@
-import {test} from 'node:test';
+import {test,beforeEach,afterEach} from 'node:test';
+
+// Keep the historical construction diagnostics testable in explicit standard
+// mode. Production permissive behavior is covered by the generation tests.
+let previousVisualMode:string|undefined;
+beforeEach(()=>{previousVisualMode=process.env.BRAIVE_VISUAL_STRICTNESS;process.env.BRAIVE_VISUAL_STRICTNESS='standard';});
+afterEach(()=>{if(previousVisualMode===undefined)delete process.env.BRAIVE_VISUAL_STRICTNESS;else process.env.BRAIVE_VISUAL_STRICTNESS=previousVisualMode;});
 import assert from 'node:assert/strict';
-import {compileConstruction,constructionRequirements} from '../src/construction.js';
+import {compileConstruction,compileScene,constructionRequirements,deterministicCorrections} from '../src/construction.js';
 import {transform,inverse,point,multiply,identity} from '../src/spatial-math.js';
 import {sceneIssues} from '../src/contracts.js';
 import type {SessionPlan,SceneSpec,SceneNode,AudioPlan} from '../../docs/handoff/contracts.js';
@@ -70,6 +76,29 @@ test('clearance respects an explicit target anchor and world offset',()=>{
  assert.throws(()=>compileConstruction(plan,scene),/constraints require repair/);
 });
 
+test('viewpoint targets preserve real clearance, and cannot stand in for geometry',()=>{
+ const {plan,scene}=setup();
+ scene.viewpoints.push({id:'arrival',position:[1,1,-3],description:'Arrival'});
+ scene.construction_plan!.relations.push({id:'clear',kind:'clear_of',subject_id:'table',target_id:'arrival',
+  offset:[0,0,0],clearance:1,tolerance:0.01,required:true});
+ const relation=scene.construction_plan!.relations[1];
+ assert.throws(()=>compileConstruction(plan,scene),(e:any)=>e.issues.some((i:any)=>i.rule==='clearance'));
+ relation.target_id='missing_viewpoint';
+ assert.throws(()=>compileConstruction(plan,scene),(e:any)=>e.issues.some((i:any)=>i.rule==='reference'));
+ relation.target_id='arrival';relation.kind='within';
+ assert.throws(()=>compileConstruction(plan,scene),(e:any)=>e.issues.some((i:any)=>i.rule==='reference'));
+});
+
+test('a declared support link identifies the owner of an undeclared contact anchor',()=>{
+ const {plan,scene}=setup(),construction=scene.construction_plan!,relation=construction.relations[0];
+ scene.nodes[1].position=[1,0.5,-3];scene.nodes[1].support_node_id='floor';
+ construction.anchors=[];
+ relation.target_id=relation.anchor_id!;
+ assert.deepEqual(compileConstruction(plan,deterministicCorrections(scene).scene).nodes,scene.nodes);
+ scene.nodes[1].support_node_id=null;
+ assert.throws(()=>compileConstruction(plan,deterministicCorrections(scene).scene),(e:any)=>e.issues.some((i:any)=>i.rule==='reference'));
+});
+
 test('zone fit catches world coordinates mistakenly repeated on a local child',()=>{
  const {plan,scene}=setup();
  const child=structuredClone(scene.nodes[1]);child.id='child';child.parent_id='table';child.position=[0,0,-15];child.geometry={kind:'box',size:[0.2,0.2,0.2]};child.role='prop';delete child.prop_name;scene.nodes.push(child);
@@ -79,24 +108,24 @@ test('zone fit catches world coordinates mistakenly repeated on a local child',(
  assert.ok(compileConstruction(plan,scene).construction_report);
 });
 
-test('inside with preserve_position checks containment without moving the subject (island/cove regression)',()=>{
+test('within checks containment at the authored position without moving the subject (island/cove regression)',()=>{
  const {plan,scene}=setup();
  const island={...scene.nodes[1],id:'island',position:[0,-0.9,-28]} as any; delete island.prop_name; island.role='environment';
  scene.nodes.push(island);
  scene.construction_plan!.zones.push({id:'cove',center:[0,1,-16],size:[70,12,70],kind:'outdoor'});
  scene.construction_plan!.assemblies.push({id:'island_assembly',root_node_id:'island',member_node_ids:['island'],zone_id:'cove',requirement_ids:[]});
- scene.construction_plan!.relations.push({id:'rel_island_in_cove',kind:'inside',subject_id:'island',target_id:'cove',offset:[0,0,0],clearance:0,tolerance:0.5,required:true,containment_behavior:'preserve_position'} as any);
+ scene.construction_plan!.relations.push({id:'rel_island_in_cove',kind:'within',subject_id:'island',target_id:'cove',offset:[0,0,0],clearance:0,tolerance:0.5,required:true});
  const compiled=compileConstruction(plan,scene);
  assert.deepEqual(compiled.nodes.find(n=>n.id==='island')!.position,[0,-0.9,-28]);
 });
-test('inside with preserve_position fails with relation, position and measured bounds when outside',()=>{
+test('within fails at the authored position with measured bounds when outside',()=>{
  const {plan,scene}=setup();
  const island={...scene.nodes[1],id:'island',position:[0,-0.9,-60]} as any; delete island.prop_name; island.role='environment';
  scene.nodes.push(island);
  scene.construction_plan!.zones.push({id:'cove',center:[0,1,-16],size:[70,12,70],kind:'outdoor'});
  scene.construction_plan!.assemblies.push({id:'island_assembly',root_node_id:'island',member_node_ids:['island'],zone_id:'cove',requirement_ids:[]});
- scene.construction_plan!.relations.push({id:'rel_island_in_cove',kind:'inside',subject_id:'island',target_id:'cove',offset:[0,0,0],clearance:0,tolerance:0.5,required:true,containment_behavior:'preserve_position'} as any);
- assert.throws(()=>compileConstruction(plan,scene),(e:any)=>e.issues.some((i:any)=>i.rule==='fit'&&i.message.includes('rel_island_in_cove')&&i.message.includes('-60')));
+ scene.construction_plan!.relations.push({id:'rel_island_in_cove',kind:'within',subject_id:'island',target_id:'cove',offset:[0,0,0],clearance:0,tolerance:0.5,required:true});
+ assert.throws(()=>compileConstruction(plan,scene),(e:any)=>e.issues.some((i:any)=>i.rule==='fit'&&i.message.includes('is not within')&&i.message.includes('-60')));
 });
 test('legacy inside without explicit behavior still places at target center plus offset',()=>{
  const {plan,scene}=setup();
@@ -118,6 +147,14 @@ test('assembly macros lower seating rows into existing node contracts',()=>{
  assert.equal(chairs.length,8);
  assert.ok(chairs.every(n=>n.geometry.kind==='asset'));
 });
+test('macro expansion is idempotent across recompilation',()=>{
+ const {plan,scene}=setup();
+ (scene.construction_plan as any).macros=[{id:'aud',kind:'seating_rows',root_node_id:'table',zone_id:'room',chair_asset_id:'furniture.chair.classic_chair_01',rows:2,seats_per_row:4,origin:[0,0,-6],seat_spacing:0.9,row_spacing:1.1,facing_yaw:0}];
+ const compiled=compileConstruction(plan,scene);
+ const recompiled=compileConstruction(plan,compiled);
+ assert.deepEqual(recompiled,compiled);
+ assert.equal(recompiled.nodes.filter(n=>n.id.startsWith('aud_seat_')).length,8);
+ });
 test('enclosure and scatter macros lower bounded finished geometry',()=>{
  const {plan,scene}=setup();
  (scene.construction_plan as any).macros=[
@@ -138,4 +175,354 @@ test('water behavior needs a declared medium region and an actual visual surface
  assert.ok(compileConstruction(plan,scene).construction_report);
  plan.construction_brief.medium_behavior!.participant_motion='swim';
  assert.throws(()=>compileConstruction(plan,scene),(e:any)=>e.issues.some((i:any)=>i.rule==='motion'));
+});
+
+test('construction reports missing parent, support and medium references together with their owners',()=>{
+ const {plan,scene}=setup();scene.nodes[1].parent_id='.';scene.nodes[1].support_node_id='.';
+ scene.construction_plan!.medium_regions=[{id:'air',zone_id:'room',medium:'air',surface_node_id:'.',flow_visual:'none',viewer_path_ids:[]}];
+ assert.throws(()=>compileConstruction(plan,scene),(e:any)=>{
+  assert.ok(e.issues.some((i:any)=>i.path==='/nodes/1/parent_id'&&i.message.includes('table')&&i.message.includes('JSON null')));
+  assert.ok(e.issues.some((i:any)=>i.path==='/nodes/1/support_node_id'&&i.message.includes('table')));
+  assert.ok(e.issues.some((i:any)=>i.path.endsWith('/air/surface_node_id')&&i.message.includes('Omit')));
+  return true;
+ });
+});
+
+test('repair feedback identifies the disconnected assembly member and the unscaled anchor bounds',()=>{
+ const {plan,scene}=setup();scene.nodes[1].scale=[20,1,20];
+ scene.construction_plan!.anchors.push({id:'table_edge',node_id:'table',kind:'entry',position:[8,0,0],footprint:[1,1]});
+ scene.construction_plan!.assemblies[0].member_node_ids.push('floor');
+ scene.events.push({at_active_second:1,operation:{type:'set_visible',node_id:'table',visible:false}});
+ assert.throws(()=>compileConstruction(plan,scene),(e:any)=>{
+  assert.ok(e.issues.some((i:any)=>i.path==='/construction_plan/anchors/1/position'&&i.message.includes('table_edge on table')&&i.message.includes('unscaled geometry bounds')));
+  assert.ok(e.issues.some((i:any)=>i.path==='/construction_plan/assemblies/0/member_node_ids/1'&&i.message.includes('member floor')&&i.message.includes('table')));
+  return true;
+ });
+});
+
+test('the shared repair receives independent scene failures even when construction fails first',()=>{
+ const {plan,scene}=setup();scene.nodes[1].parent_id='missing';scene.nodes[1].role='environment';
+ const original=structuredClone(scene);
+ assert.throws(()=>compileScene(plan,scene,{session_id:plan.session_id,revision:2,layers:[]} as unknown as AudioPlan),(e:any)=>{
+  assert.ok(e.issues.some((i:any)=>i.path==='/nodes/1/parent_id'&&i.message.includes('table')));
+  assert.ok(e.issues.some((i:any)=>i.rule==='revision'&&i.path==='/audio/revision'));
+  assert.equal(e.issues.filter((i:any)=>i.path==='/nodes/1/parent_id'&&i.rule==='reference').length,1);
+  return true;
+ });
+ assert.deepEqual(scene,original);
+});
+
+test('static independent roots are partitioned without changing geometry or world transforms',()=>{
+ const {plan,scene}=setup();scene.nodes[1].position=[1,0.5,-3];scene.construction_plan!.relations=[];
+ scene.construction_plan!.assemblies[0].member_node_ids.push('floor');
+ scene.events.push({at_active_second:0,operation:{type:'set_visible',node_id:'table',visible:true}});
+ const original=structuredClone(scene.nodes),compiled=compileConstruction(plan,scene);
+ assert.equal(compiled.construction_plan!.assemblies.length,2);
+ assert.deepEqual(compiled.nodes,original);
+ assert.ok(compiled.construction_plan!.assemblies.every(a=>a.member_node_ids.length===1&&a.member_node_ids[0]===a.root_node_id));
+ assert.deepEqual(compileConstruction(plan,compiled),compiled);
+ scene.events.push({at_active_second:1,operation:{type:'set_visible',node_id:'table',visible:false}});
+ assert.throws(()=>compileConstruction(plan,scene),(e:any)=>e.issues.some((i:any)=>i.rule==='hierarchy'));
+});
+
+test('static assembly bookkeeping can omit its named root when all listed members are independent',()=>{
+ const {plan,scene}=setup();
+ scene.nodes[1].position=[1,0.5,-3];scene.construction_plan!.relations=[];
+ scene.construction_plan!.assemblies.push({id:'room_collection',root_node_id:'table',member_node_ids:['floor'],
+  zone_id:'room',requirement_ids:['task']});
+ const compiled=compileConstruction(plan,scene);
+ assert.deepEqual(compiled.nodes,scene.nodes);
+ assert.deepEqual(compiled.construction_plan!.assemblies.at(-1),{
+  id:'room_collection',root_node_id:'floor',member_node_ids:['floor'],zone_id:'room',requirement_ids:['task'],
+ });
+ assert.deepEqual(compileConstruction(plan,compiled),compiled);
+});
+
+test('anchor footprints use physical meters through parent scale while positions remain geometry-local',()=>{
+ const {plan,scene}=setup();scene.nodes[1].parent_id='floor';scene.nodes[0].scale=[2,1,3];
+ scene.construction_plan!.zones[0].size=[100,20,100];
+ scene.nodes[1].geometry={kind:'box',size:[1,1,1]};scene.nodes[1].scale=[14,0.6,9];
+ scene.construction_plan!.anchors.push({id:'table_surface',node_id:'table',kind:'support',position:[0,0.5,0],footprint:[3,3]});
+ scene.construction_plan!.relations=[];
+ assert.ok(compileConstruction(plan,scene));
+ scene.construction_plan!.anchors[1].footprint=[29,3];
+ assert.throws(()=>compileConstruction(plan,scene),(e:any)=>e.issues.some((i:any)=>i.rule==='fit'&&i.message.includes('28')));
+});
+
+test('explicit task realization supplies missing focal roles without inventing a target',()=>{
+ const {plan,scene}=setup();scene.nodes[1].role='environment';
+ assert.equal(compileConstruction(plan,scene).nodes[1].role,'task_focus');
+ assert.equal(scene.nodes[1].role,'environment');
+ scene.construction_plan!.requirements.find(r=>r.requirement_id==='task')!.node_ids=[];
+ assert.throws(()=>compileScene(plan,scene,{session_id:plan.session_id,revision:1,layers:[]} as unknown as AudioPlan),(e:any)=>e.issues.some((i:any)=>i.rule==='task_focus'));
+});
+
+test('construction derives component prop names and repairs redundant requirement labels',()=>{
+ const {plan,scene}=setup(),construction=scene.construction_plan!;
+ plan.construction_brief={spatial_intent:'Table and work surface',must_preserve:[],expected_outcomes:['Reach the work table']};
+ const outcome=constructionRequirements(plan).find(requirement=>requirement.kind==='outcome')!;
+ const prop=construction.requirements.find(requirement=>requirement.requirement_id.startsWith('prop:'))!;
+ const component:SceneNode={...structuredClone(scene.nodes[1]),id:'table_component',role:'prop',prop_name:undefined,parent_id:'table',position:[0,0.15,0]};
+ scene.nodes.push(component);
+ prop.node_ids.push(component.id);
+ construction.requirements.push({requirement_id:outcome.id,node_ids:['table'],stage_ids:[],path_ids:[]});
+ construction.assemblies[0].member_node_ids.push(component.id);
+ construction.assemblies[0].requirement_ids=['boundary:'+outcome.id.split(':')[1],'stale_annotation',prop.requirement_id];
+ const audio={session_id:plan.session_id,revision:1,layers:[]} as unknown as AudioPlan;
+ const compiled=compileScene(plan,scene,audio);
+ assert.equal(compiled.nodes.at(-1)!.prop_name,'Table');
+ assert.deepEqual(compiled.construction_plan!.assemblies[0].requirement_ids,[outcome.id,prop.requirement_id]);
+ assert.ok(compiled.construction_report!.warnings.some(issue=>issue.message.includes('stale_annotation')));
+ prop.node_ids.pop();
+ assert.throws(()=>compileScene(plan,scene,audio),(e:any)=>e.issues.some((i:any)=>i.rule==='architecture_only'));
+});
+
+function routeSetup(purpose:string,wall:boolean){
+ const {plan,scene}=setup();
+ scene.construction_plan!.relations[0].offset=[5,0,-3];
+ if(wall)scene.nodes.push({id:'wall',parent_id:null,role:'environment',geometry:{kind:'box',size:[4,3,0.2]},position:[0,1.5,-3],rotation_radians:[0,0,0],scale:[1,1,1],material:{color:'#8899aa',roughness:0.9},animation:'none',description:'wall'} as unknown as SceneNode);
+ scene.motion_paths=[{id:'travel',purpose:purpose as never,interpolation:'linear',coordinate_space:'world',points:[{at_seconds:2,position:[0,1.6,-2]},{at_seconds:5,position:[0,1.6,-5]}]}] as unknown as SceneSpec['motion_paths'];
+ scene.construction_plan!.routes=[{path_id:'travel',stage_ids:['look'],requirement_ids:['task'],clearance_radius_meters:0.25,eye_height_meters:1.6}];
+ scene.scenario!.steps[0].start_operations=[{type:'move_viewer',path_id:'travel'}] as never;
+ return {plan,scene};
+}
+
+test('a viewer route through solid geometry fails backend construction with the blocking node and segment',()=>{
+ const {plan,scene}=routeSetup('walk',true);
+ assert.throws(()=>compileConstruction(plan,scene),(e:any)=>e.issues.some((i:any)=>i.rule==='route_clearance'&&i.message.includes('wall')&&i.message.includes('segment 1')));
+});
+
+test('route clearance uses height at the obstacle and follows moving assembly ancestry',()=>{
+ const {plan,scene}=routeSetup('ride',true);
+ const obstacle=scene.nodes.at(-1)!;
+ obstacle.geometry={kind:'box',size:[2,0.2,1]};
+ obstacle.position=[0,2.6,0];
+ scene.motion_paths![0].points=[{at_seconds:5,position:[0,3.6,-8]}];
+ assert.ok(compileConstruction(plan,scene));
+ obstacle.position=[0,2.6,-5];
+ assert.throws(()=>compileConstruction(plan,scene),(e:any)=>e.issues.some((i:any)=>i.rule==='route_clearance'&&i.message.includes('wall')));
+ obstacle.parent_id='floor';
+ scene.viewer_attached_node_ids=['floor'];
+ assert.ok(compileConstruction(plan,scene));
+});
+
+test('human clearance distinguishes an animated object from an approved actor',()=>{
+ const {plan,scene}=routeSetup('other',true);
+ scene.nodes[1].position=[0,0.8,-1];
+ scene.construction_plan!.relations=[];
+ scene.motion_paths![0].points.forEach(p=>{p.position[1]=0.8;});
+ scene.scenario!.steps[0].start_operations=[{type:'move_node',node_id:'table',path_id:'travel',face_motion:false}];
+ assert.ok(compileConstruction(plan,scene).construction_report);
+
+ plan.characters=[{id:'actor',scene_node_id:'table'}] as SessionPlan['characters'];
+ scene.construction_plan!.requirements.push({requirement_id:'cast:actor',node_ids:['table'],stage_ids:[],path_ids:[]});
+ assert.throws(()=>compileConstruction(plan,scene),(e:any)=>e.issues.some((i:any)=>i.rule==='route_clearance'&&i.message.includes('wall')));
+});
+
+test('a clear viewer route and a supported walk pass backend construction',()=>{
+ const clear=routeSetup('walk',true);
+ clear.scene.motion_paths![0].points.forEach(p=>{p.position[0]=3;});
+ assert.ok(compileConstruction(clear.plan,clear.scene).construction_report);
+ const supported=routeSetup('walk',false);
+ supported.scene.motion_paths![0].points.forEach(p=>{p.position[0]=-3;});
+ assert.ok(compileConstruction(supported.plan,supported.scene).construction_report);
+});
+
+test('walking needs support under the route while swimming does not',()=>{
+ const walk=routeSetup('walk',false);
+ walk.scene.nodes=walk.scene.nodes.filter(n=>n.id!=='floor');
+ walk.scene.construction_plan!.relations=[];walk.scene.construction_plan!.anchors=[];
+ assert.throws(()=>compileConstruction(walk.plan,walk.scene),(e:any)=>e.issues.some((i:any)=>i.rule==='route_support'));
+ const swim=routeSetup('swim',false);
+ swim.scene.nodes=swim.scene.nodes.filter(n=>n.id!=='floor');
+ swim.scene.construction_plan!.relations=[];swim.scene.construction_plan!.anchors=[];swim.scene.construction_plan!.zones[0].size=[20,20,20];
+ swim.scene.motion_paths![0].points.forEach(p=>{p.position[1]=1.45;});
+ assert.ok(compileConstruction(swim.plan,swim.scene).construction_report);
+});
+
+function islandSetup(kind:string,offset:number[]){
+ const {plan,scene}=setup();
+ scene.nodes[0].position=[0,-1.5,-16];scene.nodes[0].geometry={kind:'box',size:[70,0.4,70]};
+ const cp=scene.construction_plan!;
+ cp.relations[0].offset=[10,0,10];
+ cp.zones[0].center=[0,1,-16];cp.zones[0].size=[80,12,80];
+ cp.zones.push({id:'zone_cove',center:[0,1,-16],size:[70,12,70],kind:'outdoor'},{id:'zone_island',center:[0,1,-28],size:[18,10,16],kind:'outdoor'});
+ const box=(id:string,position:number[],size:number[],role:string):SceneNode=>({id,parent_id:null,role,geometry:{kind:'box',size},position,rotation_radians:[0,0,0],scale:[1,1,1],material:{color:'#c2b280',roughness:0.9},animation:'none',description:id} as unknown as SceneNode);
+ scene.nodes.push(box('island_sand',[0,-0.9,-28],[16,1.6,14],'prop'),box('palm_1',[-2.5,-0.1,-29],[0.4,4,0.4],'environment'));
+ cp.anchors.push({id:'anchor_island_top',node_id:'island_sand',kind:'support',position:[0,0.8,0],footprint:[10,10]});
+ cp.assemblies.push({id:'island_assembly',root_node_id:'island_sand',member_node_ids:['island_sand','palm_1'],zone_id:'zone_island',requirement_ids:[]});
+ cp.relations.push({id:'rel_palm_on_island',kind:'on',subject_id:'palm_1',target_id:'anchor_island_top',offset:[-2.5,0,-1],clearance:0,tolerance:0.5,required:true});
+ cp.relations.push({id:'rel_island_in_cove',kind:kind as never,subject_id:'island_sand',target_id:'zone_cove',offset:offset as never,clearance:0,tolerance:0.5,required:true});
+ return {plan,scene};
+}
+
+test('within checks containment at the authored position without moving the island or its dependents',()=>{
+ const {plan,scene}=islandSetup('within',[0,0,0]);
+ const compiled=compileConstruction(plan,scene);
+ assert.deepEqual(compiled.nodes.find(n=>n.id==='island_sand')!.position,[0,-0.9,-28]);
+ assert.ok(compiled.nodes.find(n=>n.id==='palm_1')!.position[2]<-25);
+});
+
+test('legacy inside with a zero offset still places at the target center, and the zone failure names the relation',()=>{
+ const {plan,scene}=islandSetup('inside',[0,0,0]);
+ assert.throws(()=>compileConstruction(plan,scene),(e:any)=>e.issues.some((i:any)=>i.rule==='zone_fit'&&i.message.includes('island_sand')&&i.message.includes('rel_island_in_cove')&&i.message.includes('[0,1,-16]')));
+});
+
+test('inside with the preserving offset keeps the island position and passes',()=>{
+ const {plan,scene}=islandSetup('inside',[0,-1.9,-12]);
+ const compiled=compileConstruction(plan,scene);
+ const pos=compiled.nodes.find(n=>n.id==='island_sand')!.position;
+ assert.ok(Math.abs(pos[0])<1e-9&&Math.abs(pos[1]+0.9)<1e-6&&Math.abs(pos[2]+28)<1e-9);
+});
+
+test('zero-offset inside at a zone center remains valid intentional placement',()=>{
+ const {plan,scene}=islandSetup('inside',[0,0,0]);
+ scene.construction_plan!.relations.find(r=>r.id==='rel_island_in_cove')!.target_id='zone_island';
+ const compiled=compileConstruction(plan,scene);
+ assert.deepEqual(compiled.nodes.find(n=>n.id==='island_sand')!.position,[0,1,-28]);
+});
+
+test('within rejects a subject authored outside the target volume',()=>{
+ const {plan,scene}=islandSetup('within',[0,0,0]);
+ scene.nodes.find(n=>n.id==='island_sand')!.position=[0,-0.9,-10];
+ scene.construction_plan!.relations.find(r=>r.id==='rel_island_in_cove')!.target_id='zone_island';
+ assert.throws(()=>compileConstruction(plan,scene),(e:any)=>e.issues.some((i:any)=>i.rule==='fit'&&i.message.includes('within checks containment only')));
+});
+
+test('zone-spanning environment slabs honor the requested inset without changing height or clearance',()=>{
+ const {plan,scene}=setup();
+ const cp=scene.construction_plan!;
+ const floor=scene.nodes[0];
+ cp.zones[0]={id:'room',center:[0,1,0],size:[20,6,20],kind:'interior'};
+ cp.anchors=[];
+ scene.nodes[1].position=[1,0.5,-3];
+ cp.relations=[{id:'floor_within',kind:'within',subject_id:floor.id,target_id:'room',offset:[0,0,0],clearance:0.5,tolerance:0.2,required:true}];
+
+ const compiled=compileConstruction(plan,scene);
+ assert.deepEqual(compiled.nodes[0].scale,[0.95,1,0.95]);
+ assert.deepEqual(compiled.nodes[0].position,floor.position);
+ assert.equal(compiled.construction_plan!.relations[0].clearance,0.5);
+ assert.deepEqual(compileConstruction(plan,compiled),compiled);
+ assert.deepEqual(floor.scale,[1,1,1]);
+
+ // Off-center and anchored slabs are independently authored placements.
+ floor.position[0]=0.1;
+ assert.throws(()=>compileConstruction(plan,scene),/constraints require repair/);
+ floor.position[0]=0;
+ cp.anchors.push({id:'floor_top',node_id:floor.id,kind:'support',position:[0,0.1,0],footprint:[10,10]});
+ assert.throws(()=>compileConstruction(plan,scene),/constraints require repair/);
+});
+
+test('a swim route ending inside the island remains rejected while an offshore endpoint passes',()=>{
+ const blocked=islandSetup('within',[0,0,0]);
+ blocked.scene.motion_paths=[{id:'path_swim',purpose:'swim',interpolation:'linear',coordinate_space:'world',points:[{at_seconds:10,position:[0,0.35,-18]},{at_seconds:20,position:[0,0.35,-21.5]}]}] as unknown as SceneSpec['motion_paths'];
+ blocked.scene.construction_plan!.routes=[{path_id:'path_swim',stage_ids:['look'],requirement_ids:['task'],clearance_radius_meters:0.25,eye_height_meters:1.45}];
+ blocked.scene.scenario!.steps[0].start_operations=[{type:'move_viewer',path_id:'path_swim'}] as never;
+ assert.throws(()=>compileConstruction(blocked.plan,blocked.scene),(e:any)=>e.issues.some((i:any)=>i.rule==='route_clearance'&&i.message.includes('island_sand')));
+ const clear=islandSetup('within',[0,0,0]);
+ clear.scene.motion_paths=[{id:'path_swim',purpose:'swim',interpolation:'linear',coordinate_space:'world',points:[{at_seconds:10,position:[0,0.35,-18]},{at_seconds:20,position:[0,0.35,-20.5]}]}] as unknown as SceneSpec['motion_paths'];
+ clear.scene.construction_plan!.routes=[{path_id:'path_swim',stage_ids:['look'],requirement_ids:['task'],clearance_radius_meters:0.25,eye_height_meters:1.45}];
+ clear.scene.scenario!.steps[0].start_operations=[{type:'move_viewer',path_id:'path_swim'}] as never;
+ assert.ok(compileConstruction(clear.plan,clear.scene).construction_report);
+});
+
+test('routes pass through genuine openings and respect transformed and relative geometry',()=>{
+ const doorway=routeSetup('walk',false);
+ const wall=(id:string,x:number):SceneNode=>({id,parent_id:null,role:'environment',geometry:{kind:'box',size:[1.7,3,0.2]},position:[x,1.5,-3],rotation_radians:[0,0,0],scale:[1,1,1],material:{color:'#8899aa',roughness:0.9},animation:'none',description:id} as unknown as SceneNode);
+ doorway.scene.nodes.push(wall('wall_l',-1.45),wall('wall_r',1.45));
+ doorway.scene.motion_paths![0].points.forEach(p=>{p.position[0]=0;});
+ assert.ok(compileConstruction(doorway.plan,doorway.scene).construction_report);
+ const scaled=routeSetup('walk',false);
+ const parent:SceneNode={id:'frame_root',parent_id:null,role:'environment',geometry:{kind:'box',size:[1,3,1]},position:[3,1.5,-3],rotation_radians:[0,0,0],scale:[2,1,2],material:{color:'#8899aa',roughness:0.9},animation:'none',description:'frame'} as unknown as SceneNode;
+ const child:SceneNode={id:'frame_child',parent_id:'frame_root',role:'environment',geometry:{kind:'box',size:[1,3,0.2]},position:[0,0,0],rotation_radians:[0,0,0],scale:[1,1,1],material:{color:'#8899aa',roughness:0.9},animation:'none',description:'child'} as unknown as SceneNode;
+ scaled.scene.nodes.push(parent,child);
+ scaled.scene.motion_paths![0].points.forEach(p=>{p.position[0]=3;});
+ assert.throws(()=>compileConstruction(scaled.plan,scaled.scene),(e:any)=>e.issues.some((i:any)=>i.rule==='route_clearance'));
+ const relative=routeSetup('walk',true);
+ (relative.scene.motion_paths![0] as {coordinate_space:string}).coordinate_space='relative';
+ relative.scene.motion_paths![0].points=[{at_seconds:2,position:[0,0,-2]},{at_seconds:5,position:[0,0,-5]}] as never;
+ assert.throws(()=>compileConstruction(relative.plan,relative.scene),(e:any)=>e.issues.some((i:any)=>i.rule==='route_clearance'&&i.message.includes('wall')));
+});
+
+test('a small zone overflow is accepted as a recorded soft defect while a large one still fails',()=>{
+ const small=setup();
+ small.scene.construction_plan!.zones[0].center=[0,2,-3];small.scene.construction_plan!.zones[0].size=[3.5,4,20];
+ const compiled=compileConstruction(small.plan,small.scene);
+ assert.ok(compiled.construction_report!.accepted_defects?.some(i=>i.rule==='zone_fit'&&i.classification==='soft'));
+ const large=setup();
+ large.scene.construction_plan!.zones[0].center=[0,2,-3];large.scene.construction_plan!.zones[0].size=[2,4,20];
+ assert.throws(()=>compileConstruction(large.plan,large.scene),(e:any)=>e.issues.some((i:any)=>i.rule==='zone_fit'&&i.classification==='hard'));
+});
+
+test('a dangling route anchor annotation is dropped with a warning and the trajectory is preserved',()=>{
+ const {plan,scene}=routeSetup('walk',false);
+ scene.motion_paths![0].points.forEach(p=>{p.position[0]=-3;});
+ scene.construction_plan!.routes[0].from_anchor_id='missing_anchor';
+ const compiled=compileConstruction(plan,scene);
+ assert.equal(compiled.construction_plan!.routes[0].from_anchor_id,undefined);
+ assert.ok(compiled.construction_report!.warnings.some(i=>i.rule==='anchor_alignment'&&i.message.includes('missing_anchor')));
+ assert.deepEqual(compiled.motion_paths![0].points,scene.motion_paths![0].points);
+});
+
+test('zone failures on rotated assets report rest and transformed bounds for repair',()=>{
+ const {plan,scene}=setup();
+ const win:SceneNode={id:'window_east',parent_id:null,role:'environment',geometry:{kind:'asset',asset_id:'architecture.window.building_wall_window_wide_square_detailed_01'},position:[5.35,0.4,-3.2],rotation_radians:[0,-Math.PI/2,0],scale:[1,1,1],material:{color:'#aabbcc',roughness:0.8},animation:'none',description:'window'} as unknown as SceneNode;
+ scene.nodes.push(win);
+ scene.construction_plan!.zones[0].center=[0,1.5,0];scene.construction_plan!.zones[0].size=[11,4,10];
+ scene.construction_plan!.relations.push({id:'rel_window_zone',kind:'within',subject_id:'window_east',target_id:'room',offset:[0,0,0],clearance:0.2,tolerance:0.2,required:true});
+ assert.throws(()=>compileConstruction(plan,scene),(e:any)=>e.issues.some((i:any)=>(i.rule==='fit'||i.rule==='zone_fit')&&i.message.includes('window_east')&&i.message.includes('rest bounds')&&i.message.includes('architecture.window')));
+ const unrotated=setup();
+ const win2=structuredClone(win);win2.rotation_radians=[0,0,0];win2.position=[9.8,0.4,-3.2];
+ unrotated.scene.nodes.push(win2);
+ unrotated.scene.construction_plan!.zones[0].size=[30,4,20];
+ assert.ok(compileConstruction(unrotated.plan,unrotated.scene).construction_report);
+});
+
+test('open-air zones have no virtual ceiling, but enclosures and explicit containment still do',()=>{
+ const {plan,scene}=setup();scene.nodes[1].geometry={kind:'box',size:[2,8,1]};scene.nodes[1].position=[1,4,-3];
+ const cp=scene.construction_plan!;cp.relations=[];cp.zones[0].kind='outdoor';
+ assert.ok(compileConstruction(plan,scene));
+ cp.zones[0].kind='enclosure';
+ assert.throws(()=>compileConstruction(plan,scene),(e:any)=>e.issues.some((i:any)=>i.rule==='zone_fit'));
+ cp.zones[0].kind='outdoor';
+ cp.relations.push({id:'contain_table',kind:'inside',subject_id:'table',target_id:'room',offset:[0,0,0],clearance:0,tolerance:0.01,required:true});
+ assert.throws(()=>compileConstruction(plan,scene),(e:any)=>e.issues.some((i:any)=>i.rule==='fit'));
+});
+
+test('unbound decoration in a task assembly warns, while required objects and supports must fit',()=>{
+ const {plan,scene}=setup();const cp=scene.construction_plan!;
+ scene.nodes.push({...structuredClone(scene.nodes[0]),id:'backdrop',position:[40,0,-3]});
+ cp.assemblies[0].member_node_ids.push('backdrop');cp.assemblies[0].requirement_ids=['task'];
+ assert.ok(compileConstruction(plan,scene).construction_report!.warnings.some(i=>i.rule==='zone_fit'&&i.message.includes('backdrop')));
+ const binding=cp.requirements.find(r=>r.requirement_id==='task')!;
+ binding.node_ids.push('backdrop');
+ assert.throws(()=>compileConstruction(plan,scene),(e:any)=>e.issues.some((i:any)=>i.rule==='zone_fit'&&i.message.includes('backdrop')));
+ binding.node_ids.pop();cp.relations=[];scene.nodes[1].position=[1,0.5,-3];scene.nodes[1].support_node_id='backdrop';
+ assert.throws(()=>compileConstruction(plan,scene),(e:any)=>e.issues.some((i:any)=>i.rule==='zone_fit'&&i.message.includes('backdrop')));
+});
+
+test('repair keeps every failing member of the same assembly and names its parent frame',()=>{
+ const {plan,scene}=setup();
+ for(const [id,position] of [['left_part',[-30,0,0]],['far_part',[0,0,-30]]] as [string,[number,number,number]][]){
+  scene.nodes.push({...structuredClone(scene.nodes[1]),id,position,parent_id:'table',role:'prop'});
+  scene.construction_plan!.assemblies[0].member_node_ids.push(id);
+ }
+ assert.throws(()=>compileScene(plan,scene,{session_id:plan.session_id,revision:1,layers:[]} as unknown as AudioPlan),(e:any)=>{
+  for(const [index,id] of [[2,'left_part'],[3,'far_part']])assert.ok(e.issues.some((i:any)=>i.path===`/nodes/${index}`&&i.rule==='zone_fit'&&i.message.includes(id)&&i.message.includes('child of table')));
+  return true;
+ });
+});
+
+test('route annotations cannot overwrite continuous authored world endpoints',()=>{
+ const {plan,scene}=setup(),cp=scene.construction_plan!;
+ cp.relations[0].offset=[5,0,-3];
+ cp.anchors.push({id:'elsewhere',node_id:'floor',kind:'entry',position:[4,0.1,4],footprint:[1,1]});
+ scene.motion_paths=[{id:'route',purpose:'walk',coordinate_space:'world',interpolation:'smooth',start_position:[0,1.6,0],points:[{at_seconds:10,position:[0,1.6,-4]}]}];
+ scene.scenario!.steps[0].start_operations=[{type:'move_viewer',path_id:'route'}];
+ cp.routes=[{path_id:'route',stage_ids:['look'],requirement_ids:[],clearance_radius_meters:0.3,eye_height_meters:1.6,from_anchor_id:'elsewhere',to_anchor_id:'elsewhere'}];
+ const compiled=compileConstruction(plan,scene),path=compiled.motion_paths![0];
+ assert.deepEqual(path.start_position,[0,1.6,0]);
+ assert.deepEqual(path.points,scene.motion_paths[0].points);
+ assert.equal(path.clearance_radius_meters,0.3);
+ assert.equal(compiled.construction_report!.warnings.filter(i=>i.rule==='anchor_alignment').length,2);
 });

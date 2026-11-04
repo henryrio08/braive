@@ -8,14 +8,24 @@ const base='http://127.0.0.1:8788';
 let occupied=false;
 try { await fetch(base+'/health',{signal:AbortSignal.timeout(1000)}); occupied=true; } catch {}
 if(occupied) throw Error('Port 8788 is already in use. Stop the existing test deliberately before starting a synthetic check.');
-const child=spawn(process.execPath,[path.join(root,'scripts/start-phone-test.mjs')],{cwd:root,env:{...process.env,META_REQUEST_LIMIT:'5',META_MAX_COST_USD:'1.00',BRAIVE_ALLOW_AUDIO:'false'},stdio:['ignore','pipe','pipe']});
+const child=spawn(process.execPath,[path.join(root,'scripts/start-phone-test.mjs')],{cwd:root,env:{...process.env,META_REQUEST_LIMIT:'5',META_MAX_COST_USD:'3.00',BRAIVE_ALLOW_AUDIO:'false'},stdio:['ignore','pipe','pipe']});
 child.stdout.on('data',()=>{});child.stderr.on('data',()=>{});
-const globalDeadline=setTimeout(()=>{child.kill('SIGTERM');console.error('Bounded test reached its overall shutdown deadline.');process.exitCode=1;},125000);
+// Eight minutes: inside the product's ten-minute generation ceiling, long
+// enough for author, editor, builder and one bounded repair to complete.
+const globalDeadline=setTimeout(()=>{child.kill('SIGTERM');console.error('Bounded test reached its overall shutdown deadline.');process.exitCode=1;},480000);
 const headers={Authorization:`Bearer ${process.env.BRAIVE_TOKEN}`,'Content-Type':'application/json'};
 let jobID;
 try {
  for(let i=0;i<40;i++){try{if((await fetch(base+'/health')).ok)break;}catch{}await new Promise(r=>setTimeout(r,100));}
- const request={schema_version:'1',session_id:crypto.randomUUID(),revision:1,fear_description:'Practice a one-minute community garden proposal to eight friendly neighbors in a sunny library. Include a clear speaking area, windows, and responsive audience questions.',current_ability:'Synthetic test participant: can speak for one minute, but gets flustered by follow-up questions. Keep it friendly.',preferences:[],relevant_history:[],history_choice:'not_available',builder_additions:[],use_history:false,chained_rerun:false};
+ const scenarios={
+ library:{fear_description:'Practice a one-minute community garden proposal to eight friendly neighbors in a sunny library. Include a clear speaking area, windows, and responsive audience questions.',current_ability:'Synthetic test participant: can speak for one minute, but gets flustered by follow-up questions. Keep it friendly.'},
+ walk:{fear_description:'Practice walking calmly through an indoor office hallway to a small meeting room, passing a few friendly colleagues, then settling at the table.',current_ability:'Synthetic test participant: comfortable walking indoors at an easy pace, a little nervous about arriving and greeting people. Keep it gentle.'},
+ swim:{fear_description:'Practice swimming calmly through open water from a quiet cove toward a small island with palms, staying near the surface at an easy pace.',current_ability:'Synthetic test participant: a cautious swimmer who is comfortable floating and swimming slowly in calm, clear water. Keep it gentle and unhurried.'},
+};
+ const scenarioName=process.env.BRAIVE_LIVE_SCENARIO??'library';
+ const chosen=scenarios[scenarioName];if(!chosen)throw Error('Unknown BRAIVE_LIVE_SCENARIO: '+scenarioName);
+ console.log('Scenario:',scenarioName);
+ const request={schema_version:'1',session_id:crypto.randomUUID(),revision:1,...chosen,preferences:[],relevant_history:[],history_choice:'not_available',builder_additions:[],use_history:false,chained_rerun:false};
  const start=await fetch(base+'/v1/session-plans',{method:'POST',headers,body:JSON.stringify(request)});
  const job=await start.json();if(!start.ok)throw Error(job.message);jobID=job.job_id;
  let previous='';
@@ -25,6 +35,7 @@ try {
   if(['failed','succeeded','cancelled'].includes(result.status)){
    await mkdir(path.join(root,'backend/data/live-test'),{recursive:true});
    await writeFile(path.join(root,'backend/data/live-test/result.json'),JSON.stringify(result,null,2));
+   await writeFile(path.join(root,`backend/data/live-test/result-${scenarioName}-${jobID}.json`),JSON.stringify(result,null,2));
    const health=await(await fetch(base+'/health')).json();
    console.log('Final status:',result.status,'Meta text requests:',health.meta_requests);
    console.log('Reserved upper cost allowance:',health.reserved_cost_usd,'USD; completed-response usage:',JSON.stringify(health.usage));

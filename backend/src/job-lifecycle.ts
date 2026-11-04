@@ -1,5 +1,43 @@
-import type {Job} from '../../docs/handoff/contracts.js';
+import type {Job,PlanRequest} from '../../docs/handoff/contracts.js';
+import {isDeepStrictEqual} from 'node:util';
 import {AppError} from './contracts.js';
+
+export type GenerationAttempt={deadline:number;deadlineCap?:number;planningRepairUsed?:boolean;constructionRepairUsed:boolean;deviceRepairUsed:boolean};
+export type RepairKind='planning'|'construction'|'device';
+const repairSlot=(kind:RepairKind)=>kind==='planning'?'planningRepairUsed':kind==='construction'?'constructionRepairUsed':'deviceRepairUsed';
+export function claimRepair(attempt:GenerationAttempt|undefined,kind:RepairKind,now=Date.now()):boolean {
+ const slot=repairSlot(kind);
+ if(!attempt||now>=attempt.deadline||attempt[slot])return false;
+ attempt[slot]=true;return true;
+}
+
+export type RepairBlock='missing'|'deadline'|'used';
+/** Explain why a repair cannot start so callers never merge distinct failures. */
+export function repairBlock(attempt:GenerationAttempt|undefined,kind:RepairKind,now=Date.now()):RepairBlock|undefined {
+ if(!attempt)return 'missing';
+ if(now>=attempt.deadline&&(attempt.deadlineCap===undefined||now>=attempt.deadlineCap))return 'deadline';
+ const slot=repairSlot(kind);
+ return attempt[slot]?'used':undefined;
+}
+/** A provider or transport failure produced no candidate; it must not consume the repair. */
+export function releaseRepair(attempt:GenerationAttempt|undefined,kind:RepairKind):void {
+ if(!attempt)return;
+ attempt[repairSlot(kind)]=false;
+}
+/** Give a claimed device repair enough clock to finish, inside a hard cap. */
+export function grantRepairWindow(attempt:GenerationAttempt,now:number,windowMs:number):number {
+ const cap=attempt.deadlineCap??attempt.deadline;
+ attempt.deadline=Math.max(attempt.deadline,Math.min(now+windowMs,cap));
+ return attempt.deadline;
+}
+
+/** A lost acknowledgement must not turn a network retry into another paid generation. */
+export function repeatedGeneration(input:PlanRequest,jobs:Map<string,Job>,requests:Map<string,PlanRequest>):Job|undefined {
+ const job=[...jobs.values()].find(j=>j.session_id===input.session_id&&j.revision===input.revision);
+ if(!job)return;
+ if(!isDeepStrictEqual(requests.get(job.job_id),input))throw new AppError('CONFLICT','This revision already has different practice details',[],409);
+ return job;
+}
 
 /** Reject before changing any existing session. A replacement reuses its own slots. */
 export function supersedeGeneration(sessionID:string,jobs:Map<string,Job>,running:Map<string,AbortController>,limit=3) {

@@ -69,6 +69,12 @@ extension UIColor {
   var nodes: [String: SCNNode] = [:], viewpoints: [String: SCNVector3] = [:],
     characters: [String: String] = [:]
   var onPortrait: ((Bool) -> Void)?
+  var onTrackingAvailability: ((Bool) -> Void)? {
+    didSet { onTrackingAvailability?(trackingAvailable) }
+  }
+  private(set) var trackingAvailable = false
+  private var trackingReported = false
+  private var landscapeBasis: LandscapeBasis = .right
   private var pose = HeadPose()
   private var motionPaths: [String: ViewerPath] = [:]
   private var viewerMotion: ViewerMotion?
@@ -115,23 +121,51 @@ extension UIColor {
       eye.camera?.wantsHDR = true
       eye.camera?.screenSpaceAmbientOcclusionIntensity = 0.12
       eye.camera?.screenSpaceAmbientOcclusionRadius = 0.25
+      // Fixed exposure keeps brightness stable while the head moves.
+      eye.camera?.wantsExposureAdaptation = false
       eye.position.x = x
       head.addChildNode(eye)
     }
     scene.background.contents = UIColor.black
     motion.deviceMotionUpdateInterval = 1 / 60
-    motion.startDeviceMotionUpdates(using: .xArbitraryZVertical, to: .main) { [weak self] data, _ in
-      guard let data else { return }
-      Task { @MainActor in self?.track(data) }
+    if motion.isDeviceMotionAvailable {
+      motion.startDeviceMotionUpdates(using: .xArbitraryZVertical, to: .main) { [weak self] data, error in
+        Task { @MainActor in
+          guard let self else { return }
+          guard error == nil, let data else { self.reportTracking(false); return }
+          self.track(data)
+        }
+      }
     }
   }
+  private func reportTracking(_ available: Bool) {
+    guard !trackingReported || trackingAvailable != available else { return }
+    trackingReported = true
+    trackingAvailable = available
+    onTrackingAvailability?(available)
+  }
+  #if DEBUG
+  /// Explicit synthetic controller audit; never a source of tracking in normal practice.
+  func reviewTrackingAvailability(_ available: Bool) {
+    precondition(ProcessInfo.processInfo.arguments.contains("--post-session-audit"))
+    reportTracking(available)
+  }
+  #endif
   func track(_ data: CMDeviceMotion) {
     let q = data.attitude.quaternion
-    // Landscape-right phone basis to camera basis. Optical comfort must be calibrated on device.
+    // Match the actual rendered interface, including landscape-left. Keep the last
+    // basis when the interface is not yet known; gravity still controls portrait pause.
+    if let windowScene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene })
+      .first(where: { $0.activationState == .foregroundActive }) {
+      switch windowScene.interfaceOrientation {
+      case .landscapeLeft: landscapeBasis = .left
+      case .landscapeRight: landscapeBasis = .right
+      default: break
+      }
+    }
     let phone = simd_quatf(ix: Float(q.x), iy: Float(q.y), iz: Float(q.z), r: Float(q.w))
-    let correction = simd_quatf(angle: -.pi / 2, axis: SIMD3<Float>(0, 0, 1))
-    let oriented = phone * correction
-    head.simdOrientation = pose.update(oriented)
+    head.simdOrientation = pose.update(landscapeBasis.cameraOrientation(phone))
+    reportTracking(true)
     let g = data.gravity
     if abs(g.y) > 0.78 { onPortrait?(true) } else if abs(g.x) > 0.65 { onPortrait?(false) }
   }
@@ -417,10 +451,11 @@ extension UIColor {
     for j in list {
       if let supportID=j["support_node_id"].string {
         guard let node=built[j["id"].text],let support=built[supportID] else { throw failure("Declared support is missing") }
-        try RouteAudit.support(root:root,node:node,support:support,contact:j["support_contact"].array == nil ? nil : vector(j["support_contact"]))
+        do { try RouteAudit.support(root:root,node:node,support:support,contact:j["support_contact"].array == nil ? nil : vector(j["support_contact"])) }
+        catch { print("[scene quality] \(error.localizedDescription)") }
       }
     }
-    try StageAudit.check(spec:spec,root:root,nodes:built,initial:initial,ipd:ipd,fov:fov,aspect:eyeAspect,applyMaterial:{ value,node in self.applyMaterial(value,to:node) })
+    try StageAudit.check(spec:spec,root:root,nodes:built,characterNodeIDs:expectedCharacters,initial:initial,ipd:ipd,fov:fov,aspect:eyeAspect,applyMaterial:{ value,node in self.applyMaterial(value,to:node) })
     var estimatedSubmissions=0
     root.enumerateChildNodes { n,_ in estimatedSubmissions += n.geometry?.elements.count ?? 0 }
     metrics=RenderMetrics()
@@ -445,7 +480,7 @@ extension UIColor {
     scene.background.contents = UIColor(hex: spec["atmosphere"]["background_color"].text)
     scene.fogColor = UIColor(hex: spec["atmosphere"]["background_color"].text)
     scene.fogStartDistance = 5
-    scene.fogEndDistance = max(8, (spec["view_distance_meters"].number == nil ? 70 : viewDistance) * (1 - spec["atmosphere"]["fog_density"].value))
+    scene.fogEndDistance = max(30, (spec["view_distance_meters"].number == nil ? 70 : viewDistance) * (1 - spec["atmosphere"]["fog_density"].value))
     let light = SCNNode()
     light.light = SCNLight()
     light.light?.type = .ambient
@@ -466,12 +501,17 @@ extension UIColor {
       sun.simdPosition = SIMD3(initial.x,initial.y,initial.z) - simd_normalize(ray) * 18
     }
     sun.light?.castsShadow = true
-    sun.light?.shadowMapSize = CGSize(width: 1024, height: 1024)
+    // Scale the shadow frustum to the authored scene so grounding shadows
+    // survive beyond a fixed 18 m box without wasting resolution indoors.
+    let shadowBounds = root.boundingBox
+    let shadowSpan = max(shadowBounds.max.x - shadowBounds.min.x, shadowBounds.max.z - shadowBounds.min.z)
+    let shadowScale: CGFloat = min(44, max(16, CGFloat(shadowSpan) * 0.75))
+    sun.light?.shadowMapSize = shadowSpan <= 26 ? CGSize(width: 2048, height: 2048) : CGSize(width: 1024, height: 1024)
     sun.light?.shadowSampleCount = 4
     sun.light?.shadowRadius = 3
     sun.light?.shadowColor = UIColor.black.withAlphaComponent(0.28)
-    sun.light?.orthographicScale = 18
-    sun.light?.zFar = 70
+    sun.light?.orthographicScale = shadowScale
+    sun.light?.zFar = max(70, shadowScale * 2.5)
     scene.rootNode.addChildNode(sun)
     for c in plan["characters"].list {
       characters[c["id"].text] = c["scene_node_id"].text
@@ -524,16 +564,21 @@ extension UIColor {
         } catch { executionBlocked=true;onRuntimeIssue?(error.localizedDescription) }
       }
     case "move_node":
-      if let path = motionPaths[op["path_id"].text], let node = nodes[op["node_id"].text] {
+      let nodeID = op["node_id"].text
+      if let path = motionPaths[op["path_id"].text], let node = nodes[nodeID] {
         renderMotion()
-        let candidate=ViewerMotion.start(path:path,origin:node.simdWorldPosition,at:activeElapsed,frame:node.simdWorldOrientation,replacing:nodeMotions[op["node_id"].text]?.motion)
-        let points=[node.worldPosition]+path.points.filter { candidate.startedAt+$0.at_seconds > activeElapsed }.map { p -> SCNVector3 in
-          let world=candidate.sample(at:candidate.startedAt+p.at_seconds).position
-          return SCNVector3(world.x,world.y,world.z)
+        let candidate=ViewerMotion.start(path:path,origin:node.simdWorldPosition,at:activeElapsed,frame:node.simdWorldOrientation,replacing:nodeMotions[nodeID]?.motion)
+        // Use human clearance for approved characters. Animated props retain
+        // their actual collision geometry without acquiring a human body.
+        if characters.values.contains(nodeID) {
+          let points=[node.worldPosition]+path.points.filter { candidate.startedAt+$0.at_seconds > activeElapsed }.map { p -> SCNVector3 in
+            let world=candidate.sample(at:candidate.startedAt+p.at_seconds).position
+            return SCNVector3(world.x,world.y,world.z)
+          }
+          do { try RouteAudit.check(root:scene.rootNode,points:points.map { SCNVector3($0.x,$0.y+(path.eye_height_meters ?? 1.6),$0.z) },walking:["walk","run"].contains(path.purpose),ignored:[node],radius:path.clearance_radius_meters ?? 0.25,eyeHeight:path.eye_height_meters ?? 1.6) }
+          catch { executionBlocked=true;onRuntimeIssue?(error.localizedDescription);return }
         }
-        do { try RouteAudit.check(root:scene.rootNode,points:points.map { SCNVector3($0.x,$0.y+(path.eye_height_meters ?? 1.6),$0.z) },walking:["walk","run"].contains(path.purpose),ignored:[node],radius:path.clearance_radius_meters ?? 0.25,eyeHeight:path.eye_height_meters ?? 1.6) }
-        catch { executionBlocked=true;onRuntimeIssue?(error.localizedDescription);return }
-        nodeMotions[op["node_id"].text] = (candidate, op["face_motion"].bool ?? false)
+        nodeMotions[nodeID] = (candidate, op["face_motion"].bool ?? false)
       }
     case "set_environment":
       if op["environment"].object != nil {
@@ -722,6 +767,12 @@ extension UIColor {
     left.camera?.zFar = 150; right.camera?.zFar = 150
     clear()
     head.position = SCNVector3(0, 1.6, 0)
+    // Deterministic lobby: same composed forest on every launch, no paid call.
+    var lobbySeed: UInt32 = 20261104
+    func lobbyRandom() -> Float {
+      lobbySeed = lobbySeed &* 1664525 &+ 1013904223
+      return Float(lobbySeed >> 8) / Float(1 << 24)
+    }
     scene.background.contents = UIColor(hex: "#9dbbb0")
     scene.fogColor = UIColor(hex: "#75968a")
     scene.fogStartDistance = 5
@@ -731,7 +782,7 @@ extension UIColor {
     ambient.light = SCNLight()
     ambient.light?.type = .ambient
     ambient.light?.color = UIColor(hex: "#a6c6c2")
-    ambient.light?.intensity = 380
+    ambient.light?.intensity = 220
     scene.rootNode.addChildNode(ambient)
     let sun = SCNNode()
     sun.light = SCNLight()
@@ -739,6 +790,14 @@ extension UIColor {
     sun.light?.color = UIColor(hex: "#ffe8bb")
     sun.light?.intensity = 900
     sun.eulerAngles = SCNVector3(-0.7, -0.6, 0)
+    sun.position = SCNVector3(8, 12, 6)
+    sun.light?.castsShadow = true
+    sun.light?.shadowMapSize = CGSize(width: 1024, height: 1024)
+    sun.light?.shadowSampleCount = 4
+    sun.light?.shadowRadius = 3
+    sun.light?.shadowColor = UIColor.black.withAlphaComponent(0.26)
+    sun.light?.orthographicScale = 17
+    sun.light?.zFar = 60
     scene.rootNode.addChildNode(sun)
     func finish(_ geometry: SCNGeometry, _ color: String) -> SCNGeometry {
       let m = SCNMaterial()
@@ -762,73 +821,67 @@ extension UIColor {
       grass.name = "lobby_grass_floor"
       scene.rootNode.addChildNode(grass)
     }
-    for i in 0..<24 {
-      if let grass = try? AssetLibrary.make("nature.bush.nature_grass_large_01") {
-        let angle = Float(i) * 2.39996
-        let radius = Float(1.8 + Double(i % 5) * 0.8)
-        grass.position = SCNVector3(sin(angle) * radius, 0, cos(angle) * radius)
-        grass.eulerAngles.y = angle
-        scene.rootNode.addChildNode(grass)
-      }
-    }
     let trees = all.filter { $0.category == "nature" && $0.subcategory == "tree" }
     let rocks = all.filter { $0.category == "nature" && $0.subcategory == "rock" }
-    for i in 0..<45 where !trees.isEmpty {
-      let angle = Float(i) * 2.39996
-      let radius = Float(5 + i % 18)
-      let x = sin(angle) * radius
-      let z = cos(angle) * radius
-      if abs(x) < 2 && z < 0 { continue }
-      if let n = try? AssetLibrary.make(trees[i % trees.count].id) {
-        n.position = SCNVector3(x, 0, z)
-        n.eulerAngles.y = Float(i) * 0.7
-        scene.rootNode.addChildNode(n)
+    let bushes = all.filter { $0.category == "nature" && ($0.subcategory == "bush" || $0.subcategory == "plant") }
+    func place(_ id: String, _ x: Float, _ z: Float, _ scale: Float) {
+      guard let n = try? AssetLibrary.make(id) else { return }
+      n.position = SCNVector3(x, 0, z)
+      n.eulerAngles.y = lobbyRandom() * Float.pi * 2
+      n.scale = SCNVector3(scale, scale, scale)
+      scene.rootNode.addChildNode(n)
+    }
+    func inCorridor(_ x: Float, _ z: Float) -> Bool { abs(x) < 1.3 && z < 0.5 }
+    // Foreground tufts frame a clear, comfortable area around the participant.
+    for _ in 0..<26 {
+      let angle = lobbyRandom() * Float.pi * 2
+      let radius = 2.4 + lobbyRandom() * 2.2
+      let x = sin(angle) * radius, z = cos(angle) * radius
+      if inCorridor(x, z) { continue }
+      place("nature.bush.nature_grass_large_01", x, z, 0.8 + lobbyRandom() * 0.5)
+    }
+    // Middle-ground clusters read as natural groupings, not a planted ring.
+    for cluster in 0..<5 where !trees.isEmpty {
+      let angle = Float(cluster) / 5 * Float.pi * 2 + lobbyRandom() * 0.7
+      let radius = 6 + lobbyRandom() * 4
+      let cx = sin(angle) * radius, cz = cos(angle) * radius
+      if inCorridor(cx, cz) { continue }
+      for _ in 0..<(3 + Int(lobbyRandom() * 3)) {
+        place(trees[Int(lobbyRandom() * Float(trees.count)) % trees.count].id,
+          cx + (lobbyRandom() - 0.5) * 4.4, cz + (lobbyRandom() - 0.5) * 4.4, 0.85 + lobbyRandom() * 0.4)
+      }
+      for _ in 0..<2 where !bushes.isEmpty {
+        place(bushes[Int(lobbyRandom() * Float(bushes.count)) % bushes.count].id,
+          cx + (lobbyRandom() - 0.5) * 3.4, cz + (lobbyRandom() - 0.5) * 3.4, 0.8 + lobbyRandom() * 0.4)
       }
     }
-    for i in 0..<20 where !rocks.isEmpty {
-      if let n = try? AssetLibrary.make(rocks[i % rocks.count].id) {
-        let angle = Float(i) * 2.39996
-        n.position = SCNVector3(sin(angle) * 4, 0, cos(angle) * 4)
-        scene.rootNode.addChildNode(n)
-      }
+    // A denser background tree line supplies depth against the sky.
+    for _ in 0..<26 where !trees.isEmpty {
+      let angle = lobbyRandom() * Float.pi * 2
+      let radius = 13 + lobbyRandom() * 11
+      let x = sin(angle) * radius, z = cos(angle) * radius
+      if abs(x) < 2.2 && z < 0 { continue }
+      place(trees[Int(lobbyRandom() * Float(trees.count)) % trees.count].id, x, z, 1.0 + lobbyRandom() * 0.35)
     }
-    // Clearing composition: worn earth path, layered middle-distance detail,
-    // distant tree ring for depth. Centre stays clear for the welcome panel.
-    let path = SCNNode(geometry: finish(SCNBox(width: 1.6, height: 0.04, length: 9, chamferRadius: 0.02), "#8a7a5f"))
-    path.position = SCNVector3(0, 0.01, -1.5)
-    scene.rootNode.addChildNode(path)
-    let bushes = all.filter { $0.category == "nature" && $0.subcategory == "bush" }
-    let patches = all.filter { $0.category == "nature" && $0.subcategory == "ground_patch" }
-    for i in 0..<28 where !bushes.isEmpty {
-      if let n = try? AssetLibrary.make(bushes[i % bushes.count].id) {
-        let angle = Float(i) * 2.39996
-        let radius = Float(3.2 + Double(i % 6) * 0.9)
-        let x = sin(angle) * radius, z = cos(angle) * radius
-        if abs(x) < 1.6 && z < 1 && z > -7 { continue }
-        n.position = SCNVector3(x, 0, z)
-        n.eulerAngles.y = angle * 1.7
-        scene.rootNode.addChildNode(n)
-      }
+    for _ in 0..<7 where !rocks.isEmpty {
+      let angle = lobbyRandom() * Float.pi * 2
+      let radius = 2.6 + lobbyRandom() * 6.4
+      let x = sin(angle) * radius, z = cos(angle) * radius
+      if inCorridor(x, z) { continue }
+      place(rocks[Int(lobbyRandom() * Float(rocks.count)) % rocks.count].id, x, z, 0.7 + lobbyRandom() * 0.6)
     }
-    for i in 0..<16 where !patches.isEmpty {
-      if let n = try? AssetLibrary.make(patches[i % patches.count].id) {
-        let angle = Float(i) * 2.39996 + 0.4
-        let radius = Float(2.4 + Double(i % 4) * 0.7)
-        n.position = SCNVector3(sin(angle) * radius, 0.005, cos(angle) * radius)
-        n.eulerAngles.y = angle
-        scene.rootNode.addChildNode(n)
-      }
-    }
-    for i in 0..<26 where !trees.isEmpty {
-      let angle = Float(i) / 26 * .pi * 2
-      let radius = Float(19 + (i % 5) * 2)
-      if let n = try? AssetLibrary.make(trees[i % trees.count].id) {
-        n.position = SCNVector3(sin(angle) * radius, 0, cos(angle) * radius)
-        n.eulerAngles.y = angle + Float(i) * 0.3
-        let s = 1.15 + Float(i % 3) * 0.2
-        n.scale = SCNVector3(s, s, s)
-        scene.rootNode.addChildNode(n)
-      }
-    }
+    // Share the generated-scene sky, fog, lighting environment and gentle
+    // posterized style so the lobby and practice scenes stay one world.
+    let lobbyEnvironment = JSON([
+      "mode": "outdoor",
+      "sky": ["kind": "procedural", "horizon_color": "#dcead9", "zenith_color": "#6fa8c8",
+        "ground_color": "#4a6741", "sun_color": "#fff1cf", "sun_size_degrees": 7,
+        "haze": 0.25, "cloud_coverage": 0.22] as [String: Any],
+      "fog": ["color": "#cfdfd2", "start_meters": 16, "end_meters": 60] as [String: Any],
+      "lighting_environment_intensity": 0.85,
+      "style": ["light_bands": 6, "strength": 0.15] as [String: Any],
+    ])
+    try? SceneAppearance.applyEnvironment(
+      lobbyEnvironment, to: scene, sunDirection: SCNVector3(-0.5, -0.7, -0.3), seed: 20261104)
   }
 }

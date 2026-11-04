@@ -9,7 +9,12 @@ const ajv = new (Ajv as any)({ strict: false, allErrors: true });
 (addFormats as any)(ajv);
 ajv.addSchema({ $id: 'braive', components: document.components });
 export class AppError extends Error {
+ declare modelOutput?:{schema:string;value:unknown};
  constructor(public code: string, message: string, public issues: ValidationIssue[] = [], public status = 400) { super(message); }
+ withModelOutput(schema:string,value:unknown):this {
+  Object.defineProperty(this,'modelOutput',{value:{schema,value},enumerable:false,configurable:true});
+  return this;
+ }
 }
 function schemaIssues(errors:any[]):ValidationIssue[]{
  return errors.map(e=>({path:e.instancePath,rule:e.keyword,message:e.message+(e.params&&Object.keys(e.params).length?' '+JSON.stringify(e.params):'')}));
@@ -23,7 +28,7 @@ const providerChecks=new Map<string,any>();
  * the advertised capability contract, not merely be asked to do so in prose. */
 export function validateProviderOutput(name:string,value:unknown) {
  let check=providerChecks.get(name);
- if(!check){check=ajv.compile(outputSchema(name));providerChecks.set(name,check);}
+ if(!check){check=ajv.compile(name==='SceneRepairPatch'?sceneRepairPatchSchema():outputSchema(name));providerChecks.set(name,check);}
  if(!check(value))throw new AppError('INVALID_MODEL_OUTPUT',`New ${name} is missing required capabilities`,schemaIssues(check.errors));
 }
 export function sceneIssues(plan: SessionPlan, scene: SceneSpec, audio: AudioPlan): ValidationIssue[] {
@@ -230,6 +235,29 @@ export function outputSchema(name: string): any {
  if(name==='SceneSpec'&&defs.ScenarioStep)defs.ScenarioStep.properties.actions={type:'array',maxItems:0};
  if(name==='SceneSpec')root.properties.interactions={type:'array',maxItems:0};
  if(name==='SceneSpec'&&defs.SceneNode)defs.SceneNode.required=[...new Set([...defs.SceneNode.required,'collision_role','support_node_id'])];
+ if(name==='SceneSpec'&&defs.Geometry){
+  const asset=(defs.Geometry.oneOf??defs.Geometry.anyOf)?.find((variant:any)=>variant.properties?.kind?.const==='asset');
+  if(asset)asset.properties.asset_id={type:'string',minLength:1,maxLength:100,enum:[...assetIDs]};
+ }
+ // Newly authored identifiers must name something. Nullable links use real null;
+ // omitted optional links must not become punctuation-only placeholder strings.
+ if(name==='SceneSpec'){
+  const identifier=(schema:any)=>{
+   if(!schema?.enum&&!schema?.format&&(schema?.type==='string'||Array.isArray(schema?.type)&&schema.type.includes('string'))){
+    schema.minLength=Math.max(1,schema.minLength??0);
+    schema.pattern='^[A-Za-z0-9_]';
+   }
+  };
+  const identifiers=(definition:any):void=>{
+   if(!definition||typeof definition!=='object')return;
+   for(const [key,property] of Object.entries(definition.properties??{}) as [string,any][]){
+    if(key==='id'||key.endsWith('_id')||key==='conversation_target')identifier(property);
+    if(key.endsWith('_ids'))identifier(property.items);
+   }
+   for(const child of Object.values(definition))identifiers(child);
+  };
+  identifiers(root);identifiers(defs);
+ }
  if(name==='SceneSpec')delete root.properties.construction_report; // Compiler-owned output only.
  // Drop definitions that became unreachable after restricting newly authored
  // guided output. Legacy action/choice graphs remain in the saved wire schema.
@@ -244,4 +272,70 @@ export function outputSchema(name: string): any {
  }
  visit(root);
  return {...root,$defs:Object.fromEntries([...reachable].map(id=>[id,defs[id]]))};
+}
+
+/** Scoped repair output: a small patch against an identified base candidate. */
+export function sceneRepairPatchSchema():any {
+ const vec3={type:'array',items:{type:'number'},minItems:3,maxItems:3};
+ const operation=(properties:any,required:string[])=>({type:'object',additionalProperties:false,properties:{op:{type:'string'},...properties},required:['op',...required]});
+ return {type:'object',additionalProperties:false,properties:{
+  base_hash:{type:'string',minLength:8,maxLength:64},
+  operations:{type:'array',minItems:1,maxItems:24,items:{anyOf:[
+   operation({node_id:{type:'string'},position:vec3,rotation_radians:vec3,scale:vec3},['node_id']),
+   operation({node_id:{type:'string'},color:{type:'string'},roughness:{type:'number',minimum:0,maximum:1}},['node_id']),
+   operation({relation_id:{type:'string'},offset:vec3},['relation_id','offset']),
+   operation({relation_id:{type:'string'},kind:{type:'string',enum:['inside','within']}},['relation_id','kind']),
+   operation({path_id:{type:'string'},points:{type:'array',minItems:1,maxItems:64,items:{type:'object',additionalProperties:false,properties:{at_seconds:{type:'number',minimum:0},position:vec3},required:['at_seconds','position']}}},['path_id','points']),
+   operation({zone_id:{type:'string'},center:vec3,size:vec3},['zone_id']),
+   operation({anchor:{type:'object',additionalProperties:false,properties:{id:{type:'string'},node_id:{type:'string'},kind:{type:'string',enum:['support','seat','attachment','entry','exit']},position:vec3,footprint:{type:'array',items:{type:'number'},minItems:2,maxItems:2}},required:['id','node_id','kind','position','footprint']}},['anchor']),
+   operation({relation_id:{type:'string'},anchor_id:{type:'string'}},['relation_id','anchor_id']),
+   operation({relation_id:{type:'string'},anchor_id:{type:'string'}},['relation_id','anchor_id']),
+   operation({node_id:{type:'string'}},['node_id']),
+  ]}},
+ },required:['base_hash','operations']};
+}
+
+/** Bind references already owned by the approved plan instead of asking the builder to invent them. */
+export function sceneOutputSchema(plan:SessionPlan,audio:AudioPlan):any {
+ const schema=outputSchema('SceneSpec'),defs=schema.$defs;
+ schema.properties.session_id={type:'string',const:plan.session_id};
+ schema.properties.revision={type:'integer',const:plan.revision};
+ const bind=(properties:any,key:string,values:string[])=>{
+  if(values.length)properties[key]={type:'string',enum:[...new Set(values)]};
+  else delete properties[key];
+ };
+ bind(defs.SceneNode.properties,'prop_name',plan.props??[]);
+ const characters=plan.characters.map(c=>c.id);
+ bind(defs.ScenarioStep.properties,'conversation_target',characters);
+ if(plan.experience?.stages.length){
+  bind(defs.ScenarioStep.properties,'id',plan.experience.stages.map(s=>s.id));
+  defs.ScenarioSpec.properties.initial_step_id={type:'string',const:plan.experience.stages[0].id};
+ }
+ const operations=defs.WorldOperation.oneOf??defs.WorldOperation.anyOf;
+ for(const [kind,key,ids] of [['character_action','character_id',characters],['play_sound','cue_id',audio.layers.map(l=>l.id)]] as [string,string,string[]][]){
+  const index=operations.findIndex((variant:any)=>variant.properties?.type?.const===kind);
+  if(index<0)continue;
+  if(ids.length)bind(operations[index].properties,key,ids);
+  else operations.splice(index,1);
+ }
+ return schema;
+}
+
+/** Model-authored scene seeds omit fields the stage compiler owns. The final
+ * SceneSpec is still fully validated after preparation, before playback. */
+export function sceneBuilderSchema(plan:SessionPlan,audio:AudioPlan):any {
+ const schema=sceneOutputSchema(plan,audio),step=schema.$defs.ScenarioStep;
+ schema.properties.nodes.minItems=1;
+ schema.properties.viewpoints.minItems=1;
+ const compiled=new Set(['terminal','completion','conversation_target','review_viewpoint_id','focus_node_ids','announce_on_entry']);
+ step.required=(step.required??[]).filter((field:string)=>!compiled.has(field));
+ return schema;
+}
+
+export function validateSceneBuilderOutput(plan:SessionPlan,audio:AudioPlan,value:unknown):void {
+ // Plan-bound schemas are per request; do not retain them in the shared Ajv cache.
+ const builderAjv=new (Ajv as any)({strict:false,allErrors:true});
+ (addFormats as any)(builderAjv);
+ const check=builderAjv.compile(sceneBuilderSchema(plan,audio));
+ if(!check(value))throw new AppError('INVALID_MODEL_OUTPUT','Invalid scene builder output',schemaIssues(check.errors));
 }

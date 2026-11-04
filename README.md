@@ -4,6 +4,10 @@ Native iPhone VR situational practice with voice intake and a Meta-powered backe
 
 ## Current state
 
+Phone build **0.4 (6)** includes the connection/pairing readiness check, bounded same-job polling retries, voice-preview/listening fixes and both landscape tracking bases. Pull this branch on the practice computer and restart its backend before rebuilding/installing the app. See [phone follow-up](docs/iphone-voice-followup-2026-11-03.md) for evidence and remaining physical checks.
+
+Scene generation now runs **Spark author → fresh Spark editor → Wonder builder**. The editor returns the complete final experience in the author's format. Backend code validates it and assembles IDs, scheduling and audio locally before construction. The normal path uses three model calls; construction repairs retain the edited plan. See [generation chain](docs/scene-generation-chain.md) for contracts, validation, timing measurements and verification limits.
+
 The visual development branch builds on the integrated partner runtime through `89fc366` and runtime follow-up `5cb7522`. It adds measured bounds for all 355 assets, deterministic spatial construction, procedural sky, explicit fog and a gentle context-adjustable low-poly shader with matte/ground/water/glass/foliage profiles. Character palettes remain protected, and moving surfaces share the pause-aware clock. Air/water conditions and unsupported fluid dynamics are described explicitly; ripples and fog are visual effects, not physical simulation. Coordinator instructions emphasize sights, sounds and events happening to the participant, with quiet routine stages. Action experiences have no character dialogue; any required dialogue uses conversation classification while retaining necessary physical movement. See [implementation evidence and remaining device checks](docs/visual-implementation-2026-11-02.md).
 
 The earlier core practice loop passed on the physical phone on November 2, 2026: complete voice intake through pauses, centered reveal/countdown, STOP/NO resumption, speech waiting, relevant character replies, a nonempty saved reflection, grounded feedback, and a centered adapted repeat. Fresh and adapted library generations took 48.835 and 62.149 seconds. These are historical checks of the earlier interaction engine, not verification of every subsequent change.
@@ -122,12 +126,12 @@ xcrun swiftc -module-cache-path /tmp/braive-swift-module-cache ios/Braive/JSON.s
 ## Runtime design
 
 - SwiftUI shell; SceneKit scene graph; Metal eye textures and lens correction; Core Motion rotational tracking; AVFoundation voice processing, TTS, and audio mixing.
-- Spark coordinates, reasons about dialogue, generates feedback, and proposes adaptation. Wonder authors the declarative scene. Spark selects bundled audio, as permitted by the handoff's Glimmer fallback. SAM/Image/Glimmer are optional and are not active dependencies.
+- Spark authors the experience and independently edits it in a fresh call, reasons about dialogue, generates feedback, and proposes adaptation. Wonder builds the edited experience as a declarative scene. Structured bundled sound selections become an AudioPlan through local assembly; audio does not require another model call. SAM/Image/Glimmer are optional and are not active dependencies.
 - Apple SpeechAnalyzer / SpeechTranscriber handles on-device, long-form recognition and SpeechDetector supplies speech boundaries. The original Meta relay remains a disabled optional backend route; the app does not use it. The Meta API key stays on the backend computer.
 - The project OpenAPI supplies schema validation. The server adds graph/reference/tool-phase/evidence checks. The phone builds scenes offscreen and checks both-eye focal/depth visibility before commit.
-- Model output cannot execute code or load arbitrary URLs. Invalid scenes get at most one repair shared with native preflight, within the ten-minute generation/readiness deadline. No preset practice-room fallback.
+- Model output cannot execute code or load arbitrary URLs. Generation gets one construction repair and one native preflight repair, both within the ten-minute readiness deadline and cumulative spending cap. No preset practice-room fallback.
 
-Contract extensions: persisted SessionRecord detail fields (`observations`, `adaptation`, reflection metadata/file); `/v1/jobs/{id}/validation` accepts a bounded native validation explanation and requests the shared repair. SessionPlan now includes an experience with ordered stages; SceneSpec adds executable scenarios, motion paths, viewer-carried assemblies and viewing distance. These fields are additive for saved records and required from new provider output. Specialist generation remains internal to the single backend.
+Contract extensions: persisted SessionRecord detail fields (`observations`, `adaptation`, reflection metadata/file); `/v1/jobs/{id}/validation` accepts a bounded native validation explanation and requests the device repair. SessionPlan now includes an experience with ordered stages; SceneSpec adds executable scenarios, motion paths, viewer-carried assemblies and viewing distance. These fields are additive for saved records and required from new provider output. Specialist generation remains internal to the single backend.
 
 ## Remaining verification and delivery work
 

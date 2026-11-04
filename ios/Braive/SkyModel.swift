@@ -51,7 +51,7 @@ enum SkyModel {
       let coverage=max(0,min(1,(density-threshold)*6))
       let horizonFade=min(1,max(0,(d.y-0.08)/0.25))
       let cloud=coverage*coverage*(3-2*coverage)*horizonFade*0.65
-      value=value*(1-cloud)+SIMD3<Double>(repeating:1)*cloud
+      value=value*(1-cloud)+(horizon*0.3+SIMD3<Double>(repeating:0.7))*cloud
     }
     return SIMD3(min(1,max(0,value.x)),min(1,max(0,value.y)),min(1,max(0,value.z)))
   }

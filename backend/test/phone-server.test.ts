@@ -22,6 +22,11 @@ test('idle phone server stays reachable; only authenticated practice actions ren
   const base=`http://127.0.0.1:${port}`;
   const health=async()=>{const r=await fetch(base+'/health');assert.equal(r.status,200);return r.json();};
   assert.equal((await health()).live_test_active,false);
+  assert.equal((await fetch(base+'/v1/connection')).status,401);
+  const paired=await fetch(base+'/v1/connection',{headers:{Authorization:`Bearer ${token}`}});
+  assert.equal(paired.status,200);
+  assert.deepEqual(await paired.json(),{status:'ok'});
+  assert.equal((await health()).live_test_active,false,'Read-only pairing must not renew paid activity');
   const post=async(authorized:boolean)=>fetch(base+'/v1/session-plans',{
    method:'POST',headers:{'Content-Type':'application/json',...(authorized?{Authorization:`Bearer ${token}`}:{})},
    body:'{}', // Invalid before any model or budget reservation; never contact a provider.

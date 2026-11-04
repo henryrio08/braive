@@ -30,7 +30,7 @@ export type Choice = { "id": string; "label": string; "intent_examples": Array<s
 
 export type Interaction = { "id": string; "prompt": string; "trigger": "user_request" | "scene_start" | "scheduled" | "choice_completed"; "at_active_second"?: number; "choices": Array<Choice> };
 
-export type SceneSpec = { construction_plan?: ConstructionPlan; construction_report?: {compiler_version:"1";resolved_relation_ids:string[];warnings:ValidationIssue[]}; environment?: VisualEnvironment; "schema_version": "1"; "session_id": string; "revision": number; "description": string; "nodes": Array<SceneNode>; "viewpoints": Array<{ "id": string; "position": Array<number>; "description": string }>; "initial_viewpoint_id": string; "lighting": { "ambient_color": string; "ambient_intensity": number; "key_direction": Array<number>; "key_intensity": number }; "atmosphere": { "background_color": string; "fog_density": number }; "interactions": Array<Interaction>; "events": Array<{ "at_active_second": number; "operation": WorldOperation }>; "stereo": StereoSpec; "reveal": RevealSpec; "scenario"?: ScenarioSpec; "motion_paths"?: Array<MotionPath>; "view_distance_meters"?: number; "viewer_attached_node_ids"?: Array<string> };
+export type SceneSpec = { construction_plan?: ConstructionPlan; construction_report?: {compiler_version:"1";resolved_relation_ids:string[];warnings:ValidationIssue[];accepted_defects?:ValidationIssue[];corrections?:string[];recovery?:"first_pass"|"deterministic"|"patched"|"rebuilt"}; environment?: VisualEnvironment; "schema_version": "1"; "session_id": string; "revision": number; "description": string; "nodes": Array<SceneNode>; "viewpoints": Array<{ "id": string; "position": Array<number>; "description": string }>; "initial_viewpoint_id": string; "lighting": { "ambient_color": string; "ambient_intensity": number; "key_direction": Array<number>; "key_intensity": number }; "atmosphere": { "background_color": string; "fog_density": number }; "interactions": Array<Interaction>; "events": Array<{ "at_active_second": number; "operation": WorldOperation }>; "stereo": StereoSpec; "reveal": RevealSpec; "scenario"?: ScenarioSpec; "motion_paths"?: Array<MotionPath>; "view_distance_meters"?: number; "viewer_attached_node_ids"?: Array<string> };
 
 export type AudioRequest = { "plan": SessionPlan; "available_assets": Array<Asset> };
 
@@ -60,7 +60,7 @@ export type Reflection = { "id": string; "session_id": string; "created_at": str
 
 export type SessionRecord = { checkpoint?: Record<string,unknown> | null; render_metrics?: Record<string,unknown> | null; applied_operations?: WorldOperation[]; turns?: Array<Record<string,unknown>>; scene?: SceneSpec; audio?: AudioPlan; observations?: Array<Observation>; adaptation?: AdaptationResult | null; reflection_file?: string; reflection?: Record<string, unknown>; "schema_version": "1"; "session_id": string; "parent_session_id"?: string; "started_at": string; "ended_at": string; "plan": SessionPlan; "scene_revision": number; "active_seconds": number; "stop_count": number; "outcome": "completed" | "user_ended" | "interrupted" | "failed"; "reported_difficulty": number | null; "reported_readiness": number | null; "reflection_id"?: string; "feedback"?: FeedbackResult; "generation_provenance": { "mode": "live" | "replay"; "model_ids": Array<string>; "request_ids": Array<string> }; "use_history": boolean; "chained_rerun": boolean; "intensity_1_10": number; "topic_short": string; "early_end": boolean };
 
-export type ValidationIssue = { "path": string; "rule": string; "message": string };
+export type ValidationIssue = { "path": string; "rule": string; "message": string; "classification"?: "hard" | "soft"; "severity"?: number; "measured"?: string; "allowed"?: string };
 
 export type Error = { "code": "INVALID_INPUT" | "UNAUTHORIZED" | "RATE_LIMITED" | "PROVIDER_UNAVAILABLE" | "TIMEOUT" | "INVALID_MODEL_OUTPUT" | "CANCELLED" | "CONFLICT"; "message": string; "retryable": boolean; "request_id": string; "issues"?: Array<ValidationIssue>; "retry_after_ms"?: number };
 
@@ -105,7 +105,7 @@ export type ConstructionPlan = {
  zones:Array<{id:string;center:[number,number,number];size:[number,number,number];kind:'interior'|'outdoor'|'enclosure'}>;
  assemblies:Array<{id:string;root_node_id:string;member_node_ids:string[];zone_id:string;requirement_ids:string[]}>;
  anchors:Array<{id:string;node_id:string;kind:'support'|'seat'|'attachment'|'entry'|'exit';position:[number,number,number];footprint:[number,number]}>;
- relations:Array<{id:string;kind:'on'|'inside'|'faces'|'attached_to'|'near'|'clear_of';subject_id:string;target_id:string;anchor_id?:string;subject_anchor_id?:string;offset:[number,number,number];clearance:number;tolerance:number;required:boolean;containment_behavior?:'preserve_position'|'place_by_offset'}>;
+ relations:Array<{id:string;kind:'on'|'inside'|'within'|'faces'|'attached_to'|'near'|'clear_of';subject_id:string;target_id:string;anchor_id?:string;subject_anchor_id?:string;offset:[number,number,number];clearance:number;tolerance:number;required:boolean}>;
  routes:Array<{path_id:string;from_anchor_id?:string;to_anchor_id?:string;stage_ids:string[];requirement_ids:string[];clearance_radius_meters:number;eye_height_meters:number}>;
  medium_regions?:MediumRegion[];
  macros?:AssemblyMacro[];

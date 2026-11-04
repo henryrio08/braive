@@ -5,7 +5,8 @@ import UIKit
 /// Offscreen object-mask passes test actual geometry/occlusion before attaching a generated world.
 @MainActor enum ScenePreflight {
   static func check(
-    root: SCNNode, focus: [SCNNode], position: SCNVector3, ipd: Float, fov: Double, aspect: Double, far viewDistance: Double = 150
+    root: SCNNode, focus: [SCNNode], position: SCNVector3, ipd: Float, fov: Double, aspect: Double, far viewDistance: Double = 150,
+    strictVisualReview: Bool = false, requireVisibleFocus: Bool = true
   ) throws {
     guard let device = MTLCreateSystemDefaultDevice() else {
       throw error("Metal renderer unavailable")
@@ -46,14 +47,26 @@ import UIKit
     for depth in rawDistances {
       if distances.last.map({ depth - $0 > 0.1 }) ?? true { distances.append(depth) }
     }
-    guard distances.count >= 3 else { throw error("Scene needs visible spatial composition (depth groups: \(distances))") }
+    if distances.count < 3 {
+      let message = "Scene needs visible spatial composition (depth groups: \(distances))"
+      if strictVisualReview { throw error(message) }
+      print("[scene quality] \(message)")
+    }
     // Compare view-space depth with view-space depth. Cut between depth groups,
     // not through an object's center (its front-facing surface lies nearer).
-    let nearIndex = max(1, distances.count / 3)
-    let farIndex = min(distances.count - 1, max(nearIndex + 1, distances.count * 2 / 3))
-    let near = (distances[nearIndex - 1] + distances[nearIndex]) / 2
-    let far = (distances[farIndex - 1] + distances[farIndex]) / 2
-    guard far - near > 0.1 else { throw error("Scene geometry has insufficient depth separation") }
+    var near: Float = 1
+    var far: Float = 10
+    if distances.count >= 3 {
+      let nearIndex = max(1, distances.count / 3)
+      let farIndex = min(distances.count - 1, max(nearIndex + 1, distances.count * 2 / 3))
+      near = (distances[nearIndex - 1] + distances[nearIndex]) / 2
+      far = (distances[farIndex - 1] + distances[farIndex]) / 2
+      if far - near <= 0.1 {
+        if strictVisualReview { throw error("Scene geometry has insufficient depth separation") }
+        print("[scene quality] Scene geometry has insufficient depth separation")
+        far = near + 0.2
+      }
+    }
     let renderer = SCNRenderer(device: device, options: nil)
     renderer.scene = staging
     renderer.autoenablesDefaultLighting = false
@@ -84,9 +97,13 @@ import UIKit
           atTime: 0, with: CGSize(width: 320, height: 320 / max(0.5, aspect)),
           antialiasingMode: .none))
       let visible = focusPixels.strideCount { r, g, b in r > 200 && g < 30 && b < 30 }
-      guard visible >= 200 else {
-        throw error(
-          "Task focal point is occluded or too small in one eye (\(visible) visible pixels)")
+      if visible == 0 && (requireVisibleFocus || strictVisualReview) {
+        throw error("Task focal point is not visible in one eye (0 visible pixels)")
+      }
+      if visible < 200 {
+        let message = "Task focal point is occluded or too small in one eye (\(visible) visible pixels)"
+        if strictVisualReview { throw error(message) }
+        print("[scene quality] \(message)")
       }
       // Second pass: distance at each visible surface fragment, rather than object origins.
       // A large floor/water plane spans several depths even when its origin is far away.
@@ -111,8 +128,11 @@ import UIKit
       let nearPixels = mask.strideCount({ r, g, b in r > 180 && g < 40 && b < 40 })
       let middlePixels = mask.strideCount({ r, g, b in g > 180 && r < 40 && b < 40 })
       let farPixels = mask.strideCount({ r, g, b in b > 180 && r < 40 && g < 40 })
-      guard nearPixels > 40, middlePixels > 40, farPixels > 40
-      else { throw error("Foreground, middle, and far geometry must be visible in both eyes (\(nearPixels)/\(middlePixels)/\(farPixels) pixels; cuts \(near)/\(far))") }
+      if nearPixels <= 40 || middlePixels <= 40 || farPixels <= 40 {
+        let message = "Foreground, middle, and far geometry must be visible in both eyes (\(nearPixels)/\(middlePixels)/\(farPixels) pixels; cuts \(near)/\(far))"
+        if strictVisualReview { throw error(message) }
+        print("[scene quality] \(message)")
+      }
     }
   }
   private static func maskMaterial(_ source: SCNMaterial) -> SCNMaterial {
@@ -186,13 +206,25 @@ import UIKit
           pane.geometry?.materials=[source];pane.position=SCNVector3(0,1.6,-3);root.addChildNode(pane)
         }
       }
-      if mode == "transparent" || mode == "cutout" {
+      if mode == "flat" {
+        // A visible but flat composition is usable in normal playback;
+        // the strict diagnostic below still detects its quality defect.
+        try check(root:root,focus:focus,position:SCNVector3(0,1.6,0),ipd:0.064,fov:70,aspect:1)
+      }
+      if mode == "occluded" {
+        var blockedAtStart = false
         do { try check(root:root,focus:focus,position:SCNVector3(0,1.6,0),ipd:0.064,fov:70,aspect:1) }
+        catch { blockedAtStart = error.localizedDescription.contains("0 visible pixels") }
+        guard blockedAtStart else { throw error("Preflight accepted an invisible opening focus") }
+        try check(root:root,focus:focus,position:SCNVector3(0,1.6,0),ipd:0.064,fov:70,aspect:1,requireVisibleFocus:false)
+      }
+      if mode == "transparent" || mode == "cutout" {
+        do { try check(root:root,focus:focus,position:SCNVector3(0,1.6,0),ipd:0.064,fov:70,aspect:1,strictVisualReview:true) }
         catch { throw self.error("\(mode) visibility control: " + error.localizedDescription) }
         continue
       }
       var rejected = false
-      do { try check(root: root, focus: focus, position: SCNVector3(0, 1.6, 0), ipd: 0.064, fov: 70, aspect: 1) }
+      do { try check(root: root, focus: focus, position: SCNVector3(0, 1.6, 0), ipd: 0.064, fov: 70, aspect: 1, strictVisualReview: true) }
       catch {
         let expected = mode == "flat" ? ["Foreground, middle, and far", "insufficient depth separation", "visible spatial composition"] : ["Task focal point"]
         guard expected.contains(where: { error.localizedDescription.contains($0) }) else { throw error }

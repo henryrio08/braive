@@ -34,8 +34,7 @@ struct ContentView: View {
           radius: s.phase == .setup ? 9 : s.phase == .reveal ? max(0, (1 - s.revealBlurProgress) * 7) : 0)
         if !s.headsetReady { Color.black.ignoresSafeArea() }
         if s.phase == .setup {
-          LinearGradient(colors: [ink.opacity(0.98), ink.opacity(0.8), ink.opacity(0.5)],
-            startPoint: .leading, endPoint: .trailing).ignoresSafeArea()
+          ink.opacity(0.97).ignoresSafeArea()
           ScrollView(.vertical) { welcome }.scrollIndicators(.hidden)
         } else {
           if [.intro, .planning, .error].contains(s.phase) || s.loading {
@@ -116,7 +115,7 @@ struct ContentView: View {
   var welcome: some View {
     HStack(alignment: .center, spacing: 40) {
       VStack(alignment: .leading, spacing: 14) {
-        Text("YOUR NEXT TRY STARTS HERE").font(.system(size: 10, weight: .semibold)).tracking(2.4)
+        EmptyView()
           .foregroundStyle(accent)
         Text("Practice before\nit counts.")
           .font(.system(size: 43, weight: .regular, design: .serif)).tracking(-1.5)
@@ -125,7 +124,7 @@ struct ContentView: View {
           .font(.system(size: 15)).foregroundStyle(.white.opacity(0.7)).lineSpacing(4)
         HStack(spacing: 8) {
           Image(systemName: "waveform").foregroundStyle(accent)
-          Text("Describe it. Practice it. Try again.")
+          Text("Speech stays on this iPhone.")
         }.font(.system(size: 12)).padding(.top, 4)
       }.frame(maxWidth: .infinity, alignment: .leading)
       VStack(alignment: .leading, spacing: 14) {
@@ -150,16 +149,16 @@ struct ContentView: View {
             .foregroundStyle(ink).background(accent, in: RoundedRectangle(cornerRadius: 12))
         }.buttonStyle(.plain).disabled(!s.remoteConsent || s.connecting)
           .opacity(s.remoteConsent ? 1 : 0.55)
+        Text(s.connection).font(.system(size: 10, weight: .medium)).foregroundStyle(.white.opacity(0.75))
         Text(s.setupNotice.isEmpty ? "Stay seated or stand still. Remove the viewer and hold the screen for phone controls." : s.setupNotice)
           .font(.system(size: 10)).foregroundStyle(.white.opacity(0.55)).fixedSize(horizontal: false, vertical: true)
       }.padding(22).frame(maxWidth: 340)
-        .background(.white.opacity(0.055), in: RoundedRectangle(cornerRadius: 22))
-        .overlay(RoundedRectangle(cornerRadius: 22).stroke(.white.opacity(0.12), lineWidth: 1))
+        .background(Color(red: 0.09, green: 0.13, blue: 0.115), in: RoundedRectangle(cornerRadius: 22))
     }.padding(.horizontal, 44).padding(.top, 50).padding(.bottom, 16).frame(maxWidth: 1050)
   }
   var eyeHUD: some View {
     HeadsetHUD(copy: s.headsetCopy,
-      status: s.voiceListening ? (s.characterReplyPending ? "Reply on its way" : s.speechFeedback.isEmpty ? "Listening" : s.speechFeedback) : s.connecting ? "Getting ready" : "Voice unavailable",
+      status: s.isSpeaking ? "Speaking" : s.voiceListening ? (s.characterReplyPending ? "Reply on its way" : s.speechFeedback.isEmpty ? "Listening" : s.speechFeedback) : s.connecting ? "Getting ready" : "Voice unavailable",
       remaining: s.phase == .active && !s.loading ? s.remaining : nil,
       preparing: s.loading || (s.phase == .planning && !s.builder))
   }
@@ -193,6 +192,9 @@ struct ContentView: View {
             Button("Start practice") { panel = nil; send("start") }
             if s.store.recoverable != nil { Button("Resume interrupted practice") { panel=nil; s.requestRecovery() } }
           }
+          if s.phase == .planning && !s.builder {
+            Button("Add details") { panel = nil; send("hey builder") }
+          }
           if s.isCollectingAnswer {
             Button("Finish answer") { panel = nil; send("that's all") }
             Button("Replace answer") { panel = nil; send("start over") }
@@ -202,14 +204,16 @@ struct ContentView: View {
             Button("No") { panel = nil; send("no") }
           }
           if s.phase == .error {
-            ForEach(s.pendingPostSave == nil ? ["Retry", "Revise", "Cancel"] : ["Retry"], id: \.self) { value in
-              Button(value) { panel = nil; send(value) }
+            Button(s.pendingPostSave == nil ? "Try again" : "Save again") { panel = nil; send("retry") }
+            if s.pendingPostSave == nil {
+              Button("Change details") { panel = nil; send("revise") }
+              Button("Return to forest") { panel = nil; send("cancel") }
             }
           }
           Button("Type an answer") { panel = .typing }
           Button("Settings") { panel = .settings }
         }
-        Section("Full prompt") {
+        Section("What’s happening") {
           Text(s.message).textSelection(.enabled)
         }
         if !s.transcript.isEmpty {

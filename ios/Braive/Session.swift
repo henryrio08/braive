@@ -29,7 +29,7 @@ import SwiftUI
   }
   @Published var connection = "Not connected"
   @Published var server =
-    UserDefaults.standard.string(forKey: "server") ?? "http://braive.local:8787"
+    UserDefaults.standard.string(forKey: "server") ?? ""
   @Published var token = UserDefaults.standard.string(forKey: "token") ?? ""
   @Published var remoteConsent = false
   @Published var liveEnabled = false
@@ -40,6 +40,7 @@ import SwiftUI
   private var speechFeedbackExpiresAt = 0.0
   @Published var setupNotice = ""
   @Published var scenarioActions: [String] = []
+  var isSpeaking: Bool { audio.narrated || audio.speech.isSpeaking || audio.promptSpeech.isSpeaking }
   @Published var characterReplyPending = false
   var scenario: ScenarioRuntime?
   var scenarioCompletedAt: Double?
@@ -129,8 +130,6 @@ import SwiftUI
   var useHistory = false
   var parent: String?
   var builder = false
-  var builderEditing = false
-  var pendingNextAttemptChange = ""
   var active = 0.0, lastTick = ProcessInfo.processInfo.systemUptime, introTime = 0.0, stopCount = 0
   var fired = Set<Int>(), beatFired = Set<Int>()
   var turns: [Any] = []
@@ -169,6 +168,9 @@ import SwiftUI
       self.fail(self.world.failure(reason))
     }
     world.onPortrait = { [weak self] portrait in self?.pause("portrait", enabled: portrait) }
+    world.onTrackingAvailability = { [weak self] available in
+      self?.pause("tracking_unavailable", enabled: !available)
+    }
     audio.onStatus = { [weak self] status in self?.setupNotice = status }
     audio.onText = { [weak self] text, final, id in self?.heard(text, final: final, id: id) }
     audio.onActivity = { [weak self] speaking in
@@ -296,19 +298,29 @@ import SwiftUI
     Task {
       defer { connecting = false }
       do {
-        connection = "Checking practice server…"
+        connection = "Checking your connection…"
         do {
-          let health = try await api.call("/health", timeout: 5)
-          guard health["status"].text == "ok" else { throw URLError(.badServerResponse) }
+          try await api.checkConnection()
         } catch {
+          let failure = error as NSError
+          let detail: String
+          if server.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            detail = "Open Settings → Connection setup to connect this phone to the practice computer. You’ll need its address and pairing code."
+          } else if failure.domain == "Braive" && failure.code == 401 {
+            detail = "The pairing code doesn’t match. Check it in Settings → Connection setup."
+          } else if failure.domain == "Braive" && failure.code == 404 {
+            detail = "The phone and practice computer need the same Braive update. Update both, then reconnect."
+          } else {
+            detail = "We couldn’t reach the practice computer. Check that both devices are connected and check Connection setup in Settings."
+          }
           throw NSError(domain: "BraiveConnection", code: 1, userInfo: [
-            NSLocalizedDescriptionKey: "Cannot reach the practice server at \(server). Open Settings → Connection setup and use this computer’s reachable address."
+            NSLocalizedDescriptionKey: detail
           ])
         }
-        connection = "Practice server reachable · Preparing on-device voice…"
+        connection = "Connected · Getting voice ready…"
         try await audio.start(api: api)
         setupNotice = ""
-        connection = "On-device voice ready · Practice server reachable"
+        connection = "Connected · Voice ready"
         go(.lobby, "When you’re ready to start, say START!")
         headsetReady = false
         world.scene.isPaused = !pauses.isEmpty
@@ -319,8 +331,8 @@ import SwiftUI
         loading = false
         pendingPhase = nil
         connection = "Not connected"
-        setupNotice = "Voice couldn’t start: " + error.localizedDescription
-        connection = error.localizedDescription
+        print("[practice connection] \(error.localizedDescription)")
+        setupNotice = (error as NSError).domain == "BraiveConnection" ? error.localizedDescription : "Voice couldn’t start. Check microphone and speech access in iPhone Settings, then try again."
       }
     }
   }
@@ -331,6 +343,7 @@ import SwiftUI
     Task {
       defer { connecting = false }
       do {
+        try await api.checkConnection()
         try await audio.start(api: api)
         audio.setCommandPhrases(scenario?.definition.steps.flatMap { $0.actions.flatMap(\.phrases) } ?? [])
         pause("command_channel_unavailable", enabled: false)
@@ -430,17 +443,6 @@ import SwiftUI
       if let answer = stopConfirmation.answer(text,at:ProcessInfo.processInfo.systemUptime) { confirmStop(end:answer == .end) }
       return
     }
-    if pauses.contains("builder_edit") {
-      if VoiceAnswer.normalized(text) == "resume" {
-        builderEditing = false
-        pause("builder_edit", enabled: false)
-        message = "Continuing from where you left off."
-        audio.say(message)
-      } else if builderEditing {
-        collectActiveEdit(text)
-      }
-      return
-    }
     guard pauses.isEmpty, !loading, !adapting else { return }
     let yes = VoiceAnswer.binary(text) == true
     let no = VoiceAnswer.binary(text) == false
@@ -470,6 +472,10 @@ import SwiftUI
       }
     case .headset:
       if VoiceAnswer.confirmsHeadset(text) {
+        guard world.trackingAvailable else {
+          pause("tracking_unavailable", enabled: true)
+          return
+        }
         world.recenter()
         headsetReady = true
         if let saved = pendingRecovery {
@@ -548,7 +554,10 @@ import SwiftUI
       if text.lowercased().contains("retry") {
         generate()
       } else if text.lowercased().contains("revise") {
-        restartIntake()
+        if intakeApproved && !fear.isEmpty {
+          builder = true
+          go(.planning, "Your situation and boundaries are kept. Say what you’d like to change or add, then say ‘that’s all’ when you’ve finished.")
+        } else { restartIntake() }
       } else if text.lowercased().contains("cancel") {
         world.lobby()
         go(.lobby, "When you’re ready to start, say START!")
@@ -703,7 +712,7 @@ import SwiftUI
       return
     }
     guard remoteConsent && liveEnabled else {
-      message = "This is an offline forest preview. Live practice needs approved Meta access."
+      message = "You can explore the forest here. To prepare a personal practice, connect in Settings and allow your practice details to be processed."
       audio.say(message)
       return
     }
@@ -718,16 +727,28 @@ import SwiftUI
     jobID = ""
     go(
       .planning,
-      "I’ll get the scene ready. If there’s anything additional you’d like to say, just say ‘hey builder!’ and let me know!"
+      "I’ll prepare your practice. To add something, say ‘hey builder.’"
     )
     generation = Task {
       do {
-        let job = try await api.call("/v1/session-plans", request())
+        let job: JSON
+        do {
+          job = try await api.callResuming("/v1/session-plans", request(),
+            deadline: min(generationDeadline, ProcessInfo.processInfo.systemUptime + 20)) {
+              self.message = "Reconnecting to the practice computer…"
+            }
+        } catch {
+          if API.isTransientConnection(error) {
+            throw NSError(domain: "BraiveConnection", code: 1, userInfo: [NSLocalizedDescriptionKey: "Couldn’t reach the practice computer."])
+          }
+          throw error
+        }
         guard !Task.isCancelled, owner == sessionID, rev == revision else {
           _ = try? await api.call("/v1/jobs/" + job["job_id"].text, method: "DELETE")
           return
         }
         jobID = job["job_id"].text
+        message = "Getting your practice ready…"
         while !Task.isCancelled {
           guard ProcessInfo.processInfo.systemUptime < generationDeadline else {
             _ = try? await api.call("/v1/jobs/" + jobID, method: "DELETE")
@@ -736,22 +757,16 @@ import SwiftUI
             ])
           }
           try await Task.sleep(for: .milliseconds(600))
-          let j: JSON
-          do {
-            j = try await api.call("/v1/jobs/" + jobID,
-              timeout: max(0.1, min(35, generationDeadline - ProcessInfo.processInfo.systemUptime)))
-          } catch let error as URLError where [.timedOut, .networkConnectionLost, .cannotConnectToHost, .notConnectedToInternet].contains(error.code) {
-            // The server owns the paid job. Keep polling that same job until its
-            // actual deadline instead of starting another one after a short gap.
-            message = "Still preparing your scene · Reconnecting to the server"
-            continue
+          let j = try await api.pollJob(jobID, deadline: generationDeadline) {
+            self.message = "Reconnecting. We’re keeping your place."
           }
           guard owner == sessionID, rev == revision, !Task.isCancelled else { return }
-          message = j["stage"].text + " · Say hey builder to add details"
+          message = PreparationCopy.progress(j["stage"].text)
           if j["status"].text == "failed" {
             throw NSError(
               domain: "Generation", code: 1,
-              userInfo: [NSLocalizedDescriptionKey: j["error"]["message"].text])
+              userInfo: [NSLocalizedDescriptionKey: j["error"]["message"].text,
+                "BraiveErrorCode": j["error"]["code"].text, "BraiveRequestID": j["error"]["request_id"].text])
           }
           if j["status"].text == "cancelled" { throw world.failure("Scene preparation was cancelled. Retry, revise, or cancel.") }
           if j["status"].text == "succeeded" {
@@ -784,8 +799,19 @@ import SwiftUI
               }
               try world.load(result["scene"], plan: result["plan"])
             } catch {
-              _ = try await api.call(
-                "/v1/jobs/" + jobID + "/validation", JSON(["message": error.localizedDescription]))
+              let preflightError = error
+              do {
+                _ = try await api.call(
+                  "/v1/jobs/" + jobID + "/validation", JSON(["message": error.localizedDescription]),
+                  timeout: max(0.1, min(8, generationDeadline - ProcessInfo.processInfo.systemUptime)))
+                // The backend grants the repair its own bounded window; keep
+                // polling for its result instead of expiring mid-repair.
+                generationDeadline = max(generationDeadline, ProcessInfo.processInfo.systemUptime + 300)
+              } catch {
+                // The repair may already be running if its acknowledgement was lost.
+                // Poll its existing job; never blindly repeat a paid repair request.
+                if !API.isTransientConnection(error) { throw preflightError }
+              }
               continue
             }
             guard ProcessInfo.processInfo.systemUptime < generationDeadline else { throw world.failure("Scene loading exceeded the ten-minute readiness deadline") }
@@ -933,11 +959,6 @@ import SwiftUI
     checkpoint(force:true)
   }
   func perform(_ text: String) {
-    let lowered = text.lowercased()
-    if lowered.contains("hey builder") || lowered.contains("make the audience") || lowered.contains("more people") || lowered.contains("larger audience") || lowered.contains("bigger audience") {
-      beginActiveEdit(prefill: lowered.contains("hey builder") ? "" : text)
-      return
-    }
     observe("speech_excerpt", "transcript", text)
     if scenario?.isGuided == true {
       guard !VoiceAnswer.needsTime(text), let target = scenario?.conversationTarget,
@@ -966,63 +987,6 @@ import SwiftUI
     let id = ScenarioRuntime.requestedCharacter(text, characters: people.map { (id: $0["id"].text, name: $0["name"].text, role: $0["role"].text) })
     guard let character = people.first(where: { $0["id"].text == id }) else { narration.enqueue("Say ask followed by the character’s name and your question.", at: active); return }
     dialogue(text, character: character)
-  }
-  func refreshHeadsetPanels() {
-    let copy = pauses.isEmpty ? headsetCopy : pausedHeadsetCopy
-    let status = !pauses.isEmpty ? "Paused" : voiceListening ? (characterReplyPending ? "Reply on its way" : speechFeedback.isEmpty ? "Listening" : speechFeedback) : connecting ? "Getting ready" : ""
-    let statusText = phase == .active && pauses.isEmpty && remaining > 0 ? "\(status)  \(Int(remaining.rounded()))s" : status
-    world.setHeadsetText(title: copy.title, detail: copy.detail, command: [copy.command, copy.hint].filter { !$0.isEmpty }.joined(separator: " · "), status: statusText, visible: headsetReady && phase != .setup)
-  }
-  func beginActiveEdit(prefill: String) {
-    guard phase == .active, !builderEditing else { return }
-    builderEditing = true
-    answer = VoiceAnswer()
-    checkpoint(force: true)
-    pause("builder_edit", enabled: true)
-    if prefill.isEmpty {
-      message = "Your place is saved. What should change in this same place? Say that's all when finished."
-      audio.say(message)
-    } else {
-      applyActiveEdit(prefill)
-    }
-  }
-  func collectActiveEdit(_ text: String) {
-    switch answer.receive(text) {
-    case .complete(let value): answer = VoiceAnswer(); applyActiveEdit(value)
-    case .cleared, .empty:
-      message = "What should change in this same place? Say that's all when finished, or resume to continue."
-      audio.say(message)
-    default: break
-    }
-  }
-  /// Bounded same-world revision: population, appearance and decorative
-  /// changes apply now with stage, timer, pose and conversation preserved.
-  /// Task, route and duration changes are recorded for the next attempt.
-  func applyActiveEdit(_ text: String) {
-    let lowered = text.lowercased()
-    var applied = ""
-    if lowered.contains("audience") || lowered.contains("people") || lowered.contains("crowd") || lowered.contains("larger") || lowered.contains("bigger") || lowered.contains("more") {
-      let before = world.audienceCount
-      let total = world.growAudience(targetTotal: min(16, max(before + 8, 8)))
-      applied = total > before ? "Your audience is now \(total) people, in this same place." : "Your audience is already at the size this place can hold well."
-      observe("active_edit", "app_event", "Audience \(before) to \(total): " + text)
-    } else if lowered.contains("warm") || lowered.contains("bright") || lowered.contains("light") {
-      operation(JSON(["type": "set_environment", "background_color": "#a8c8b8", "fog_density": 0.12, "ambient_intensity": 0.9]))
-      applied = "The light in this same place is warmer and brighter now."
-      observe("active_edit", "app_event", "Lighting: " + text)
-    } else if lowered.contains("quiet") || lowered.contains("calm") || lowered.contains("dim") {
-      operation(JSON(["type": "set_environment", "background_color": "#5f7a72", "fog_density": 0.2, "ambient_intensity": 0.55]))
-      applied = "This same place is calmer and dimmer now."
-      observe("active_edit", "app_event", "Calm lighting: " + text)
-    } else {
-      pendingNextAttemptChange = text
-      applied = "That change shapes your next attempt in this same place. This attempt continues as it is."
-      observe("active_edit", "app_event", "Next attempt: " + text)
-    }
-    record["active_edit"] = JSON(text)
-    checkpoint(force: true)
-    message = applied + " Say resume to continue."
-    audio.say(message)
   }
   func dialogue(_ text: String, character: JSON) {
     guard remoteConsent && liveEnabled else { return }
@@ -1119,7 +1083,8 @@ import SwiftUI
     message = "Reviewing your session…"
     cancelFeedback()
     let nonce = feedbackNonce, owner = sessionID, rev = revision
-    feedbackTask = Task {
+    feedbackTask = Task { [weak self] in
+      guard let self else { return }
       do {
         let f = try await api.call(
           "/v1/feedback", JSON(["plan": plan.raw, "observations": observations]))
@@ -1248,7 +1213,8 @@ import SwiftUI
     audio.silence()
     phase = .error
     loading = false
-    message = error.localizedDescription + " Say retry, revise, or cancel."
-    audio.say(message)
+    print("[practice preparation] \((error as NSError).domain): \(error.localizedDescription)")
+    message = PreparationCopy.failure(error)
+    audio.say(message + " Say RETRY to try again, REVISE to change the details, or CANCEL to return to the forest.")
   }
 }
