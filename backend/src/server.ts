@@ -98,7 +98,8 @@ app.post(['/v1/session-plans','/v1/scene-revisions'],(req,res,next)=>{
   supersedeGeneration(input.session_id,jobs,running);
   revisions.set(input.session_id,input.revision);
   const job:Job={job_id:randomUUID(),session_id:input.session_id,revision:input.revision,status:'running',stage:'Getting your practice ready…'};
-  attempts.set(job.job_id,{deadline:Date.now()+generationLimitMs,deadlineCap:Date.now()+generationLimitMs,planningRepairUsed:false,constructionRepairUsed:false,deviceRepairUsed:false});
+  const startedAt=Date.now();
+  attempts.set(job.job_id,{deadline:startedAt+generationLimitMs,deadlineCap:startedAt+generationLimitMs,planningRepairUsed:false,constructionRepairUsed:false,deviceRepairUsed:false});
   jobPauses.set(job.job_id,new GenerationPause());
   jobs.set(job.job_id,job); const controller=new AbortController(); running.set(job.job_id,controller);
   requests.set(job.job_id,structuredClone(input));
