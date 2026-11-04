@@ -291,7 +291,13 @@ export function compileConstruction(plan:SessionPlan,source:SceneSpec):SceneSpec
   const path=paths.get(route.path_id);
   if(!path||route.stage_ids.some(id=>!stages.has(id))||route.requirement_ids.some(id=>!expected.has(id))){fail('/construction_plan/routes','reference','Route references an unknown path, stage or requirement');continue;}
   if((route.from_anchor_id||route.to_anchor_id)&&path.coordinate_space==='relative'){fail('/construction_plan/routes','frame','Anchored routes require world coordinates; relative routes are checked against the current heading on the phone');continue;}
-  if(route.from_anchor_id&&!anchors.has(route.from_anchor_id)||route.to_anchor_id&&!anchors.has(route.to_anchor_id)){fail('/construction_plan/routes','reference','Route anchor is missing');continue;}
+  // Anchor links are annotations on the authoritative trajectory (see the
+  // alignment check below). A dangling link is dropped with a warning rather
+  // than failing an otherwise valid route; endpoints never move.
+  for(const side of ['from_anchor_id','to_anchor_id'] as const){
+   const id=route[side];
+   if(id&&!anchors.has(id)){fail('/construction_plan/routes/'+path.id+'/'+side,'anchor_alignment',`Route ${path.id} ${side} names missing anchor ${id}; the annotation was dropped and the authored trajectory preserved.`,false);delete route[side];}
+  }
   const viewer=scene.scenario?.steps.some(s=>s.start_operations.some(o=>o.type==='move_viewer'&&o.path_id===path.id));
   // These optional links describe the route; they must not relocate its actual
   // authored trajectory or break continuity between adjacent motion stages.

@@ -297,6 +297,16 @@ test('routes pass through genuine openings and respect transformed and relative 
  assert.throws(()=>compileConstruction(relative.plan,relative.scene),(e:any)=>e.issues.some((i:any)=>i.rule==='route_clearance'&&i.message.includes('wall')));
 });
 
+test('a dangling route anchor annotation is dropped with a warning and the trajectory is preserved',()=>{
+ const {plan,scene}=routeSetup('walk',false);
+ scene.motion_paths![0].points.forEach(p=>{p.position[0]=-3;});
+ scene.construction_plan!.routes[0].from_anchor_id='missing_anchor';
+ const compiled=compileConstruction(plan,scene);
+ assert.equal(compiled.construction_plan!.routes[0].from_anchor_id,undefined);
+ assert.ok(compiled.construction_report!.warnings.some(i=>i.rule==='anchor_alignment'&&i.message.includes('missing_anchor')));
+ assert.deepEqual(compiled.motion_paths![0].points,scene.motion_paths![0].points);
+});
+
 test('zone failures on rotated assets report rest and transformed bounds for repair',()=>{
  const {plan,scene}=setup();
  const win:SceneNode={id:'window_east',parent_id:null,role:'environment',geometry:{kind:'asset',asset_id:'architecture.window.building_wall_window_wide_square_detailed_01'},position:[5.35,0.4,-3.2],rotation_radians:[0,-Math.PI/2,0],scale:[1,1,1],material:{color:'#aabbcc',roughness:0.8},animation:'none',description:'window'} as unknown as SceneNode;
