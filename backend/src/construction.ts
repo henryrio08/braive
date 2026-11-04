@@ -3,6 +3,7 @@ import {assetManifest} from './assets.js';
 import {AppError,document,sceneIssues} from './contracts.js';
 import type {SceneSpec,SceneNode,SessionPlan,ValidationIssue,ConstructionPlan,AudioPlan} from '../../docs/handoff/contracts.js';
 import {identity,multiply,inverse,point,transform,transformedBounds,contains,distance,type Vec3,type Bounds} from './spatial-math.js';
+import {evaluateAcceptance,zoneSeverity,type ClassifiedIssue} from './acceptance.js';
 
 export type ConstructionRequirement={id:string;kind:'task'|'cast'|'prop'|'stage'|'motion'|'boundary'|'outcome';target:string;description:string};
 export function constructionRequirements(plan:SessionPlan):ConstructionRequirement[]{
@@ -109,6 +110,25 @@ function constructionSource(source:SceneSpec):SceneSpec {
 }
 
 /** A construction failure must not hide independent scene errors from the one repair. */
+/**
+ * Bounded deterministic corrections applied to a copy before any model
+ * repair. Each correction is unambiguous, idempotent and recorded; nothing
+ * here guesses task semantics or invents replacement content.
+ */
+export function deterministicCorrections(source:SceneSpec):{scene:SceneSpec;corrections:string[]} {
+ const scene=structuredClone(source),corrections:string[]=[];
+ for(const node of scene.nodes){
+  // The renderer registers no texture assets. When the authored material
+  // already carries a color, that color is the defined fallback: retain it
+  // and drop the unusable optional reference instead of failing the scene.
+  if(node.material.texture_asset_id&&node.material.color){
+   corrections.push(`Removed unsupported texture reference ${node.material.texture_asset_id} from ${node.id}; retained its authored material color ${node.material.color}.`);
+   delete node.material.texture_asset_id;
+  }
+ }
+ return {scene,corrections};
+}
+
 export function compileScene(plan:SessionPlan,source:SceneSpec,audio:AudioPlan):SceneSpec {
  const prepared=constructionSource(source);
  let compiled:SceneSpec;
@@ -131,7 +151,7 @@ export function compileScene(plan:SessionPlan,source:SceneSpec,audio:AudioPlan):
 export function compileConstruction(plan:SessionPlan,source:SceneSpec):SceneSpec {
  if(!source.construction_plan)return source; // Saved scenes predate this compiler.
  const scene=constructionSource(source),cp=scene.construction_plan!,issues:ValidationIssue[]=[],warnings:ValidationIssue[]=[];
- const fail=(path:string,rule:string,message:string,required=true)=>(required?issues:warnings).push({path,rule,message});
+ const fail=(path:string,rule:string,message:string,required=true,meta?:Partial<ClassifiedIssue>)=>(required?issues:warnings).push({path,rule,message,...meta});
  const map=<T extends {id:string}>(items:T[],path:string)=>{const result=new Map(items.map(i=>[i.id,i]));if(result.size!==items.length)fail(path,'unique','Duplicate construction IDs');return result;};
  const nodes=map(scene.nodes,'/nodes'),zones=map(cp.zones,'/construction_plan/zones'),anchors=map(cp.anchors,'/construction_plan/anchors');
  for(const [index,node] of scene.nodes.entries()){
@@ -388,10 +408,12 @@ export function compileConstruction(plan:SessionPlan,source:SceneSpec):SceneSpec
    if(!contains(measured,bounds,0.2)){
     const parent=nodes.get(id)?.parent_id;
     const via=placedBy.get(id)?` Placed by relation ${placedBy.get(id)} at resolved origin ${JSON.stringify(point(frames(id),[0,0,0]))}.`:'';
+    const overflowVec=[0,1,2].map(axis=>Math.max(measured.min[axis]-bounds.min[axis],bounds.max[axis]-measured.max[axis],0));
+    const severity=zoneSeverity(overflowVec,zone.size);
     const overflow=[0,1,2].map(axis=>{const low=measured.min[axis]-bounds.min[axis],high=bounds.max[axis]-measured.max[axis];return (low>0?` ${'xyz'[axis]} low by ${low.toFixed(2)}m`:'')+(high>0?` ${'xyz'[axis]} high by ${high.toFixed(2)}m`:'');}).join('').trim();
     const overflowText=overflow?` Overflow:${overflow}.`:'';
     const frame=parent?` ${id} is a child of ${parent}, whose scale ${JSON.stringify(nodes.get(parent)?.scale)} also scales its geometry and local offset.`:'';
-    fail(`/nodes/${nodeIndices.get(id)}`,'zone_fit',`${id} world bounds ${JSON.stringify(bounds)} exceed zone ${zone.id} ${JSON.stringify(volume)} (0.2m boundary allowance).${frame}${via}${overflowText}${describeAuthored(nodes.get(id)!)} Use independent world roots for static objects, or correct local transforms for genuine children.`,requiredGeometry.has(id));
+    fail(`/nodes/${nodeIndices.get(id)}`,'zone_fit',`${id} world bounds ${JSON.stringify(bounds)} exceed zone ${zone.id} ${JSON.stringify(volume)} (0.2m boundary allowance).${frame}${via}${overflowText}${describeAuthored(nodes.get(id)!)} Use independent world roots for static objects, or correct local transforms for genuine children.`,requiredGeometry.has(id),{classification:severity<=1?'soft':'hard',severity,measured:JSON.stringify(bounds),allowed:JSON.stringify(volume)});
    }
   }
  }
@@ -416,7 +438,9 @@ export function compileConstruction(plan:SessionPlan,source:SceneSpec):SceneSpec
    if(!contains({min:bounds.min.map(v=>v+relation.clearance) as Vec3,max:bounds.max.map(v=>v-relation.clearance) as Vec3},worldBounds(n.id),relation.tolerance))fail('/construction_plan/relations/'+relation.id,'fit','Later placement violates the required usable space',relation.required);
   }
  }
- if(issues.length)throw new AppError('INVALID_MODEL_OUTPUT','Construction constraints require repair',issues);
- scene.construction_report={compiler_version:'1',resolved_relation_ids:[...done].sort(),warnings:[...new Map(warnings.map(w=>[JSON.stringify(w),w])).values()]};
+ const acceptance=evaluateAcceptance(issues as ClassifiedIssue[]);
+ if(issues.some(issue=>(issue as ClassifiedIssue).classification!=='soft')||acceptance.reasons.length)throw new AppError('INVALID_MODEL_OUTPUT','Construction constraints require repair',issues);
+ warnings.push(...acceptance.acceptedSoft);
+ scene.construction_report={compiler_version:'1',resolved_relation_ids:[...done].sort(),warnings:[...new Map(warnings.map(w=>[JSON.stringify(w),w])).values()],...(acceptance.acceptedSoft.length?{accepted_defects:acceptance.acceptedSoft}:{})} as SceneSpec['construction_report'];
  return scene;
 }

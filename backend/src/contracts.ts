@@ -28,7 +28,7 @@ const providerChecks=new Map<string,any>();
  * the advertised capability contract, not merely be asked to do so in prose. */
 export function validateProviderOutput(name:string,value:unknown) {
  let check=providerChecks.get(name);
- if(!check){check=ajv.compile(outputSchema(name));providerChecks.set(name,check);}
+ if(!check){check=ajv.compile(name==='SceneRepairPatch'?sceneRepairPatchSchema():outputSchema(name));providerChecks.set(name,check);}
  if(!check(value))throw new AppError('INVALID_MODEL_OUTPUT',`New ${name} is missing required capabilities`,schemaIssues(check.errors));
 }
 export function sceneIssues(plan: SessionPlan, scene: SceneSpec, audio: AudioPlan): ValidationIssue[] {
@@ -270,6 +270,24 @@ export function outputSchema(name: string): any {
  }
  visit(root);
  return {...root,$defs:Object.fromEntries([...reachable].map(id=>[id,defs[id]]))};
+}
+
+/** Scoped repair output: a small patch against an identified base candidate. */
+export function sceneRepairPatchSchema():any {
+ const vec3={type:'array',items:{type:'number'},minItems:3,maxItems:3};
+ const operation=(properties:any,required:string[])=>({type:'object',additionalProperties:false,properties:{op:{type:'string'},...properties},required:['op',...required]});
+ return {type:'object',additionalProperties:false,properties:{
+  base_hash:{type:'string',minLength:8,maxLength:64},
+  operations:{type:'array',minItems:1,maxItems:24,items:{anyOf:[
+   operation({node_id:{type:'string'},position:vec3,rotation_radians:vec3,scale:vec3},['node_id']),
+   operation({node_id:{type:'string'},color:{type:'string'},roughness:{type:'number',minimum:0,maximum:1}},['node_id']),
+   operation({relation_id:{type:'string'},offset:vec3},['relation_id','offset']),
+   operation({relation_id:{type:'string'},kind:{type:'string',enum:['inside','within']}},['relation_id','kind']),
+   operation({path_id:{type:'string'},points:{type:'array',minItems:1,maxItems:64,items:{type:'object',additionalProperties:false,properties:{at_seconds:{type:'number',minimum:0},position:vec3},required:['at_seconds','position']}}},['path_id','points']),
+   operation({zone_id:{type:'string'},center:vec3,size:vec3},['zone_id']),
+   operation({node_id:{type:'string'}},['node_id']),
+  ]}},
+ },required:['base_hash','operations']};
 }
 
 /** Bind references already owned by the approved plan instead of asking the builder to invent them. */

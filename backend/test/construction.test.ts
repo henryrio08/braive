@@ -297,6 +297,16 @@ test('routes pass through genuine openings and respect transformed and relative 
  assert.throws(()=>compileConstruction(relative.plan,relative.scene),(e:any)=>e.issues.some((i:any)=>i.rule==='route_clearance'&&i.message.includes('wall')));
 });
 
+test('a small zone overflow is accepted as a recorded soft defect while a large one still fails',()=>{
+ const small=setup();
+ small.scene.construction_plan!.zones[0].center=[0,2,-3];small.scene.construction_plan!.zones[0].size=[3.5,4,20];
+ const compiled=compileConstruction(small.plan,small.scene);
+ assert.ok(compiled.construction_report!.accepted_defects?.some(i=>i.rule==='zone_fit'&&i.classification==='soft'));
+ const large=setup();
+ large.scene.construction_plan!.zones[0].center=[0,2,-3];large.scene.construction_plan!.zones[0].size=[2,4,20];
+ assert.throws(()=>compileConstruction(large.plan,large.scene),(e:any)=>e.issues.some((i:any)=>i.rule==='zone_fit'&&i.classification==='hard'));
+});
+
 test('a dangling route anchor annotation is dropped with a warning and the trajectory is preserved',()=>{
  const {plan,scene}=routeSetup('walk',false);
  scene.motion_paths![0].points.forEach(p=>{p.position[0]=-3;});

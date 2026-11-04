@@ -61,7 +61,7 @@ function harness(options:{edited?:ExperienceDraft;model?:(call:Call,index:number
    if(custom!==undefined)return structuredClone(custom);
    if(role==='experience_author')return draft();
    if(role==='experience_editor')return structuredClone(options.edited??draft());
-   assert.equal(role,'scene_builder','The normal chain must not make a separate audio-model call.');
+   assert.ok(role==='scene_builder'||role==='scene_repair','The normal chain must not make a separate audio-model call.');
    return sceneFor((input as {plan:SessionPlan}).plan);
   },
   isCurrent:()=>current,
@@ -93,13 +93,26 @@ test('editor final plan reaches construction, with original context and compact 
 test('a planning repair does not consume the construction repair',async()=>{
  let builderCalls=0;
  const h=harness({model:call=>{
+  if(call.schema==='SceneRepairPatch')return {base_hash:call.input.base_hash,operations:[{op:'set_relation_offset',relation_id:'ground_focus',offset:[0,0,-3]}]};
   if(call.role==='experience_editor'&&!call.input.issues){const bad=draft();bad.experience.stages[0].duration_sec=30;return bad;}
   if(call.role==='scene_builder'){builderCalls++;if(builderCalls===1){const bad=sceneFor(call.input.plan);bad.construction_plan!.relations[0].offset=[0,0,-30];return bad;}}
  }});
  const result=await h.run();
  assert.ok(result.scene.construction_report);
- assert.deepEqual(h.calls.map(c=>c.role),['experience_author','experience_editor','experience_editor','scene_builder','scene_builder']);
+ assert.deepEqual(h.calls.map(c=>c.role),['experience_author','experience_editor','experience_editor','scene_builder','scene_repair']);
  assert.equal(h.repairs(),2);
+});
+
+test('a localized construction failure is repaired with a scoped patch, not a rebuild',async()=>{
+ let builderCalls=0;
+ const h=harness({model:call=>{
+  if(call.schema==='SceneRepairPatch')return {base_hash:call.input.base_hash,operations:[{op:'set_relation_offset',relation_id:'ground_focus',offset:[0,0,-3]}]};
+  if(call.role==='scene_builder'){builderCalls++;if(builderCalls===1){const bad=sceneFor(call.input.plan);bad.construction_plan!.relations[0].offset=[0,0,-30];return bad;}}
+ }});
+ const result=await h.run();
+ assert.ok(result.scene.construction_report);
+ assert.deepEqual(h.calls.map(c=>c.schema),['ExperienceDraft','ExperienceDraft','SceneSpec','SceneRepairPatch']);
+ assert.equal(h.repairs(),1);
 });
 
 test('an unchanged complete editor plan proceeds directly to the builder',async()=>{
