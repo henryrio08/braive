@@ -5,7 +5,7 @@ import {canonicalSceneReferences} from './scene-references.js';
 import {assertCurrentDialogue,dialogueContext} from './dialogue.js';
 import {meshCatalog,assetManifest,generationCharacterIDs} from './assets.js';
 import express from 'express';
-import {compileScene,constructionRequirements} from './construction.js';
+import {compileScene,constructionRequirements,deterministicCorrections} from './construction.js';
 import {dispatchTool} from './tool-dispatch.js';
 import {generateExperience,authoredScene,experienceSceneIssues,type ApprovedExperience} from './generation-chain.js';
 import {builderInstructions} from './generation-prompts.js';
@@ -64,7 +64,7 @@ async function generate(request:PlanRequest, job:Job, signal:AbortSignal) {
   consumeRepair:(kind)=>claimRepair(attempts.get(job.job_id),kind),
   onRejected:(candidate,error)=>{
    if(process.env.BRAIVE_TEST_MODE==='true'){
-    try{const payload=JSON.stringify({...candidate,issues:error instanceof AppError?error.issues:[]},null,2);writeFileSync(new URL('../data/last-rejected-scene.json',import.meta.url),payload,{mode:0o600});mkdirSync(new URL('../data/rejected',import.meta.url),{recursive:true});writeFileSync(new URL(`../data/rejected/${job.job_id}.json`,import.meta.url),payload,{mode:0o600});}catch{}
+    try{const payload=JSON.stringify({...candidate,issues:error instanceof AppError?error.issues:[]},null,2);writeFileSync(new URL('../data/last-rejected-scene.json',import.meta.url),payload,{mode:0o600});mkdirSync(new URL('../data/rejected',import.meta.url),{recursive:true});writeFileSync(new URL(`../data/rejected/${job.job_id}-${Date.now()}.json`,import.meta.url),payload,{mode:0o600});}catch{}
    }
   }
  },signal);
@@ -120,7 +120,7 @@ app.post('/v1/jobs/:id/validation',async(req,res,next)=>{
    const experience=approved.get(job.session_id)?.experience;
    const output=await model('SceneSpec',{plan,audio,approved_experience:experience,requirements:constructionRequirements(plan),previous_scene:authoredScene(scene),capabilities,issues:[{path:'/nodes',rule:'native_preflight',message:req.body.message}]},builderInstructions,controller.signal,'scene_builder');
    validate('SceneSpec',output);validateProviderOutput('SceneSpec',output);
-   const authored=canonicalSceneReferences(plan,output,audio);
+   const authored=deterministicCorrections(canonicalSceneReferences(plan,output,audio)).scene;
    const repaired=compileScene(plan,authored,audio);
    const errors=[...sceneIssues(plan,repaired,audio),...(experience?experienceSceneIssues(experience,plan,repaired):[])];if(errors.length) throw new AppError('INVALID_MODEL_OUTPUT','Native repair invalid',errors);
    controller.signal.throwIfAborted();if(revisions.get(job.session_id)!==job.revision)return;

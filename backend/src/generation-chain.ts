@@ -1,10 +1,11 @@
 import type {AudioPlan, Job, PlanRequest, SceneSpec, SessionPlan, ValidationIssue} from '../../docs/handoff/contracts.js';
 import {AppError, validate, validateProviderOutput, sceneIssues} from './contracts.js';
 import {assembleExperience, planningCapabilities, validateExperience, validateExperienceShape, type ExperienceDraft} from './experience.js';
-import {compileScene, constructionRequirements} from './construction.js';
+import {compileScene, constructionRequirements, deterministicCorrections} from './construction.js';
+import {applyScenePatch, computeRepairScope, patchEligible, sceneHash, type SceneRepairPatch} from './repair-patch.js';
 import {canonicalSceneReferences} from './scene-references.js';
 import {dispatchTool} from './tool-dispatch.js';
-import {authorInstructions, editorInstructions, builderInstructions} from './generation-prompts.js';
+import {authorInstructions, editorInstructions, builderInstructions, repairInstructions} from './generation-prompts.js';
 import type {ModelRole} from './meta.js';
 
 export type ApprovedExperience = {plan:SessionPlan; scene:SceneSpec; audio:AudioPlan; experience?:ExperienceDraft};
@@ -97,7 +98,7 @@ export async function generateExperience(request:PlanRequest,job:Job,deps:Genera
  check();
  const {plan,audio}=assembleExperience(experience,source,source.revision===1?'setup':'builder_revision');
  let candidate:SceneSpec|undefined;
- const scene=await run('Building your scene','construction',async issues=>{
+ const buildOnce=async(issues?:ValidationIssue[]):Promise<SceneSpec>=>{
   const input={request:source,plan,approved_experience:experience,audio,requirements:constructionRequirements(plan),
    capabilities:deps.capabilities,previous_scene:authoredScene(candidate??previous?.scene),issues};
   try {
@@ -105,7 +106,9 @@ export async function generateExperience(request:PlanRequest,job:Job,deps:Genera
     args=>deps.model('SceneSpec',structuredClone({...input,tool_arguments:args}),builderInstructions,signal,'scene_builder'));
    check();candidate=output;
    validate('SceneSpec',output);validateProviderOutput('SceneSpec',output);
-   const compiled=compileScene(plan,canonicalSceneReferences(plan,output,audio),audio);
+   const corrected=deterministicCorrections(canonicalSceneReferences(plan,output,audio));
+   const compiled=compileScene(plan,corrected.scene,audio);
+   if(compiled.construction_report&&corrected.corrections.length)compiled.construction_report.corrections=corrected.corrections;
    const errors=[...sceneIssues(plan,compiled,audio),...experienceSceneIssues(experience,plan,compiled)];
    if(errors.length)throw new AppError('INVALID_MODEL_OUTPUT','Scene requires repair',errors);
    return compiled;
@@ -118,9 +121,8 @@ export async function generateExperience(request:PlanRequest,job:Job,deps:Genera
    if(candidate&&error instanceof AppError&&error.code==='INVALID_MODEL_OUTPUT'){
     const issues:ValidationIssue[]=[];
     try {
-     // Cross-field validation is safe only after the saved wire shape passes.
      validate('SceneSpec',candidate);
-     try {compileScene(plan,canonicalSceneReferences(plan,candidate,audio),audio);}
+     try {compileScene(plan,deterministicCorrections(canonicalSceneReferences(plan,candidate,audio)).scene,audio);}
      catch(constructionError){if(constructionError instanceof AppError)issues.push(...constructionError.issues);else throw constructionError;}
      issues.push(...experienceSceneIssues(experience,plan,candidate));
     } catch(shapeError){if(shapeError instanceof AppError)issues.push(...shapeError.issues);else throw shapeError;}
@@ -133,7 +135,31 @@ export async function generateExperience(request:PlanRequest,job:Job,deps:Genera
    if(candidate&&failure instanceof AppError&&failure.code==='INVALID_MODEL_OUTPUT')deps.onRejected?.({plan,scene:candidate,audio,experience},failure);
    throw failure;
   }
- });
+ };
+ job.stage='Building your scene'; deps.isCurrent();
+ let scene:SceneSpec;
+ try { scene=await buildOnce(); if(scene.construction_report)scene.construction_report.recovery=scene.construction_report.corrections?.length?'deterministic':'first_pass'; }
+ catch(firstError){
+  if(!(firstError instanceof AppError)||firstError.code!=='INVALID_MODEL_OUTPUT'||!deps.consumeRepair('construction'))throw firstError;
+  const issues=firstError.issues;
+  job.stage='Repairing your scene'; check();
+  if(candidate&&patchEligible(issues)){
+   const base=deterministicCorrections(canonicalSceneReferences(plan,candidate,audio)).scene;
+   const scope=computeRepairScope(base,issues);
+   const patch=await deps.model('SceneRepairPatch',{base_scene:authoredScene(base),base_hash:sceneHash(base),issues,
+    scope:{nodes:[...scope.nodes],relations:[...scope.relations],paths:[...scope.paths],zones:[...scope.zones],anchors:[...scope.anchors]},
+    requirements:constructionRequirements(plan),capabilities:deps.capabilities},repairInstructions,signal,'scene_repair');
+   check();
+   validateProviderOutput('SceneRepairPatch',patch);
+   const patched=applyScenePatch(base,patch as SceneRepairPatch,scope);
+   const compiled=compileScene(plan,patched,audio);
+   const errors=[...sceneIssues(plan,compiled,audio),...experienceSceneIssues(experience,plan,compiled)];
+   if(errors.length)throw new AppError('INVALID_MODEL_OUTPUT','Scene requires repair',errors);
+   scene=compiled; if(scene.construction_report)scene.construction_report.recovery='patched';
+  } else {
+   scene=await buildOnce(issues); if(scene.construction_report)scene.construction_report.recovery='rebuilt';
+  }
+ }
  check();
  return {plan,scene,audio,experience};
 }
