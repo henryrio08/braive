@@ -382,8 +382,10 @@ export function compileConstruction(plan:SessionPlan,source:SceneSpec):SceneSpec
    if(!contains(measured,bounds,0.2)){
     const parent=nodes.get(id)?.parent_id;
     const via=placedBy.get(id)?` Placed by relation ${placedBy.get(id)} at resolved origin ${JSON.stringify(point(frames(id),[0,0,0]))}.`:'';
+    const overflow=[0,1,2].map(axis=>{const low=measured.min[axis]-bounds.min[axis],high=bounds.max[axis]-measured.max[axis];return (low>0?` ${'xyz'[axis]} low by ${low.toFixed(2)}m`:'')+(high>0?` ${'xyz'[axis]} high by ${high.toFixed(2)}m`:'');}).join('').trim();
+    const overflowText=overflow?` Overflow:${overflow}.`:'';
     const frame=parent?` ${id} is a child of ${parent}, whose scale ${JSON.stringify(nodes.get(parent)?.scale)} also scales its geometry and local offset.`:'';
-    fail(`/nodes/${nodeIndices.get(id)}`,'zone_fit',`${id} world bounds ${JSON.stringify(bounds)} exceed zone ${zone.id} ${JSON.stringify(volume)} (0.2m boundary allowance).${frame}${via}${describeAuthored(nodes.get(id)!)} Use independent world roots for static objects, or correct local transforms for genuine children.`,requiredGeometry.has(id));
+    fail(`/nodes/${nodeIndices.get(id)}`,'zone_fit',`${id} world bounds ${JSON.stringify(bounds)} exceed zone ${zone.id} ${JSON.stringify(volume)} (0.2m boundary allowance).${frame}${via}${overflowText}${describeAuthored(nodes.get(id)!)} Use independent world roots for static objects, or correct local transforms for genuine children.`,requiredGeometry.has(id));
    }
   }
  }

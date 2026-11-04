@@ -40,6 +40,7 @@ import SwiftUI
   private var speechFeedbackExpiresAt = 0.0
   @Published var setupNotice = ""
   @Published var scenarioActions: [String] = []
+  var isSpeaking: Bool { audio.narrated || audio.speech.isSpeaking || audio.promptSpeech.isSpeaking }
   @Published var characterReplyPending = false
   var scenario: ScenarioRuntime?
   var scenarioCompletedAt: Double?
@@ -553,7 +554,10 @@ import SwiftUI
       if text.lowercased().contains("retry") {
         generate()
       } else if text.lowercased().contains("revise") {
-        restartIntake()
+        if intakeApproved && !fear.isEmpty {
+          builder = true
+          go(.planning, "Your situation and boundaries are kept. Say what you’d like to change or add, then say ‘that’s all’ when you’ve finished.")
+        } else { restartIntake() }
       } else if text.lowercased().contains("cancel") {
         world.lobby()
         go(.lobby, "When you’re ready to start, say START!")
@@ -1077,7 +1081,8 @@ import SwiftUI
     message = "Reviewing your session…"
     cancelFeedback()
     let nonce = feedbackNonce, owner = sessionID, rev = revision
-    feedbackTask = Task {
+    feedbackTask = Task { [weak self] in
+      guard let self else { return }
       do {
         let f = try await api.call(
           "/v1/feedback", JSON(["plan": plan.raw, "observations": observations]))

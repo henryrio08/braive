@@ -152,7 +152,7 @@ struct ContentView: View {
   }
   var eyeHUD: some View {
     HeadsetHUD(copy: s.headsetCopy,
-      status: s.voiceListening ? (s.characterReplyPending ? "Reply on its way" : s.speechFeedback.isEmpty ? "Listening" : s.speechFeedback) : s.connecting ? "Getting ready" : "Voice unavailable",
+      status: s.isSpeaking ? "Speaking" : s.voiceListening ? (s.characterReplyPending ? "Reply on its way" : s.speechFeedback.isEmpty ? "Listening" : s.speechFeedback) : s.connecting ? "Getting ready" : "Voice unavailable",
       remaining: s.phase == .active && !s.loading ? s.remaining : nil,
       preparing: s.loading || (s.phase == .planning && !s.builder))
   }
