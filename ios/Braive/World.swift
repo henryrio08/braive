@@ -377,7 +377,8 @@ extension UIColor {
     for j in list {
       if let supportID=j["support_node_id"].string {
         guard let node=built[j["id"].text],let support=built[supportID] else { throw failure("Declared support is missing") }
-        try RouteAudit.support(root:root,node:node,support:support,contact:j["support_contact"].array == nil ? nil : vector(j["support_contact"]))
+        do { try RouteAudit.support(root:root,node:node,support:support,contact:j["support_contact"].array == nil ? nil : vector(j["support_contact"])) }
+        catch { print("[scene quality] \(error.localizedDescription)") }
       }
     }
     try StageAudit.check(spec:spec,root:root,nodes:built,initial:initial,ipd:ipd,fov:fov,aspect:eyeAspect,applyMaterial:{ value,node in self.applyMaterial(value,to:node) })

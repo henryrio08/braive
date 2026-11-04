@@ -8,9 +8,11 @@ import {materializeStageGraph} from './stage-compiler.js';
 import {dispatchTool} from './tool-dispatch.js';
 import {authorInstructions, editorInstructions, builderInstructions, repairInstructions} from './generation-prompts.js';
 import type {ModelRole} from './meta.js';
+import {automaticSceneRepairEnabled} from './recovery-policy.js';
 
 export type ApprovedExperience = {plan:SessionPlan; scene:SceneSpec; audio:AudioPlan; experience?:ExperienceDraft};
 export interface GenerationDependencies {
+ automaticSceneRepair?:boolean;
  model:(schema:string,input:unknown,instructions:string,signal:AbortSignal,role:ModelRole)=>Promise<any>;
  capabilities:unknown;
  previous?:ApprovedExperience;
@@ -144,7 +146,7 @@ export async function generateExperience(request:PlanRequest,job:Job,deps:Genera
  let scene:SceneSpec;
  try { scene=await buildOnce(); if(scene.construction_report)scene.construction_report.recovery=scene.construction_report.corrections?.length?'deterministic':'first_pass'; }
  catch(firstError){
-  if(!(firstError instanceof AppError)||firstError.code!=='INVALID_MODEL_OUTPUT'||!deps.consumeRepair('construction'))throw firstError;
+  if(!(deps.automaticSceneRepair??automaticSceneRepairEnabled())||!(firstError instanceof AppError)||firstError.code!=='INVALID_MODEL_OUTPUT'||!deps.consumeRepair('construction'))throw firstError;
   const issues=firstError.issues;
   job.stage='Repairing your scene'; check();
   if(candidate&&patchEligible(issues)){

@@ -2,7 +2,8 @@ import SceneKit
 
 @MainActor enum StageAudit {
   static func check(spec: JSON, root: SCNNode, nodes: [String:SCNNode], initial: SCNVector3,
-    ipd: Float, fov: Double, aspect: Double, applyMaterial: (JSON, SCNNode) -> Void) throws {
+    ipd: Float, fov: Double, aspect: Double, strictVisualReview: Bool = false,
+    applyMaterial: (JSON, SCNNode) -> Void) throws {
     let paths=Dictionary(uniqueKeysWithValues:spec["motion_paths"].list.map { ($0["id"].text,$0) })
     let steps=spec["scenario"]["steps"].list
     guard !steps.isEmpty else { return }
@@ -58,14 +59,28 @@ import SceneKit
       }
       try apply(incoming + step["start_operations"].list)
       for entry in spec["nodes"].list {
-        if let id=entry["support_node_id"].string,let node=nodes[entry["id"].text],!node.isHidden,let support=nodes[id],let original=initialPositions[entry["id"].text],simd_length(node.simdWorldPosition-original)<0.01 { try RouteAudit.support(root:root,node:node,support:support,contact:entry["support_contact"].array.map { a in SCNVector3(Float(a[0].value),Float(a[1].value),Float(a[2].value)) }) }
+        if let id=entry["support_node_id"].string,let node=nodes[entry["id"].text],!node.isHidden,let support=nodes[id],let original=initialPositions[entry["id"].text],simd_length(node.simdWorldPosition-original)<0.01 {
+          do { try RouteAudit.support(root:root,node:node,support:support,contact:entry["support_contact"].array.map { a in SCNVector3(Float(a[0].value),Float(a[1].value),Float(a[2].value)) }) }
+          catch {
+            if strictVisualReview { throw error }
+            print("[scene quality] \(error.localizedDescription)")
+          }
+        }
       }
       if let viewID=step["review_viewpoint_id"].string {
-        guard let view=spec["viewpoints"].list.first(where: { $0["id"].text == viewID }) else { throw ScenePreflight.error("Stage review viewpoint is missing") }
-        let p=view["position"].list.map { Float($0.value) }
-        let focus=step["focus_node_ids"].list.compactMap { nodes[$0.text] }
-        guard !focus.isEmpty else { throw ScenePreflight.error("Stage review requires an explicit focal object") }
-        try ScenePreflight.check(root:root,focus:focus,position:SCNVector3(p[0],p[1],p[2]),ipd:ipd,fov:fov,aspect:aspect,far:spec["view_distance_meters"].number ?? 150)
+        if let view=spec["viewpoints"].list.first(where: { $0["id"].text == viewID }) {
+          let p=view["position"].list.map { Float($0.value) }
+          let focus=step["focus_node_ids"].list.compactMap { nodes[$0.text] }
+          if focus.isEmpty {
+            if strictVisualReview { throw ScenePreflight.error("Stage review requires an explicit focal object") }
+            print("[scene quality] Stage review has no explicit focal object")
+          } else {
+            try ScenePreflight.check(root:root,focus:focus,position:SCNVector3(p[0],p[1],p[2]),ipd:ipd,fov:fov,aspect:aspect,far:spec["view_distance_meters"].number ?? 150,strictVisualReview:strictVisualReview)
+          }
+        } else {
+          if strictVisualReview { throw ScenePreflight.error("Stage review viewpoint is missing") }
+          print("[scene quality] Stage review viewpoint is missing")
+        }
       }
       for action in step["actions"].list {
         if let id=action["next_step_id"].string, let next=indices[id] {

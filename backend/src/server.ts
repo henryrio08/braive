@@ -1,4 +1,6 @@
 import {activeBudget} from './budget.js';
+import {automaticSceneRepairEnabled} from './recovery-policy.js';
+import {materializeStageGraph} from './stage-compiler.js';
 import {cancelGeneration,releaseGeneration,supersedeGeneration,repeatedGeneration,claimRepair,repairBlock,releaseRepair,grantRepairWindow,type GenerationAttempt} from './job-lifecycle.js';
 import {PhoneTestWindow} from './phone-test-window.js';
 import {canonicalSceneReferences} from './scene-references.js';
@@ -105,6 +107,7 @@ app.post('/v1/jobs/:id/validation',async(req,res,next)=>{
   if(revisions.get(job.session_id)!==job.revision)throw new AppError('CONFLICT','A newer scene revision has replaced this job',[],409);
   if(running.size>=3)throw new AppError('RATE_LIMITED','Too many active generation jobs',[],429);
   if(typeof req.body.message!=='string' || req.body.message.length>2000) throw new AppError('INVALID_INPUT','Provide a bounded validation explanation');
+  if(!automaticSceneRepairEnabled())throw new AppError('CONFLICT','Automatic scene repair is disabled. Your practice details and generated scene are preserved; revise or retry when ready.',[],409);
   const block=repairBlock(attempt,'device');
   if(block==='missing')throw new AppError('CONFLICT','This scene is no longer available for automatic repair. Your practice details are unchanged; start again to rebuild the scene.',[],409);
   if(block==='deadline')throw new AppError('TIMEOUT','The time reserved for building this scene has ended, so its automatic fix cannot start. Your practice details are unchanged; start again when you are ready.',[],408);
@@ -119,9 +122,11 @@ app.post('/v1/jobs/:id/validation',async(req,res,next)=>{
    const {plan,audio,scene}=job.result;
    const experience=approved.get(job.session_id)?.experience;
    const output=await model('SceneSpec',{plan,audio,approved_experience:experience,requirements:constructionRequirements(plan),previous_scene:authoredScene(scene),capabilities,issues:[{path:'/nodes',rule:'native_preflight',message:req.body.message}]},builderInstructions,controller.signal,'scene_builder');
-   validate('SceneSpec',output);validateProviderOutput('SceneSpec',output);
    const authored=deterministicCorrections(canonicalSceneReferences(plan,output,audio)).scene;
-   const repaired=compileScene(plan,authored,audio);
+   const staged=experience?materializeStageGraph(experience,plan,authored):{scene:authored,issues:[]};
+   if(staged.issues.length)throw new AppError('INVALID_MODEL_OUTPUT','Stage graph requires route geometry',staged.issues);
+   validate('SceneSpec',staged.scene);validateProviderOutput('SceneSpec',staged.scene);
+   const repaired=compileScene(plan,staged.scene,audio);
    const errors=[...sceneIssues(plan,repaired,audio),...(experience?experienceSceneIssues(experience,plan,repaired):[])];if(errors.length) throw new AppError('INVALID_MODEL_OUTPUT','Native repair invalid',errors);
    controller.signal.throwIfAborted();if(revisions.get(job.session_id)!==job.revision)return;
    job.result={plan,audio,scene:repaired};approved.set(job.session_id,{...job.result,experience});job.status='succeeded';job.stage='Ready for device validation';

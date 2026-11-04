@@ -318,3 +318,20 @@ export function sceneOutputSchema(plan:SessionPlan,audio:AudioPlan):any {
  }
  return schema;
 }
+
+/** Model-authored scene seeds omit fields the stage compiler owns. The final
+ * SceneSpec is still fully validated after preparation, before playback. */
+export function sceneBuilderSchema(plan:SessionPlan,audio:AudioPlan):any {
+ const schema=sceneOutputSchema(plan,audio),step=schema.$defs.ScenarioStep;
+ const compiled=new Set(['terminal','completion','conversation_target','review_viewpoint_id','focus_node_ids','announce_on_entry']);
+ step.required=(step.required??[]).filter((field:string)=>!compiled.has(field));
+ return schema;
+}
+
+export function validateSceneBuilderOutput(plan:SessionPlan,audio:AudioPlan,value:unknown):void {
+ // Plan-bound schemas are per request; do not retain them in the shared Ajv cache.
+ const builderAjv=new (Ajv as any)({strict:false,allErrors:true});
+ (addFormats as any)(builderAjv);
+ const check=builderAjv.compile(sceneBuilderSchema(plan,audio));
+ if(!check(value))throw new AppError('INVALID_MODEL_OUTPUT','Invalid scene builder output',schemaIssues(check.errors));
+}

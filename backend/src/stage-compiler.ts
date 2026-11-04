@@ -23,6 +23,14 @@ export function materializeStageGraph(experience:ExperienceDraft,plan:SessionPla
  const authored=new Map((scene.scenario?.steps??[]).map(step=>[step.id,step]));
  const routes=scene.construction_plan?.routes??[];
  const stages=experience.experience.stages;
+ const nodeIDs=new Set(scene.nodes.map(node=>node.id));
+ const declaredFocus=scene.nodes.filter(node=>node.role==='task_focus').map(node=>node.id);
+ const defaultFocus=declaredFocus.length?declaredFocus:(scene.construction_plan?.requirements?.find(requirement=>requirement.requirement_id==='task')?.node_ids??[]).filter(id=>nodeIDs.has(id));
+ const review=(prior:Partial<Step>|undefined)=>({
+  review_viewpoint_id:scene.viewpoints?.some(view=>view.id===prior?.review_viewpoint_id)?prior!.review_viewpoint_id:scene.initial_viewpoint_id,
+  focus_node_ids:(prior?.focus_node_ids??defaultFocus).filter(id=>nodeIDs.has(id)),
+  announce_on_entry:prior?.announce_on_entry??false,
+ });
  const steps=stages.map((stage,index)=>{
   const id=`stage_${index+1}`;
   const prior=authored.get(id);
@@ -56,6 +64,7 @@ export function materializeStageGraph(experience:ExperienceDraft,plan:SessionPla
   const {completion:_priorCompletion,conversation_target:_priorTarget,...priorRest}=prior??{} as Partial<Step>;
   return {
    ...priorRest,
+   ...review(prior),
    id,
    prompt:prior?.prompt??'',
    terminal:false,
@@ -69,6 +78,7 @@ export function materializeStageGraph(experience:ExperienceDraft,plan:SessionPla
  const {completion:_authoredCompletion,conversation_target:_authoredTarget,...terminalRest}=terminalPrior??{} as Partial<Step>;
  steps.push({
   ...terminalRest,
+  ...review(terminalPrior),
   id:'stage_completed',
   prompt:terminalPrior?.prompt??'',
   terminal:true,
@@ -79,7 +89,7 @@ export function materializeStageGraph(experience:ExperienceDraft,plan:SessionPla
  scene.scenario={
   progression:'guided',
   objective:scene.scenario?.objective||plan.task_instruction,
-  dialogue_policy:scene.scenario?.dialogue_policy??(anyConversation?'natural':'on_request'),
+  dialogue_policy:anyConversation?'natural':'disabled',
   initial_step_id:'stage_1',
   steps,
  };

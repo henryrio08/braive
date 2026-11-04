@@ -2,7 +2,7 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {generateExperience,experienceSceneIssues} from '../src/generation-chain.js';
 import {constructionRequirements} from '../src/construction.js';
-import {AppError} from '../src/contracts.js';
+import {AppError,validateSceneBuilderOutput} from '../src/contracts.js';
 import type {ExperienceDraft} from '../src/experience.js';
 import type {PlanRequest,Job,SessionPlan,SceneSpec,SceneNode} from '../../docs/handoff/contracts.js';
 
@@ -51,9 +51,10 @@ function sceneFor(plan:SessionPlan):SceneSpec {
 }
 
 type Call={schema:string;input:any;role:string};
-function harness(options:{edited?:ExperienceDraft;model?:(call:Call,index:number)=>unknown|Promise<unknown>;repairAvailable?:boolean}={}) {
+function harness(options:{edited?:ExperienceDraft;model?:(call:Call,index:number)=>unknown|Promise<unknown>;repairAvailable?:boolean;automaticSceneRepair?:boolean}={}) {
  const calls:Call[]=[],controller=new AbortController();let current=true,repairs=0;const used=new Set<string>();
  const deps:Parameters<typeof generateExperience>[2]={
+  automaticSceneRepair:options.automaticSceneRepair??true, // Legacy recovery tests explicitly exercise opt-in mode.
   capabilities:{assets:{test_inventory:[['not_for_the_planner',1]]},asset_bounds:{not_for_the_planner:{min:[0,0,0],max:[1,1,1]}}},
   model:async(schema,input,_instructions,_signal,role)=>{
    const call={schema,input:structuredClone(input),role};calls.push(call);
@@ -71,6 +72,48 @@ function harness(options:{edited?:ExperienceDraft;model?:(call:Call,index:number
  return {calls,controller,deps,input,job,setStale:()=>{current=false;},repairs:()=>repairs,
   run:()=>generateExperience(input,job,deps,controller.signal)};
 }
+
+test('default production policy never buys a repair or rebuild for an unexecutable scene',async()=>{
+ const h=harness({model:call=>{
+  if(call.role==='scene_builder'){const candidate=sceneFor(call.input.plan);candidate.nodes[1].parent_id='missing_parent';return candidate;}
+ }});
+ delete h.deps.automaticSceneRepair;
+ await assert.rejects(h.run(),(error:AppError)=>error.code==='INVALID_MODEL_OUTPUT');
+ assert.deepEqual(h.calls.map(call=>call.role),['experience_author','experience_editor','scene_builder']);
+ assert.equal(h.repairs(),0);
+});
+
+test('missing scenery support annotation reaches readiness locally without a model repair',async()=>{
+ const h=harness({automaticSceneRepair:false,model:call=>{
+  if(call.role==='scene_builder'){
+   const candidate=sceneFor(call.input.plan);
+   delete candidate.construction_plan!.relations[0].anchor_id;
+   return candidate;
+  }
+ }});
+ const result=await h.run();
+ assert.ok(result.scene.construction_report!.warnings.some(issue=>issue.rule==='support'));
+ assert.deepEqual(h.calls.map(call=>call.role),['experience_author','experience_editor','scene_builder']);
+ assert.equal(h.repairs(),0);
+});
+
+test('builder schema permits compiler-owned stage fields to be omitted and final scene fills them',async()=>{
+ const h=harness({automaticSceneRepair:false,model:call=>{
+  if(call.role==='scene_builder'){
+   const candidate=sceneFor(call.input.plan);
+   for(const step of candidate.scenario!.steps){
+    for(const field of ['terminal','completion','conversation_target','review_viewpoint_id','focus_node_ids','announce_on_entry'])delete (step as any)[field];
+   }
+   validateSceneBuilderOutput(call.input.plan,call.input.audio,candidate);
+   return candidate;
+  }
+ }});
+ const result=await h.run();
+ assert.equal(result.scene.scenario!.steps.at(-1)!.terminal,true);
+ assert.equal(result.scene.scenario!.steps[0].review_viewpoint_id,result.scene.initial_viewpoint_id);
+ assert.ok(result.scene.scenario!.steps[0].focus_node_ids!.length);
+ assert.equal(h.repairs(),0);
+});
 
 test('editor final plan reaches construction, with original context and compact planning capabilities',async()=>{
  const edited=draft();edited.setting_brief='An open room with softer evening light.';edited.experience.stages[0].sensory_brief='Warm evening light and quiet surroundings.';
@@ -90,7 +133,9 @@ test('editor final plan reaches construction, with original context and compact 
  assert.equal(h.repairs(),0);
 });
 
-test('a planning repair does not consume the construction repair',async()=>{
+test('a planning repair does not consume the construction repair',async t=>{
+ const previous=process.env.BRAIVE_VISUAL_STRICTNESS;process.env.BRAIVE_VISUAL_STRICTNESS='standard';
+ t.after(()=>{if(previous===undefined)delete process.env.BRAIVE_VISUAL_STRICTNESS;else process.env.BRAIVE_VISUAL_STRICTNESS=previous;});
  let builderCalls=0;
  const h=harness({model:call=>{
   if(call.schema==='SceneRepairPatch')return {base_hash:call.input.base_hash,operations:[{op:'set_relation_offset',relation_id:'ground_focus',offset:[0,0,-3]}]};
@@ -103,7 +148,9 @@ test('a planning repair does not consume the construction repair',async()=>{
  assert.equal(h.repairs(),2);
 });
 
-test('a localized construction failure is repaired with a scoped patch, not a rebuild',async()=>{
+test('a localized construction failure is repaired with a scoped patch, not a rebuild',async t=>{
+ const previous=process.env.BRAIVE_VISUAL_STRICTNESS;process.env.BRAIVE_VISUAL_STRICTNESS='standard';
+ t.after(()=>{if(previous===undefined)delete process.env.BRAIVE_VISUAL_STRICTNESS;else process.env.BRAIVE_VISUAL_STRICTNESS=previous;});
  let builderCalls=0;
  const h=harness({model:call=>{
   if(call.schema==='SceneRepairPatch')return {base_hash:call.input.base_hash,operations:[{op:'set_relation_offset',relation_id:'ground_focus',offset:[0,0,-3]}]};

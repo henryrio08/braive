@@ -798,6 +798,7 @@ import SwiftUI
               }
               try world.load(result["scene"], plan: result["plan"])
             } catch {
+              let preflightError = error
               do {
                 _ = try await api.call(
                   "/v1/jobs/" + jobID + "/validation", JSON(["message": error.localizedDescription]),
@@ -808,7 +809,7 @@ import SwiftUI
               } catch {
                 // The repair may already be running if its acknowledgement was lost.
                 // Poll its existing job; never blindly repeat a paid repair request.
-                if !API.isTransientConnection(error) { throw error }
+                if !API.isTransientConnection(error) { throw preflightError }
               }
               continue
             }

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { evaluateAcceptance, zoneSeverity } from '../src/acceptance.js';
+import { classifyVisual, evaluateAcceptance, zoneSeverity } from '../src/acceptance.js';
 import { deterministicCorrections } from '../src/construction.js';
 import { applyScenePatch, computeRepairScope, decorationEligibility, sceneHash, type SceneRepairPatch } from '../src/repair-patch.js';
 import type { SceneSpec } from '../../docs/handoff/contracts.js';
@@ -24,6 +24,13 @@ function scene(): SceneSpec {
   } as unknown as SceneSpec;
 }
 
+test('model-authored hard visual flags and large grouping discrepancies are advisory by default',()=>{
+ const issue={path:'/construction_plan/relations/tree_inside',rule:'fit',message:'Builder-authored inset',classification:'hard' as const,severity:100};
+ assert.equal(classifyVisual(issue).classification,'soft');
+ assert.equal(evaluateAcceptance([classifyVisual(issue)]).reasons.length,0);
+ assert.equal(classifyVisual(issue,'standard').classification,'hard');
+});
+
 test('acceptance: tolerable soft defects pass, severe and accumulated defects do not, dilution cannot hide severity', () => {
   const soft = (severity: number, rule = 'zone_fit') => ({ path: '/nodes/x', rule, message: 'm', classification: 'soft' as const, severity });
   assert.equal(evaluateAcceptance([soft(0.4), soft(0.5)]).acceptedSoft.length, 2);
@@ -31,8 +38,8 @@ test('acceptance: tolerable soft defects pass, severe and accumulated defects do
   // small ones are diagnostics, not rejection; gross defects stay hard.
   assert.equal(evaluateAcceptance([soft(1.4)]).acceptedSoft.length, 1, 'permissive default accepts moderate cosmetic defects');
   assert.equal(evaluateAcceptance([soft(0.9), soft(0.9), soft(0.9), soft(0.9), soft(0.9), soft(0.9)]).acceptedSoft.length, 6, 'no arbitrary count budget');
-  assert.ok(evaluateAcceptance([soft(2.5)]).reasons.length > 0, 'gross defect exceeds the permissive severity cap');
-  assert.ok(evaluateAcceptance([soft(3), ...Array.from({ length: 40 }, () => soft(0.01, 'other'))]).reasons.length > 0, 'valid content cannot dilute severity');
+  assert.equal(evaluateAcceptance([soft(2.5)]).reasons.length,0,'visual metadata never vetoes playback in permissive mode');
+  assert.equal(evaluateAcceptance([soft(3), ...Array.from({ length: 40 }, () => soft(0.01, 'other'))]).reasons.length,0,'visual diagnostics do not accumulate into a gate');
   // The developer standard mode keeps the stricter historical budgets.
   assert.ok(evaluateAcceptance([soft(1.4)], 'standard').reasons.length > 0);
   assert.ok(evaluateAcceptance([soft(0.9), soft(0.9), soft(0.9), soft(0.9)], 'standard').reasons.length > 0, 'standard category budget');
