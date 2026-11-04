@@ -285,6 +285,9 @@ export function sceneRepairPatchSchema():any {
    operation({relation_id:{type:'string'},kind:{type:'string',enum:['inside','within']}},['relation_id','kind']),
    operation({path_id:{type:'string'},points:{type:'array',minItems:1,maxItems:64,items:{type:'object',additionalProperties:false,properties:{at_seconds:{type:'number',minimum:0},position:vec3},required:['at_seconds','position']}}},['path_id','points']),
    operation({zone_id:{type:'string'},center:vec3,size:vec3},['zone_id']),
+   operation({anchor:{type:'object',additionalProperties:false,properties:{id:{type:'string'},node_id:{type:'string'},kind:{type:'string',enum:['support','seat','attachment','entry','exit']},position:vec3,footprint:{type:'array',items:{type:'number'},minItems:2,maxItems:2}},required:['id','node_id','kind','position','footprint']}},['anchor']),
+   operation({relation_id:{type:'string'},anchor_id:{type:'string'}},['relation_id','anchor_id']),
+   operation({relation_id:{type:'string'},anchor_id:{type:'string'}},['relation_id','anchor_id']),
    operation({node_id:{type:'string'}},['node_id']),
   ]}},
  },required:['base_hash','operations']};

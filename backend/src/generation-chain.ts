@@ -138,7 +138,7 @@ export async function generateExperience(request:PlanRequest,job:Job,deps:Genera
  };
  job.stage='Building your scene'; deps.isCurrent();
  let scene:SceneSpec;
- try { scene=await buildOnce(); }
+ try { scene=await buildOnce(); if(scene.construction_report)scene.construction_report.recovery=scene.construction_report.corrections?.length?'deterministic':'first_pass'; }
  catch(firstError){
   if(!(firstError instanceof AppError)||firstError.code!=='INVALID_MODEL_OUTPUT'||!deps.consumeRepair('construction'))throw firstError;
   const issues=firstError.issues;
@@ -147,7 +147,7 @@ export async function generateExperience(request:PlanRequest,job:Job,deps:Genera
    const base=deterministicCorrections(canonicalSceneReferences(plan,candidate,audio)).scene;
    const scope=computeRepairScope(base,issues);
    const patch=await deps.model('SceneRepairPatch',{base_scene:authoredScene(base),base_hash:sceneHash(base),issues,
-    scope:{nodes:[...scope.nodes],relations:[...scope.relations],paths:[...scope.paths],zones:[...scope.zones]},
+    scope:{nodes:[...scope.nodes],relations:[...scope.relations],paths:[...scope.paths],zones:[...scope.zones],anchors:[...scope.anchors]},
     requirements:constructionRequirements(plan),capabilities:deps.capabilities},repairInstructions,signal,'scene_repair');
    check();
    validateProviderOutput('SceneRepairPatch',patch);
@@ -155,9 +155,9 @@ export async function generateExperience(request:PlanRequest,job:Job,deps:Genera
    const compiled=compileScene(plan,patched,audio);
    const errors=[...sceneIssues(plan,compiled,audio),...experienceSceneIssues(experience,plan,compiled)];
    if(errors.length)throw new AppError('INVALID_MODEL_OUTPUT','Scene requires repair',errors);
-   scene=compiled;
+   scene=compiled; if(scene.construction_report)scene.construction_report.recovery='patched';
   } else {
-   scene=await buildOnce(issues);
+   scene=await buildOnce(issues); if(scene.construction_report)scene.construction_report.recovery='rebuilt';
   }
  }
  check();

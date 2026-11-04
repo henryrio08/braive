@@ -113,6 +113,18 @@ test('a localized construction failure is repaired with a scoped patch, not a re
  assert.ok(result.scene.construction_report);
  assert.deepEqual(h.calls.map(c=>c.schema),['ExperienceDraft','ExperienceDraft','SceneSpec','SceneRepairPatch']);
  assert.equal(h.repairs(),1);
+ assert.equal(result.scene.construction_report!.recovery,'patched');
+});
+
+test('a structural failure takes the bounded complete rebuild, not a patch',async()=>{
+ let builderCalls=0;
+ const h=harness({model:call=>{
+  if(call.role==='scene_builder'){builderCalls++;if(builderCalls===1){const bad=sceneFor(call.input.plan);bad.construction_plan!.requirements=[];return bad;}}
+ }});
+ const result=await h.run();
+ assert.ok(result.scene.construction_report);
+ assert.deepEqual(h.calls.map(c=>c.schema),['ExperienceDraft','ExperienceDraft','SceneSpec','SceneSpec']);
+ assert.equal(result.scene.construction_report!.recovery,'rebuilt');
 });
 
 test('an unchanged complete editor plan proceeds directly to the builder',async()=>{

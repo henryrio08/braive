@@ -18,9 +18,12 @@ export type PatchOperation=
  |{op:'set_relation_kind';relation_id:string;kind:'inside'|'within'}
  |{op:'set_path_points';path_id:string;points:{at_seconds:number;position:[number,number,number]}[]}
  |{op:'set_zone';zone_id:string;center?:[number,number,number];size?:[number,number,number]}
+ |{op:'add_anchor';anchor:{id:string;node_id:string;kind:'support'|'seat'|'attachment'|'entry'|'exit';position:[number,number,number];footprint:[number,number]}}
+ |{op:'set_relation_anchor';relation_id:string;anchor_id:string}
+ |{op:'set_relation_subject_anchor';relation_id:string;anchor_id:string}
  |{op:'remove_node';node_id:string};
 
-export type RepairScope={nodes:Set<string>;relations:Set<string>;paths:Set<string>;zones:Set<string>};
+export type RepairScope={nodes:Set<string>;relations:Set<string>;paths:Set<string>;zones:Set<string>;anchors:Set<string>};
 
 function stable(value:unknown):string {
  if(Array.isArray(value))return '['+value.map(stable).join(',')+']';
@@ -36,7 +39,7 @@ export function sceneHash(scene:SceneSpec):string {
 const ID_IN_PATH=/\/(?:nodes|motion_paths)\/([^/]+)|\/relations\/([^/]+)|\/zones\/([^/]+)/;
 
 export function computeRepairScope(scene:SceneSpec,issues:ValidationIssue[]):RepairScope {
- const scope:RepairScope={nodes:new Set(),relations:new Set(),paths:new Set(),zones:new Set()};
+ const scope:RepairScope={nodes:new Set(),relations:new Set(),paths:new Set(),zones:new Set(),anchors:new Set()};
  const cp=scene.construction_plan;
  const addNode=(id:string)=>{
   if(scope.nodes.has(id))return;
@@ -69,6 +72,7 @@ export function computeRepairScope(scene:SceneSpec,issues:ValidationIssue[]):Rep
    }
   }
   for(const assembly of cp.assemblies)if(assembly.member_node_ids.some(id=>scope.nodes.has(id)))scope.zones.add(assembly.zone_id);
+  for(const anchor of cp.anchors)if(scope.nodes.has(anchor.node_id))scope.anchors.add(anchor.id);
   for(const route of cp.routes)if(scope.paths.has(route.path_id)){/* routes themselves are not editable; paths are */}
  }
  return scope;
@@ -130,6 +134,19 @@ export function applyScenePatch(base:SceneSpec,patch:SceneRepairPatch,scope:Repa
     const zone=zones.get(operation.zone_id);if(!zone||!scope.zones.has(operation.zone_id))fail(`Patch target zone ${operation.zone_id} is outside the computed repair scope`);
     if(operation.center)zone!.center=operation.center;
     if(operation.size)zone!.size=operation.size;break;}
+   case 'add_anchor':{
+    if(!scene.construction_plan)fail('Patch cannot add an anchor without a construction plan');
+    if(scene.construction_plan!.anchors.some(a=>a.id===operation.anchor.id))fail(`Anchor ${operation.anchor.id} already exists`);
+    if(!scope.nodes.has(operation.anchor.node_id))fail(`Patch anchor node ${operation.anchor.node_id} is outside the computed repair scope`);
+    scene.construction_plan!.anchors.push(operation.anchor);scope.anchors.add(operation.anchor.id);break;}
+   case 'set_relation_anchor':{
+    const relation=relations.get(operation.relation_id);if(!relation||!scope.relations.has(operation.relation_id))fail(`Patch target relation ${operation.relation_id} is outside the computed repair scope`);
+    if(!scope.anchors.has(operation.anchor_id)&&!scene.construction_plan?.anchors.some(a=>a.id===operation.anchor_id))fail(`Patch anchor ${operation.anchor_id} is outside the computed repair scope`);
+    relation!.anchor_id=operation.anchor_id;break;}
+   case 'set_relation_subject_anchor':{
+    const relation=relations.get(operation.relation_id);if(!relation||!scope.relations.has(operation.relation_id))fail(`Patch target relation ${operation.relation_id} is outside the computed repair scope`);
+    if(!scope.anchors.has(operation.anchor_id)&&!scene.construction_plan?.anchors.some(a=>a.id===operation.anchor_id))fail(`Patch anchor ${operation.anchor_id} is outside the computed repair scope`);
+    relation!.subject_anchor_id=operation.anchor_id;break;}
    case 'remove_node':{
     if(!scope.nodes.has(operation.node_id))fail(`Patch target node ${operation.node_id} is outside the computed repair scope`);
     const check=decorationEligibility(scene,operation.node_id);

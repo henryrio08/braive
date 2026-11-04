@@ -108,6 +108,49 @@ reached and no funds were added.
   $36.86 remaining, including retained unsettled reservations. No further
   live runs were made after the conservation request.
 
+## Authoritative acceptance checklist (recovery pipeline)
+
+Implementation:
+- [x] Weighted acceptance policy with normalized severity, category and
+  total budgets, structured diagnostics (rule, entities, classification,
+  measured vs allowed, severity).
+- [x] Deterministic corrections before model repair (texture fallback),
+  recorded; raw and corrected candidates kept separately.
+- [x] Typed SceneRepairPatch with base hash, backend-computed scope,
+  stale/out-of-scope/oversized rejection, dependency expansion, and
+  omission limited to proven optional decoration.
+- [x] Patch operations cover transforms, materials, relation offsets and
+  containment kind, path points, zones, and anchor creation/binding
+  (including seated-actor subject anchors).
+- [x] Bounded rebuild eligibility for structural/semantic failures;
+  planning and construction repairs separately budgeted; recovery outcome
+  recorded per scene (`first_pass|deterministic|patched|rebuilt`).
+
+Offline verification:
+- [x] Backend suite 153+ tests (acceptance, corrections, patch scope and
+  exceptional paths, omission, allocation, obstructed routes).
+- [x] Retained-scene replay through corrections, eligibility routing,
+  controlled patch application, recompilation and full validation;
+  genuinely blocked routes remain rejected. Controlled patches are
+  labeled as such and are not model evidence.
+- [x] Native compilation via xtool ("Build complete!").
+
+Live model verification (within the US$10 authorization; about $2.30
+settled across three attempts, reservations preserved):
+- [x] Fresh library generation succeeded end to end (rebuilt class).
+- [ ] A Wonder-produced patch applied successfully live: not yet
+  demonstrated. Real first attempts consistently mix semantic defects
+  (palette, priority, edited-experience) with geometry, so the bounded
+  rebuild path is correctly selected; the patch mechanism itself is
+  proven by unit/chain tests and offline replay only.
+
+Physical-device verification:
+- [ ] Externally performed by Henry (see
+  `docs/device-handoff-henry-2026-11-04.md`); pending, not claimed here.
+  Native agreement argument: soft acceptance covers only zone grouping
+  defects, which native preflight does not evaluate; collision, support,
+  route and execution checks remain hard on both sides.
+
 ## Verification status
 
 - Backend: full suite passing (151/151: `npm --prefix backend test`),

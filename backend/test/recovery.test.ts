@@ -58,6 +58,31 @@ test('scoped patch changes only intended entities; stale and out-of-scope patche
   assert.throws(() => applyScenePatch(base, { base_hash: sceneHash(base), operations: [{ op: 'set_node_transform', node_id: 'plant', position: [0, 0, 0] }] }, scope), /outside the computed repair scope/);
 });
 
+test('scope expands to dependencies; oversized and unknown patches are rejected', () => {
+  const s = scene();
+  s.nodes.push({ id: 'child', parent_id: 'table', role: 'environment', geometry: { kind: 'box', size: [0.5, 0.5, 0.5] }, position: [0, 0.8, 0], rotation_radians: [0, 0, 0], scale: [1, 1, 1], material: { color: '#333333', roughness: 0.9 }, animation: 'none', description: 'child' } as never);
+  const scope = computeRepairScope(s, [{ path: '/nodes/child', rule: 'zone_fit', message: 'child bounds overflow' }]);
+  assert.ok(scope.nodes.has('child') && scope.nodes.has('table'), 'parent is a dependency of the child');
+  const moved = applyScenePatch(s, { base_hash: sceneHash(s), operations: [{ op: 'set_node_transform', node_id: 'table', position: [1, 0.5, -2] }] }, scope);
+  assert.deepEqual(moved.nodes.find(n => n.id === 'table')!.position, [1, 0.5, -2]);
+  assert.throws(() => applyScenePatch(s, { base_hash: sceneHash(s), operations: Array.from({ length: 25 }, () => ({ op: 'set_node_material', node_id: 'table', color: '#000000' })) as never }, scope), /operation limit/);
+  assert.throws(() => applyScenePatch(s, { base_hash: sceneHash(s), operations: [{ op: 'replace_everything', node_id: 'table' } as never] }, scope), /Unsupported repair operation/);
+});
+
+test('patches can add a scoped seat anchor and bind a support relation to it', () => {
+  const s = scene();
+  s.construction_plan!.relations.push({ id: 'rel_seat', kind: 'on', subject_id: 'table', target_id: 'floor', offset: [0, 0, 0], clearance: 0, tolerance: 0.1, required: true } as never);
+  const scope = computeRepairScope(s, [{ path: '/construction_plan/relations/rel_seat', rule: 'support', message: 'Support relations need an explicit surface/seat anchor' }]);
+  const patched = applyScenePatch(s, { base_hash: sceneHash(s), operations: [
+    { op: 'add_anchor', anchor: { id: 'table_top', node_id: 'table', kind: 'seat', position: [0, 0.5, 0], footprint: [1.5, 0.8] } },
+    { op: 'set_relation_anchor', relation_id: 'rel_seat', anchor_id: 'table_top' },
+  ] }, scope);
+  assert.equal(patched.construction_plan!.relations.find(r => r.id === 'rel_seat')!.anchor_id, 'table_top');
+  assert.throws(() => applyScenePatch(s, { base_hash: sceneHash(s), operations: [
+    { op: 'add_anchor', anchor: { id: 'plant_top', node_id: 'plant', kind: 'seat', position: [0, 0.1, 0], footprint: [1, 1] } },
+  ] }, scope), /already exists|outside the computed repair scope/);
+});
+
 test('omission is allowed only for unreferenced optional decoration', () => {
   const s = scene();
   assert.equal(decorationEligibility(s, 'plant').eligible, true);
