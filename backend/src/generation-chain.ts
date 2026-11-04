@@ -9,6 +9,7 @@ import {dispatchTool} from './tool-dispatch.js';
 import {authorInstructions, editorInstructions, builderInstructions, repairInstructions} from './generation-prompts.js';
 import type {ModelRole} from './meta.js';
 import {automaticSceneRepairEnabled} from './recovery-policy.js';
+import {measurePhase} from './diagnostics.js';
 
 export type ApprovedExperience = {plan:SessionPlan; scene:SceneSpec; audio:AudioPlan; experience?:ExperienceDraft};
 export interface GenerationDependencies {
@@ -108,14 +109,19 @@ export async function generateExperience(request:PlanRequest,job:Job,deps:Genera
    const output=await dispatchTool(plan,'compose_scene',source.revision===1?'setup':'builder_revision',
     args=>deps.model('SceneSpec',structuredClone({...input,tool_arguments:args}),builderInstructions,signal,'scene_builder'));
    check();candidate=output;
-   const corrected=deterministicCorrections(canonicalSceneReferences(plan,output,audio));
-   const staged=materializeStageGraph(experience,plan,corrected.scene);
-   if(staged.issues.length)throw new AppError('INVALID_MODEL_OUTPUT','Stage graph requires route geometry',staged.issues);
-   validate('SceneSpec',staged.scene);validateProviderOutput('SceneSpec',staged.scene);
-   const compiled=compileScene(plan,staged.scene,audio);
+   const corrected=measurePhase('local_preparation',()=>deterministicCorrections(canonicalSceneReferences(plan,output,audio)));
+   const staged=measurePhase('stage_compilation',()=>{
+    const staged=materializeStageGraph(experience,plan,corrected.scene);
+    if(staged.issues.length)throw new AppError('INVALID_MODEL_OUTPUT','Stage graph requires route geometry',staged.issues);
+    return staged;
+   });
+   measurePhase('completed_scene_schema',()=>{validate('SceneSpec',staged.scene);validateProviderOutput('SceneSpec',staged.scene);});
+   const compiled=measurePhase('construction_validation',()=>compileScene(plan,staged.scene,audio));
    if(compiled.construction_report&&corrected.corrections.length)compiled.construction_report.corrections=corrected.corrections;
-   const errors=[...sceneIssues(plan,compiled,audio),...experienceSceneIssues(experience,plan,compiled)];
-   if(errors.length)throw new AppError('INVALID_MODEL_OUTPUT','Scene requires repair',errors);
+   measurePhase('approved_experience_validation',()=>{
+    const errors=[...sceneIssues(plan,compiled,audio),...experienceSceneIssues(experience,plan,compiled)];
+    if(errors.length)throw new AppError('INVALID_MODEL_OUTPUT','Scene requires repair',errors);
+   });
    return compiled;
   } catch(error){
    if(error instanceof AppError&&error.modelOutput?.schema==='SceneSpec'){

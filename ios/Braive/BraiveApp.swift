@@ -286,6 +286,10 @@ struct ContentView: View {
         Section("About Braive") {
           Text("Version \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "") (\(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? ""))")
             .font(.footnote).foregroundStyle(.secondary)
+          Text("App source: \(NativeBuildIdentity.current.source_revision)")
+            .font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+          Text("Practice computer: \(s.backendRevision)")
+            .font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
         }
         Section {
           DisclosureGroup("Connection setup") {

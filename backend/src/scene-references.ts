@@ -24,7 +24,7 @@ export function canonicalSceneReferences(plan:SessionPlan,source:SceneSpec,audio
  const scene=structuredClone(source);
  const characterIDs=new Set(plan.characters.map(c=>c.id)),cueIDs=new Set(audio.layers.map(l=>l.id));
  const ops=[...scene.events.map(e=>e.operation),...scene.interactions.flatMap(i=>i.choices.flatMap(c=>c.operations)),
-  ...(scene.scenario?.steps.flatMap(s=>[...s.start_operations,...s.actions.flatMap(a=>a.operations)])??[])];
+  ...(scene.scenario?.steps.flatMap(s=>[...(s.start_operations??[]),...(s.actions??[]).flatMap(a=>a.operations)])??[])];
  for(const op of ops){
   if(op.type==='character_action'&&!characterIDs.has(op.character_id)){
    const matches=plan.characters.filter(c=>c.scene_node_id===op.character_id);

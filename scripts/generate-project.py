@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generate the Xcode project, bundled GLBs, and pinned GLTFKit2 dependency."""
 from pathlib import Path, PurePosixPath
-import hashlib,re,sys
+import hashlib,json,re,sys
 root=Path(__file__).resolve().parents[1]; app=root/'ios/Braive'; project=root/'ios/Braive.xcodeproj';project.mkdir(exist_ok=True)
 def uid(s): return hashlib.sha1(s.encode()).hexdigest()[:24].upper()
 existing=(project/'project.pbxproj').read_text() if (project/'project.pbxproj').exists() else ''
@@ -15,6 +15,7 @@ files=[];sources=[];resources=[]
 for path in sorted(app.rglob('*')):
  if not path.is_file():continue
  relative=PurePosixPath(path.relative_to(app).as_posix())
+ if relative.as_posix()=='Resources/BuildIdentity.json':continue # stamped directly into the built app
  if any(part.endswith('.xcassets') for part in relative.parts):continue
  if relative.parts[:2]==('Resources','LowPoly'):continue
  if 'Review' in relative.parts and '--include-review' not in sys.argv:continue
@@ -36,6 +37,8 @@ product=add('product','isa = PBXFileReference; explicitFileType = wrapper.applic
 main=add('main','isa = PBXGroup; children = ('+','.join(files+[uid('products')])+'); sourceTree = "<group>";')
 add('products',f'isa = PBXGroup; children = ({product}); name = Products; sourceTree = "<group>";')
 for name,kind,entries in [('sources','PBXSourcesBuildPhase',sources),('resources','PBXResourcesBuildPhase',resources),('frameworks','PBXFrameworksBuildPhase',[packageBuild])]:add(name,f'isa = {kind}; buildActionMask = 2147483647; files = ({",".join(entries)}); runOnlyForDeploymentPostprocessing = 0;')
+stamp='python3 "$SRCROOT/../scripts/stamp-native-build.py" --output "$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/BuildIdentity.json"\n'
+add('stampidentity',f'isa = PBXShellScriptBuildPhase; alwaysOutOfDate = 1; buildActionMask = 2147483647; files = (); name = "Stamp source identity"; inputPaths = (); outputPaths = ("$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/BuildIdentity.json"); runOnlyForDeploymentPostprocessing = 0; shellPath = /bin/sh; shellScript = {json.dumps(stamp)};')
 for level in ['project','target']:
  configs=[]
  for config in ['Debug','Release']:
@@ -46,6 +49,6 @@ for level in ['project','target']:
   else:settings+='SWIFT_OPTIMIZATION_LEVEL = "-O"; '
   configs.append(add(level+config,f'isa = XCBuildConfiguration; buildSettings = {{ {settings} }}; name = {config};'))
  add(level+'configs',f'isa = XCConfigurationList; buildConfigurations = ({",".join(configs)}); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release;')
-add('target',f'isa = PBXNativeTarget; buildConfigurationList = {uid("targetconfigs")}; buildPhases = ({uid("sources")},{uid("frameworks")},{uid("resources")}); buildRules = (); dependencies = (); packageProductDependencies = ({packageProduct}); name = Braive; productName = Braive; productReference = {product}; productType = "com.apple.product-type.application";')
+add('target',f'isa = PBXNativeTarget; buildConfigurationList = {uid("targetconfigs")}; buildPhases = ({uid("sources")},{uid("frameworks")},{uid("resources")},{uid("stampidentity")}); buildRules = (); dependencies = (); packageProductDependencies = ({packageProduct}); name = Braive; productName = Braive; productReference = {product}; productType = "com.apple.product-type.application";')
 add('project',f'isa = PBXProject; attributes = {{ LastUpgradeCheck = 1600; }}; buildConfigurationList = {uid("projectconfigs")}; compatibilityVersion = "Xcode 14.0"; developmentRegion = en; hasScannedForEncodings = 0; knownRegions = (en,Base); mainGroup = {main}; productRefGroup = {uid("products")}; projectDirPath = ""; projectRoot = ""; packageReferences = ({package}); targets = ({uid("target")});')
 (project/'project.pbxproj').write_text('// !$*UTF8*$!\n{archiveVersion = 1; classes = {}; objectVersion = 56; objects = {\n'+'\n'.join(objects)+f'\n}}; rootObject = {uid("project")}; }}\n')

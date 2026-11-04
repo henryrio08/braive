@@ -1,5 +1,7 @@
 # Current coordination — November 3, 2026
 
+November 4 follow-up: [scene-generation fixes and verification handoff](scene-generation-fixes-2026-11-04.md) records the subsequent body-depth, placement, route-origin, draft-contract, diagnostics and spending-limit fixes. Backend replay/typecheck/tests and Windows xtool compilation pass; actual native controls and fresh phone playback remain unverified. Use that evidence distinction when continuing this work.
+
 **Current state and next chat:** read the [combined handoff](combined-handoff-2026-11-03.md). Main includes the complete published partner work and all tested follow-ups. The last generated scene passed backend validation but was rejected by native route clearance. Older entries below are chronological evidence, not current branch or installation instructions.
 
 Follow-up `codex/precise-zone-validation`: the recovered live builder call produced schema-valid references. It exposed two separate issues in zone checks: an unbound decorative root inherited hard-fit status from an assembly label, and deduplication hid another member's actual oversized child transform. Hard zone fit now applies to explicit required geometry and its support chain; unrelated decoration still reports warnings. Every failing member has its own original node path and a parent-scale explanation. Static world-root authoring guidance now matches the compiler. The physical checks remain intact. All 127 backend tests/type-check pass. Final native scene verification and installation of the signed combined 0.4 (7) build are in progress.

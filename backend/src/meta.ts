@@ -5,13 +5,15 @@ import type {DialogueRequest} from '../../docs/handoff/contracts.js';
 import {experienceSchema,validateExperience,validateExperienceShape} from './experience.js';
 import {canonicalSceneMotion} from './scene-references.js';
 import {setTimeout as delay} from 'node:timers/promises';
+import {randomUUID} from 'node:crypto';
+import {backendRevision,generationIdentity} from './diagnostics.js';
 export type ModelRole='experience_author'|'experience_editor'|'scene_builder'|'scene_repair'|'dialogue'|'feedback'|'adaptation'|'general';
 function defaultRole(schema:string):ModelRole {
  return schema==='SceneSpec'?'scene_builder':schema==='DialogueResult'?'dialogue':schema==='FeedbackResult'?'feedback':schema==='AdaptationResult'?'adaptation':'general';
 }
 export let requestCount=0;
 export let reservedCostUSD=0;
-export const usageLog:Array<{model:string,role:ModelRole,schema:string,input_tokens:number,output_tokens:number,estimated_cost_usd:number,elapsed_ms:number,input_bytes:number,response_bytes:number,outcome:'succeeded'|'failed'}>=[];
+export const usageLog:Array<{model:string,role:ModelRole,schema:string,input_tokens:number,output_tokens:number,estimated_cost_usd:number,elapsed_ms:number,input_bytes:number,response_bytes:number,outcome:'succeeded'|'failed';backend_revision:string;logical_call_id:string;provider_attempt:number;job_id?:string;session_id?:string;revision?:number;finish_reason?:string;provider_status?:number;validation_outcome:string}>=[];
 export const provenance = new Map<string, string[]>();
 export class TemporaryProviderError extends AppError {
  constructor(status:number){super('PROVIDER_UNAVAILABLE',`Meta temporarily unavailable (HTTP ${status}). Retry, revise, or cancel.`,[],502);}
@@ -26,9 +28,10 @@ export async function retryTemporaryProvider<T>(operation:()=>Promise<T>,signal:
  }
 }
 export async function model(schema: string, input: unknown, instructions: string, signal: AbortSignal, role:ModelRole=defaultRole(schema)): Promise<any> {
- return retryTemporaryProvider(()=>modelAttempt(schema,input,instructions,signal,role),signal);
+ const logicalCall=randomUUID();let attempt=0;
+ return retryTemporaryProvider(()=>modelAttempt(schema,input,instructions,signal,role,logicalCall,++attempt),signal);
 }
-async function modelAttempt(schema:string,input:unknown,instructions:string,signal:AbortSignal,role:ModelRole):Promise<any>{
+async function modelAttempt(schema:string,input:unknown,instructions:string,signal:AbortSignal,role:ModelRole,logicalCall:string,attempt:number):Promise<any>{
  signal.throwIfAborted();
  if(process.env.BRAIVE_ALLOW_META !== 'true') throw new AppError('PROVIDER_UNAVAILABLE','Meta spending is disabled. Henry must explicitly approve live use before setting BRAIVE_ALLOW_META=true.',[],503);
  if(!activeBudget()) throw new AppError('PROVIDER_UNAVAILABLE','A persistent cumulative test approval is required for billable requests.',[],503);
@@ -50,34 +53,40 @@ async function modelAttempt(schema:string,input:unknown,instructions:string,sign
  if(wonder ? modelID!=='muse-wonder-1.0' : !['muse-spark-1.3','muse-spark-1.2','muse-spark-1.1'].includes(modelID)) throw new AppError('INVALID_INPUT','No verified test pricing for this model role');
  if(reservedCostUSD+reserve>budget) throw new AppError('RATE_LIMITED',`Approved test budget would be exceeded before this request (${(reservedCostUSD+reserve).toFixed(3)} USD reserved).`,[],429);
  const cumulative=activeBudget();
- const reservation=cumulative?.reserve('text',reserve,{model:modelID,role,input_token_allowance:inputAllowance,maximum_output_tokens:outputLimit});
+ const identity=generationIdentity();
+ const reservation=cumulative?.reserve('text',reserve,{model:modelID,role,input_token_allowance:inputAllowance,maximum_output_tokens:outputLimit,...identity,logical_call_id:logicalCall,provider_attempt:attempt});
  reservedCostUSD+=reserve;requestCount++;
  const started=performance.now();
- const metrics={model:modelID,role,schema,input_tokens:0,output_tokens:0,estimated_cost_usd:0,elapsed_ms:0,input_bytes:inputAllowance-1024,response_bytes:0,outcome:'failed' as 'succeeded'|'failed'};
+ const metrics:typeof usageLog[number]={model:modelID,role,schema,input_tokens:0,output_tokens:0,estimated_cost_usd:0,elapsed_ms:0,input_bytes:inputAllowance-1024,response_bytes:0,outcome:'failed',backend_revision:backendRevision,logical_call_id:logicalCall,provider_attempt:attempt,...identity,validation_outcome:'not_run'};
  try {
  const response=await fetch(`${process.env.META_BASE_URL ?? 'https://api.meta.ai/v1'}/chat/completions`,{
   method:'POST',signal,headers:{Authorization:`Bearer ${process.env.MODEL_API_KEY}`,'Content-Type':'application/json'},
   body:JSON.stringify({model:modelID,messages,response_format:responseFormat,reasoning_effort:role==='dialogue'?'minimal':role==='scene_builder'?(process.env.BRAIVE_BUILDER_REASONING??'low'):'low',max_completion_tokens:outputLimit})
  });
+ metrics.provider_status=response.status;
  if(!response.ok){
   if([502,503,504].includes(response.status))throw new TemporaryProviderError(response.status);
   throw new AppError(response.status===429?'RATE_LIMITED':'PROVIDER_UNAVAILABLE',`Meta returned HTTP ${response.status}. Check dashboard access and billing.`,[],502);
  }
  const result:any=await response.json();
+ metrics.finish_reason=['stop','length','content_filter','tool_calls'].includes(result.choices?.[0]?.finish_reason)?result.choices[0].finish_reason:'unknown';
  const inputTokens=result.usage?.prompt_tokens??0,outputTokens=result.usage?.completion_tokens??0;
  Object.assign(metrics,{input_tokens:inputTokens,output_tokens:outputTokens,estimated_cost_usd:(inputTokens*(wonder?4:1.25)+outputTokens*(wonder?20:4.25))/1_000_000});
  if(reservation && cumulative && Number.isFinite(result.usage?.prompt_tokens) && Number.isFinite(result.usage?.completion_tokens)) cumulative.settle(reservation,(inputTokens*(wonder?4:1.25)+outputTokens*(wonder?20:4.25))/1_000_000,result.usage);
  const content=result.choices?.[0]?.message?.content;
- if(!content) throw new AppError('INVALID_MODEL_OUTPUT','Meta returned no structured content');
- metrics.response_bytes=Buffer.byteLength(content,'utf8');
- let value; try { value=JSON.parse(content); } catch { throw new AppError('INVALID_MODEL_OUTPUT','Meta returned malformed JSON'); }
+ metrics.response_bytes=typeof content==='string'?Buffer.byteLength(content,'utf8'):0;
+ if(metrics.finish_reason==='length'){metrics.validation_outcome='rejected';throw new AppError('INVALID_MODEL_OUTPUT','Meta output reached its token limit before completing structured output');}
+ if(typeof content!=='string'||!content) throw new AppError('INVALID_MODEL_OUTPUT','Meta returned no structured content');
+ let value; try { value=JSON.parse(content); } catch {metrics.validation_outcome='rejected';throw new AppError('INVALID_MODEL_OUTPUT','Meta returned malformed JSON'); }
  if(schema==='SceneSpec')value=canonicalSceneMotion(value);
  if(schema==='DialogueResult')value=completeDialogueResult(input as DialogueRequest,value);
  if(schema==='ExperienceDraft'){
+  metrics.validation_outcome='rejected';
   if(role==='experience_author')validateExperienceShape(value);
   else validateExperience(value);
  }
  else {
+  metrics.validation_outcome='rejected';
   try {
    if(schema==='SceneSpec'&&context?.plan&&context?.audio)validateSceneBuilderOutput(context.plan,context.audio,value);
    else {validate(schema,value);validateProviderOutput(schema,value);}
@@ -87,6 +96,7 @@ async function modelAttempt(schema:string,input:unknown,instructions:string,sign
    throw error;
   }
  }
+ metrics.validation_outcome=schema==='SceneSpec'?'draft_accepted':'accepted';
  const sessionID=value.session_id??(input as {request?:{session_id?:string}})?.request?.session_id;
  if(sessionID && result.id) provenance.set(sessionID,[...(provenance.get(sessionID)??[]),result.id]);
  metrics.outcome='succeeded';

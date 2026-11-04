@@ -40,6 +40,27 @@ test('builder geometry rejects placeholders and invented IDs while preserving al
  if(ids.length>250)assert.ok(ids.reduce((sum,id)=>sum+id.length,0)<=15000,'Asset enum exceeds the provider string limit');
 });
 
+test('motion and construction routes accept floating body depth without changing standing height',()=>{
+ const schema=outputSchema('SceneSpec'),ajv=new (Ajv as any)({strict:false});
+ const examples={
+  MotionPath:{id:'swim_path',purpose:'swim',interpolation:'linear',points:[{at_seconds:10,position:[0,0.6,-2]}]},
+  ConstructionRoute:{path_id:'swim_path',stage_ids:['stage_1'],requirement_ids:[],clearance_radius_meters:0.25},
+ };
+ for(const [name,example] of Object.entries(examples)){
+  const check=ajv.compile({$defs:schema.$defs,$ref:`#/$defs/${name}`});
+  for(const height of [0.5,0.6,1.6,2.2]){
+   const value={...example,eye_height_meters:height};
+   assert.equal(check(value),true,`${name} must accept ${height}m`);
+   assert.doesNotThrow(()=>validate(name,value),`${name} wire validation must agree at ${height}m`);
+  }
+  for(const height of [0.49,2.21]){
+   const value={...example,eye_height_meters:height};
+   assert.equal(check(value),false,`${name} must reject ${height}m`);
+   assert.throws(()=>validate(name,value),AppError);
+  }
+ }
+});
+
 test('repair feedback identifies the missing and unexpected schema fields',()=>{
  assert.throws(()=>validate('Material',{invented:1}),(e:any)=>
   e.issues.some((i:any)=>i.message.includes('missingProperty')&&i.message.includes('color'))&&

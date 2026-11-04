@@ -118,9 +118,11 @@ import Foundation
       to: root.appendingPathComponent("SESSIONS.csv"), atomically: true, encoding: .utf8)
   }
   func deleteAll() throws {
-    for directory in ["Sessions", "Reflections"] {
+    for directory in ["Sessions", "Reflections", "PreparationDiagnostics"] {
+      let folder = root.appendingPathComponent(directory)
+      guard FileManager.default.fileExists(atPath: folder.path) else { continue }
       for file in try FileManager.default.contentsOfDirectory(
-        at: root.appendingPathComponent(directory), includingPropertiesForKeys: nil)
+        at: folder, includingPropertiesForKeys: nil)
       { try FileManager.default.removeItem(at: file) }
     }
     records = []
