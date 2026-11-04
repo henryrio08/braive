@@ -1,5 +1,7 @@
 import {activeBudget} from './budget.js';
 import {automaticSceneRepairEnabled} from './recovery-policy.js';
+import {visualStrictness} from './acceptance.js';
+import {backendRevision,persistGenerationReport,withGenerationIdentity} from './diagnostics.js';
 import {materializeStageGraph} from './stage-compiler.js';
 import {cancelGeneration,releaseGeneration,supersedeGeneration,repeatedGeneration,claimRepair,repairBlock,releaseRepair,grantRepairWindow,type GenerationAttempt} from './job-lifecycle.js';
 import {PhoneTestWindow} from './phone-test-window.js';
@@ -46,7 +48,7 @@ app.use((req,_res,next)=>{
 });
 const approved=new Map<string,ApprovedExperience>();
 // Read-only authenticated pairing check; it neither spends nor renews provider access.
-app.get('/v1/connection',(_req,res)=>res.json({status:'ok'}));
+app.get('/v1/connection',(_req,res)=>res.json({status:'ok',backend_revision:backendRevision,automatic_scene_repair:automaticSceneRepairEnabled(),visual_strictness:visualStrictness()}));
 const attempts=new Map<string,GenerationAttempt>();
 const requests=new Map<string,PlanRequest>();
 const generationLimitMs=10*60*1000;
@@ -91,10 +93,11 @@ app.post(['/v1/session-plans','/v1/scene-revisions'],(req,res,next)=>{
   jobs.set(job.job_id,job); const controller=new AbortController(); running.set(job.job_id,controller);
   requests.set(job.job_id,structuredClone(input));
   const timer=setTimeout(()=>controller.abort(new Error('Ten-minute generation ceiling reached')),generationLimitMs);
-  void generate(input,job,controller.signal).catch(e=>{
+  const started=performance.now();
+  void withGenerationIdentity(job,()=>generate(input,job,controller.signal)).catch(e=>{
    if(job.status==='cancelled') return;
    job.status='failed';job.error={code:controller.signal.aborted?'TIMEOUT':e.code??'PROVIDER_UNAVAILABLE',message:controller.signal.aborted?'Generation ended at ten minutes. Retry, revise, or cancel.':e.message,retryable:true,request_id:job.job_id,issues:e.issues};
-  }).finally(()=>{clearTimeout(timer);releaseGeneration(job.job_id,controller,running);console.log('[generation]',JSON.stringify({job_id:job.job_id,status:job.status,elapsed_seconds:(Date.now()-(attempts.get(job.job_id)!.deadline-generationLimitMs))/1000,error_code:job.error?.code,nodes:job.result?.scene.nodes.length}));});
+  }).finally(()=>{clearTimeout(timer);releaseGeneration(job.job_id,controller,running);persistGenerationReport(job,job.status,performance.now()-started,usageLog.filter(call=>call.job_id===job.job_id));console.log('[generation]',JSON.stringify({job_id:job.job_id,backend_revision:backendRevision,status:job.status,elapsed_seconds:(Date.now()-(attempts.get(job.job_id)!.deadline-generationLimitMs))/1000,error_code:job.error?.code,nodes:job.result?.scene.nodes.length}));});
   res.status(202).json(job);
  } catch(e){next(e);}
 });
@@ -121,7 +124,7 @@ app.post('/v1/jobs/:id/validation',async(req,res,next)=>{
   try {
    const {plan,audio,scene}=job.result;
    const experience=approved.get(job.session_id)?.experience;
-   const output=await model('SceneSpec',{plan,audio,approved_experience:experience,requirements:constructionRequirements(plan),previous_scene:authoredScene(scene),capabilities,issues:[{path:'/nodes',rule:'native_preflight',message:req.body.message}]},builderInstructions,controller.signal,'scene_builder');
+   const output=await withGenerationIdentity(job,()=>model('SceneSpec',{plan,audio,approved_experience:experience,requirements:constructionRequirements(plan),previous_scene:authoredScene(scene),capabilities,issues:[{path:'/nodes',rule:'native_preflight',message:req.body.message}]},builderInstructions,controller.signal,'scene_builder'));
    const authored=deterministicCorrections(canonicalSceneReferences(plan,output,audio)).scene;
    const staged=experience?materializeStageGraph(experience,plan,authored):{scene:authored,issues:[]};
    if(staged.issues.length)throw new AppError('INVALID_MODEL_OUTPUT','Stage graph requires route geometry',staged.issues);

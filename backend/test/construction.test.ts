@@ -6,7 +6,7 @@ let previousVisualMode:string|undefined;
 beforeEach(()=>{previousVisualMode=process.env.BRAIVE_VISUAL_STRICTNESS;process.env.BRAIVE_VISUAL_STRICTNESS='standard';});
 afterEach(()=>{if(previousVisualMode===undefined)delete process.env.BRAIVE_VISUAL_STRICTNESS;else process.env.BRAIVE_VISUAL_STRICTNESS=previousVisualMode;});
 import assert from 'node:assert/strict';
-import {compileConstruction,compileScene,constructionRequirements} from '../src/construction.js';
+import {compileConstruction,compileScene,constructionRequirements,deterministicCorrections} from '../src/construction.js';
 import {transform,inverse,point,multiply,identity} from '../src/spatial-math.js';
 import {sceneIssues} from '../src/contracts.js';
 import type {SessionPlan,SceneSpec,SceneNode,AudioPlan} from '../../docs/handoff/contracts.js';
@@ -199,6 +199,22 @@ test('walking needs support under the route while swimming does not',()=>{
  assert.ok(compileConstruction(swim.plan,swim.scene).construction_report);
 });
 
+test('a floating body envelope clears a shallow bottom but still rejects solid intrusion',()=>{
+ const {plan,scene}=routeSetup('swim',false);
+ scene.viewpoints.find(view=>view.id===scene.initial_viewpoint_id)!.position=[0,0.35,0];
+ scene.motion_paths![0].points.forEach(point=>point.position[1]=0.35);
+ scene.construction_plan!.routes[0].eye_height_meters=0.6;
+ scene.construction_plan!.zones[0].center=[0,1,0];scene.construction_plan!.zones[0].size=[20,6,20];
+ scene.nodes[0].position=[0,-0.4,0]; // Top -0.3 stays below the declared body bottom -0.1.
+ const before=structuredClone(scene.motion_paths![0].points);
+ const prepared=compileConstruction(plan,scene);
+ assert.equal(prepared.motion_paths![0].eye_height_meters,0.6);
+ assert.deepEqual(prepared.motion_paths![0].points,before);
+ scene.nodes.push({id:'shallow_obstacle',parent_id:null,role:'environment',geometry:{kind:'box',size:[1,0.4,0.2]},position:[0,0,-3],rotation_radians:[0,0,0],scale:[1,1,1],material:{color:'#8899aa',roughness:0.9},animation:'none',description:'Solid crossing the same floating body',collision_role:'solid',support_node_id:null});
+ assert.throws(()=>compileConstruction(plan,scene),(error:any)=>error.issues.some((issue:any)=>issue.rule==='route_clearance'&&issue.message.includes('shallow_obstacle')));
+ assert.equal(scene.construction_plan!.routes[0].eye_height_meters,0.6,'failure never shrinks the body envelope');
+});
+
 function islandSetup(kind:string,offset:number[]){
  const {plan,scene}=setup();
  scene.nodes[0].position=[0,-1.5,-16];scene.nodes[0].geometry={kind:'box',size:[70,0.4,70]};
@@ -384,4 +400,86 @@ test('route annotations cannot overwrite continuous authored world endpoints',()
  assert.deepEqual(path.points,scene.motion_paths[0].points);
  assert.equal(path.clearance_radius_meters,0.3);
  assert.equal(compiled.construction_report!.warnings.filter(i=>i.rule==='anchor_alignment').length,2);
+});
+
+test('preparation preserves explicit support offsets through a transformed parent',()=>{
+ for(const offset of [[1,0,0],[0,0.4,0],[0,0,-1]] as [number,number,number][]){
+  const {plan,scene}=setup(),floor=scene.nodes[0],table=scene.nodes[1];
+  floor.position=[3,-0.1,-2];floor.rotation_radians=[0,Math.PI/2,0];floor.scale=[2,1,1.5];
+  table.parent_id=floor.id;table.position=[0.5,0.6,-0.5];
+  scene.construction_plan!.relations[0].offset=[...offset];
+  const prepared=deterministicCorrections(scene);
+  assert.deepEqual(prepared.scene.construction_plan!.relations[0].offset,offset);
+  assert.ok(!prepared.corrections.some(message=>message.startsWith('Derived support offset')));
+  const compiled=compileConstruction(plan,prepared.scene),placed=compiled.nodes.find(node=>node.id===table.id)!;
+  const position=point(transform(floor.position,floor.rotation_radians,floor.scale),placed.position);
+  const requested=[3+offset[0],0.5+offset[1],-2+offset[2]];
+  position.forEach((value,index)=>assert.ok(Math.abs(value-requested[index])<1e-6,`world axis ${index}: ${value} != ${requested[index]}`));
+  assert.deepEqual(scene.construction_plan!.relations[0].offset,offset,'source offset is unchanged');
+ }
+});
+
+test('zero support offsets recover authored placement once without changing the source',()=>{
+ const {plan,scene}=setup();scene.nodes[1].position=[2,0.5,-2];scene.construction_plan!.relations[0].offset=[0,0,0];
+ const prepared=deterministicCorrections(scene);
+ assert.deepEqual(prepared.scene.construction_plan!.relations[0].offset,[2,0,-2]);
+ assert.deepEqual(compileConstruction(plan,prepared.scene).nodes[1].position,[2,0.5,-2]);
+ assert.deepEqual(deterministicCorrections(prepared.scene),{scene:prepared.scene,corrections:[]});
+ assert.deepEqual(scene.construction_plan!.relations[0].offset,[0,0,0]);
+});
+
+function sequentialWalk(){
+ const {plan,scene}=setup(),cp=scene.construction_plan!;
+ const ids=['look','pause','travel_again','done'];
+ plan.experience!.requires_motion=true;
+ plan.experience!.stages=ids.map(id=>({id,goal:id,action_ids:[]}));
+ cp.relations[0].offset=[6,0,-4];
+ scene.nodes.push({id:'diagonal_wall',parent_id:null,role:'environment',geometry:{kind:'box',size:[1,3,1]},position:[2,1.5,-2],rotation_radians:[0,0,0],scale:[1,1,1],material:{color:'#8899aa',roughness:0.9},animation:'none',description:'Wall inside the L-shaped route',collision_role:'solid',support_node_id:null});
+ scene.motion_paths=[
+  {id:'first_leg',purpose:'walk',interpolation:'linear',coordinate_space:'world',points:[{at_seconds:4,position:[4,1.6,0]}]},
+  {id:'second_leg',purpose:'walk',interpolation:'linear',coordinate_space:'world',points:[{at_seconds:4,position:[4,1.6,-4]}]},
+ ];
+ scene.scenario!.steps=ids.map((id,index)=>({id,prompt:'',terminal:id==='done',start_operations:id==='look'?[{type:'move_viewer' as const,path_id:'first_leg'}]:id==='travel_again'?[{type:'move_viewer' as const,path_id:'second_leg'}]:[],actions:[],
+  ...(id==='done'?{}:{completion:{trigger:'after_seconds' as const,after_seconds:4,next_step_id:ids[index+1]}})}));
+ // Metadata order is deliberately different from stage execution order.
+ cp.routes=[{path_id:'second_leg',stage_ids:['travel_again'],requirement_ids:['motion'],clearance_radius_meters:0.25,eye_height_meters:1.6},
+  {path_id:'first_leg',stage_ids:['look'],requirement_ids:['motion'],clearance_radius_meters:0.25,eye_height_meters:1.6}];
+ cp.requirements=constructionRequirements(plan).map(requirement=>({requirement_id:requirement.id,node_ids:requirement.kind==='task'||requirement.kind==='prop'?['table']:[],
+  stage_ids:requirement.kind==='stage'?[requirement.target]:['look'],path_ids:requirement.kind==='motion'?['first_leg','second_leg']:[]}));
+ return {plan,scene};
+}
+
+test('sequential world routes keep their stage-entry positions across a stationary stage',()=>{
+ const {plan,scene}=sequentialWalk(),original=structuredClone(scene.motion_paths);
+ const compiled=compileConstruction(plan,scene);
+ for(const [index,path] of compiled.motion_paths!.entries()){
+  assert.deepEqual(path.points,original![index].points,'positive-time trajectory and destination are unchanged');
+  assert.equal(path.start_position,undefined,'audit must not add or relocate an authored origin');
+ }
+ assert.deepEqual(scene.motion_paths,original,'the source route is unchanged');
+});
+
+test('a genuine obstruction on the second world leg remains a hard route failure',()=>{
+ const {plan,scene}=sequentialWalk();scene.nodes.find(node=>node.id==='diagonal_wall')!.position=[4,1.5,-2];
+ assert.throws(()=>compileConstruction(plan,scene),(error:any)=>error.issues.some((issue:any)=>issue.rule==='route_clearance'&&issue.path==='/motion_paths/second_leg'&&issue.message.includes('diagonal_wall')&&issue.message.includes('from [4,1.6,0]')));
+});
+
+test('an explicit world-route start must match the actual stage-entry position',()=>{
+ const {plan,scene}=sequentialWalk();scene.motion_paths![1].start_position=[0,1.6,0];
+ assert.throws(()=>compileConstruction(plan,scene),(error:any)=>error.issues.some((issue:any)=>issue.rule==='route_start'&&issue.path==='/motion_paths/second_leg/start_position'&&issue.message.includes('[4,1.6,0]')));
+ for(const [radius,gap] of [[0.25,0.35],[0.5,0.5]]){
+  scene.construction_plan!.routes.find(route=>route.path_id==='second_leg')!.clearance_radius_meters=radius;
+  scene.motion_paths![1].start_position=[4+gap,1.6,0];
+  assert.ok(compileConstruction(plan,scene));
+  scene.motion_paths![1].start_position=[4+gap+0.001,1.6,0];
+  assert.throws(()=>compileConstruction(plan,scene),(error:any)=>error.issues.some((issue:any)=>issue.rule==='route_start'));
+ }
+});
+
+test('node travel keeps its own origin and does not change the next viewer origin',()=>{
+ const {plan,scene}=sequentialWalk();
+ scene.motion_paths!.push({id:'table_travel',purpose:'other',interpolation:'linear',coordinate_space:'world',points:[{at_seconds:2,position:[7,0.5,-4]}]});
+ scene.scenario!.steps[1].start_operations=[{type:'move_node',node_id:'table',path_id:'table_travel',face_motion:false}];
+ scene.construction_plan!.routes.push({path_id:'table_travel',stage_ids:['pause'],requirement_ids:[],clearance_radius_meters:0.25,eye_height_meters:1.6});
+ assert.ok(compileConstruction(plan,scene));
 });

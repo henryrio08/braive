@@ -54,6 +54,13 @@ import Foundation
     try recovered.save(pending)
     guard !recovered.relevant("Public speaking").contains(where: { $0["session_id"].text == pending["session_id"].text })
     else { fatalError("Unfinished practice leaked into relevant completed history") }
+    try recovered.deleteAll() // Diagnostic storage is optional before the first preparation.
+    let diagnosticFolder = dir.appendingPathComponent("PreparationDiagnostics", isDirectory: true)
+    try FileManager.default.createDirectory(at: diagnosticFolder, withIntermediateDirectories: true)
+    try Data("{}".utf8).write(to: diagnosticFolder.appendingPathComponent("outcome.json"))
+    try recovered.deleteAll()
+    guard try FileManager.default.contentsOfDirectory(atPath: diagnosticFolder.path).isEmpty,
+      recovered.records.isEmpty else { fatalError("Deleting local data retained preparation diagnostics") }
     print(
       "Storage checks passed: idempotent save, CSV escaping, reflection file, durable recovery, null versus zero ratings."
     )

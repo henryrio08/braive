@@ -28,6 +28,19 @@ import SwiftUI
     return min(1, reveal * max(fade, blur) / max(0.1, scene["reveal"][key].number ?? 1.5))
   }
   @Published var connection = "Not connected"
+  @Published var backendRevision = "unknown"
+  private var backendIdentity = BackendBuildIdentity()
+  private var preparationDiagnostic: PreparationDiagnostics?
+  private func preparationOutcome(_ outcome: PreparationDiagnostics.Outcome, error: Error? = nil) {
+    guard preparationDiagnostic != nil, preparationDiagnostic?.finished == false else { return }
+    preparationDiagnostic?.record(outcome, jobID: jobID, error: error)
+    do { try preparationDiagnostic?.write(to: store.root) }
+    catch { print("[preparation diagnostics] Local report could not be saved") }
+  }
+  private func acceptBackendIdentity(_ response: JSON) {
+    backendIdentity = BackendBuildIdentity(response)
+    backendRevision = backendIdentity.source_revision
+  }
   @Published var server =
     UserDefaults.standard.string(forKey: "server") ?? ""
   @Published var token = UserDefaults.standard.string(forKey: "token") ?? ""
@@ -202,13 +215,18 @@ import SwiftUI
     }
     if ProcessInfo.processInfo.arguments.contains("--preflight-audit") {
       preview()
+      #if DEBUG
+      let checks = ["composition_rejection_controls", "route_segment_and_support_controls", "loaded_asset_scene"]
+      #else
+      let checks = ["loaded_asset_scene"]
+      #endif
       do {
         try PreflightAudit.run(world)
-        message = "Offline preflight audit passed — no generated practice or Meta calls"
-        try? JSONEncoder().encode(JSON(["status":"passed"])).write(to:store.root.appendingPathComponent("PreflightAudit.json"),options:.atomic)
+        message = "Offline preflight audit passed — \(checks.count) check groups; no Meta calls"
+        try? NativeAuditEvidence(passed: true, checks: checks).write(to: store.root.appendingPathComponent("PreflightAudit.json"))
       } catch {
         message = "Offline preflight audit failed: " + error.localizedDescription
-        try? JSONEncoder().encode(JSON(["status":"failed","error":error.localizedDescription])).write(to:store.root.appendingPathComponent("PreflightAudit.json"),options:.atomic)
+        try? NativeAuditEvidence(passed: false, checks: checks, error: error).write(to: store.root.appendingPathComponent("PreflightAudit.json"))
       }
     }
     if ProcessInfo.processInfo.arguments.contains("--generated-audit") {
@@ -231,13 +249,17 @@ import SwiftUI
         }
         #endif
         message = "Generated-scene replay — native preflight passed; no live model calls"
+        try? NativeAuditEvidence(passed: true, checks: ["generated_scene_load_and_stage_review"])
+          .write(to: store.root.appendingPathComponent("GeneratedAudit.json"))
       } catch {
         message = "Generated scene rejected by native preflight: " + error.localizedDescription
+        try? NativeAuditEvidence(passed: false, checks: ["generated_scene_load_and_stage_review"], error: error)
+          .write(to: store.root.appendingPathComponent("GeneratedAudit.json"))
         #if DEBUG
         if ProcessInfo.processInfo.arguments.contains("--render-scenario-review") {
           let folder = store.root.appendingPathComponent("ScenarioReview")
           try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-          try? JSONEncoder().encode(JSON(["status":"failed","error":error.localizedDescription])).write(to: folder.appendingPathComponent("result.json"))
+          try? NativeAuditEvidence(passed: false, checks: ["generated_scene_load_and_stage_review"], error: error).write(to: folder.appendingPathComponent("result.json"))
         }
         #endif
       }
@@ -300,7 +322,7 @@ import SwiftUI
       do {
         connection = "Checking your connection…"
         do {
-          try await api.checkConnection()
+          acceptBackendIdentity(try await api.checkConnection())
         } catch {
           let failure = error as NSError
           let detail: String
@@ -343,7 +365,7 @@ import SwiftUI
     Task {
       defer { connecting = false }
       do {
-        try await api.checkConnection()
+        acceptBackendIdentity(try await api.checkConnection())
         try await audio.start(api: api)
         audio.setCommandPhrases(scenario?.definition.steps.flatMap { $0.actions.flatMap(\.phrases) } ?? [])
         pause("command_channel_unavailable", enabled: false)
@@ -451,6 +473,7 @@ import SwiftUI
         collectAnswer(text)
       } else if text.lowercased().contains("hey builder") {
         // A scene must not reveal while the user is still adding details.
+        preparationOutcome(.cancelled)
         generation?.cancel()
         revision += 1
         let old = jobID, api = api
@@ -638,6 +661,7 @@ import SwiftUI
     }
   }
   func newSession() {
+    preparationOutcome(.cancelled)
     generation?.cancel(); generation = nil
     if !jobID.isEmpty {
       let old = jobID, endpoint = api
@@ -678,6 +702,8 @@ import SwiftUI
     repeatAfterHeadset = false
   }
   func deleteHistory() throws {
+    preparationOutcome(.cancelled)
+    preparationDiagnostic = nil
     try store.deleteAll()
     // Forget in-memory consent/history too, so a later repeat cannot send deleted rows.
     newSession()
@@ -716,6 +742,7 @@ import SwiftUI
       audio.say(message)
       return
     }
+    preparationOutcome(.cancelled)
     generation?.cancel()
     let old = jobID
     let api = api
@@ -725,6 +752,8 @@ import SwiftUI
     let rev = revision
     let owner = sessionID
     jobID = ""
+    preparationDiagnostic = PreparationDiagnostics(sessionID: owner, revision: rev, backend: backendIdentity)
+    preparationOutcome(.submitted)
     go(
       .planning,
       "I’ll prepare your practice. To add something, say ‘hey builder.’"
@@ -748,6 +777,7 @@ import SwiftUI
           return
         }
         jobID = job["job_id"].text
+        preparationOutcome(.submitted)
         message = "Getting your practice ready…"
         while !Task.isCancelled {
           guard ProcessInfo.processInfo.systemUptime < generationDeadline else {
@@ -770,6 +800,7 @@ import SwiftUI
           }
           if j["status"].text == "cancelled" { throw world.failure("Scene preparation was cancelled. Retry, revise, or cancel.") }
           if j["status"].text == "succeeded" {
+            preparationOutcome(.backendReady)
             var result = j["result"]
             while !pauses.isEmpty {
               try await Task.sleep(for: .milliseconds(100))
@@ -800,6 +831,7 @@ import SwiftUI
               try world.load(result["scene"], plan: result["plan"])
             } catch {
               let preflightError = error
+              preparationOutcome(.nativeRejected, error: preflightError)
               do {
                 _ = try await api.call(
                   "/v1/jobs/" + jobID + "/validation", JSON(["message": error.localizedDescription]),
@@ -815,6 +847,7 @@ import SwiftUI
               continue
             }
             guard ProcessInfo.processInfo.systemUptime < generationDeadline else { throw world.failure("Scene loading exceeded the ten-minute readiness deadline") }
+            preparationOutcome(.nativeAccepted)
             plan = result["plan"]
             scene = result["scene"]
             scenario = nextScenario; scenarioCompletedAt = nil; scenarioActions = []
@@ -1042,6 +1075,7 @@ import SwiftUI
     ])
   }
   func finish(early: Bool) {
+    preparationOutcome(.cancelled)
     generation?.cancel()
     turnTask?.cancel()
     turnTask = nil
@@ -1208,6 +1242,7 @@ import SwiftUI
     }
   }
   func fail(_ error: Error) {
+    preparationOutcome(.failed, error: error)
     cancelFeedback()
     pendingPhase = nil
     audio.silence()

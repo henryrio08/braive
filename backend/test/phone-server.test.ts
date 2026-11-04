@@ -25,7 +25,11 @@ test('idle phone server stays reachable; only authenticated practice actions ren
   assert.equal((await fetch(base+'/v1/connection')).status,401);
   const paired=await fetch(base+'/v1/connection',{headers:{Authorization:`Bearer ${token}`}});
   assert.equal(paired.status,200);
-  assert.deepEqual(await paired.json(),{status:'ok'});
+   const connection=await paired.json();
+   assert.equal(connection.status,'ok');
+   assert.match(connection.backend_revision,/^(?:[0-9a-f]{7,40}(?:-dirty)?|unknown)$/);
+   assert.equal(connection.automatic_scene_repair,false);
+   assert.equal(connection.visual_strictness,'permissive');
   assert.equal((await health()).live_test_active,false,'Read-only pairing must not renew paid activity');
   const post=async(authorized:boolean)=>fetch(base+'/v1/session-plans',{
    method:'POST',headers:{'Content-Type':'application/json',...(authorized?{Authorization:`Bearer ${token}`}:{})},

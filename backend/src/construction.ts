@@ -246,7 +246,7 @@ export function deterministicCorrections(source:SceneSpec):{scene:SceneSpec;corr
    const parent=framesOf(n.parent_id,new Set([...seen,id]));return parent?multiply(parent,local):null;
   };
   for(const relation of cp.relations??[]){
-   if(relation.kind!=='on')continue;
+   if(relation.kind!=='on'||relation.offset.some(value=>Math.abs(value)>1e-6))continue;
    const anchor=(cp.anchors??[]).find(a=>a.id===(relation.anchor_id??relation.target_id));if(!anchor)continue;
    const subjectFrame=framesOf(relation.subject_id),anchorFrame=framesOf(anchor.node_id);
    if(!subjectFrame||!anchorFrame)continue;
@@ -484,6 +484,25 @@ export function compileConstruction(plan:SessionPlan,source:SceneSpec):SceneSpec
  for(const op of operations)if(op.type==='move_node'&&'path_id' in op&&'node_id' in op&&!nodeActors.has(op.path_id))nodeActors.set(op.path_id,op.node_id);
  const attachedIDs=new Set(scene.viewer_attached_node_ids??[]);
  const initialView=(scene.viewpoints.find(v=>v.id===scene.initial_viewpoint_id)?.position??[0,1.6,0]) as Vec3;
+ // Guided world routes start at the viewer's actual position on stage entry,
+ // not at the original viewpoint or an authored start annotation. Keep the
+ // audit in execution order even when construction route metadata is unordered.
+ const viewerOrigins=new Map<string,Vec3[]>();
+ if(scene.scenario?.progression==='guided'){
+  let position:Vec3|undefined=[...initialView];
+  for(const step of scene.scenario.steps)for(const operation of step.start_operations){
+   if(operation.type!=='move_viewer')continue;
+   const path=paths.get(operation.path_id);if(!path)continue;
+   if(path.coordinate_space==='relative'){
+    // The captured heading is runtime-owned. Preserve the existing relative
+    // audit and resume known world positions after the next world endpoint.
+    position=undefined;continue;
+   }
+   if(position){const origins=viewerOrigins.get(path.id)??[];origins.push([...position]);viewerOrigins.set(path.id,origins);}
+   const endpoint=path.points.at(-1)?.position;
+   if(endpoint)position=[...endpoint] as Vec3;
+  }
+ }
  const orient2=(p:Vec3,q:Vec3,r:Vec3)=>(q[0]-p[0])*(r[2]-p[2])-(q[2]-p[2])*(r[0]-p[0]);
  const pointSegment=(pt:Vec3,u:Vec3,w:Vec3)=>{const dx=w[0]-u[0],dz=w[2]-u[2];const length2=dx*dx+dz*dz;const t=length2<1e-12?0:Math.max(0,Math.min(1,((pt[0]-u[0])*dx+(pt[2]-u[2])*dz)/length2));return Math.hypot(pt[0]-(u[0]+t*dx),pt[2]-(u[2]+t*dz));};
  const segmentRectDistance=(a:Vec3,b:Vec3,bounds:Bounds)=>{
@@ -504,27 +523,33 @@ export function compileConstruction(plan:SessionPlan,source:SceneSpec):SceneSpec
   const isViewer=viewerPathIDs.has(path.id),actorID=nodeActors.get(path.id);
   if(!isViewer&&!actorID)continue;
   const eye=route.eye_height_meters,radius=route.clearance_radius_meters;
-  const origin:Vec3=isViewer?((path.start_position as Vec3|undefined)??[...initialView] as Vec3):point(frames(actorID!),[0,0,0]);
-  const absolute:Vec3[]=path.coordinate_space==='relative'?[origin,...path.points.map(p=>[origin[0]+p.position[0],origin[1]+p.position[1],origin[2]+p.position[2]] as Vec3)]:[origin,...path.points.map(p=>p.position as Vec3)];
-  const solids=scene.nodes.filter(n=>(n.collision_role??'solid')==='solid'&&n.id!==actorID&&!(isViewer&&attachedIDs.has(n.id)));
-  const supports=scene.nodes.filter(n=>(n.collision_role??'solid')!=='none'&&n.id!==actorID);
-  let reported=0;
-  for(let i=1;i<absolute.length&&reported<4;i++){
-   const a=absolute[i-1],b=absolute[i];
-   const eyeA=isViewer?a[1]:a[1]+eye,eyeB=isViewer?b[1]:b[1]+eye;
-   const bodyLow=Math.min(eyeA,eyeB)-eye+0.15,bodyHigh=Math.max(eyeA,eyeB);
-   for(const solid of solids){
-    const bounds=worldBounds(solid.id);
-    if(bodyHigh<bounds.min[1]||bodyLow>bounds.max[1])continue;
-    const gap=segmentRectDistance(a,b,bounds);
-    if(gap<radius){fail('/motion_paths/'+path.id,'route_clearance',`Route ${path.id} segment ${i-1} from ${JSON.stringify(a)} to ${JSON.stringify(b)} passes ${gap.toFixed(2)}m from solid node "${solid.id}" (body radius ${radius}m, blocking bounds ${JSON.stringify(bounds)}). Move the route or "${solid.id}" so the swept body clears it; keep the authored destination and purpose.`);reported++;break;}
+  const stageOrigins=isViewer?viewerOrigins.get(path.id):undefined;
+  const origins=stageOrigins??[isViewer?((path.start_position as Vec3|undefined)??[...initialView] as Vec3):point(frames(actorID!),[0,0,0])];
+  for(const origin of origins){
+   if(stageOrigins&&path.start_position&&distance(origin,path.start_position)>Math.max(0.35,radius)){
+    fail('/motion_paths/'+path.id+'/start_position','route_start',`Route ${path.id} declares start ${JSON.stringify(path.start_position)}, but the viewer enters its stage at ${JSON.stringify(origin)} (maximum gap ${Math.max(0.35,radius)}m). Preserve route continuity without relocating the viewer.`);
    }
-   if(['walk','run'].includes(path.purpose)){
-    const length=Math.hypot(b[0]-a[0],b[1]-a[1],b[2]-a[2]),count=Math.max(1,Math.ceil(length/0.25));
-    for(let sample=0;sample<=count;sample++){
-     const t=sample/count,x=a[0]+(b[0]-a[0])*t,z=a[2]+(b[2]-a[2])*t,footY=a[1]+(b[1]-a[1])*t-(isViewer?eye:0);
-     const supported=supports.some(n=>{const bounds=worldBounds(n.id);return x>=bounds.min[0]-0.02&&x<=bounds.max[0]+0.02&&z>=bounds.min[2]-0.02&&z<=bounds.max[2]+0.02&&bounds.max[1]>=footY-0.35&&bounds.max[1]<=footY+0.3;});
-     if(!supported){fail('/motion_paths/'+path.id,'route_support',`Route ${path.id} segment ${i-1} has no supporting surface under the body near [${x.toFixed(2)},${footY.toFixed(2)},${z.toFixed(2)}] (sample ${sample}). Add or extend ground geometry under the authored route; do not lower the participant through the floor.`);reported++;break;}
+   const absolute:Vec3[]=path.coordinate_space==='relative'?[origin,...path.points.map(p=>[origin[0]+p.position[0],origin[1]+p.position[1],origin[2]+p.position[2]] as Vec3)]:[origin,...path.points.map(p=>p.position as Vec3)];
+   const solids=scene.nodes.filter(n=>(n.collision_role??'solid')==='solid'&&n.id!==actorID&&!(isViewer&&attachedIDs.has(n.id)));
+   const supports=scene.nodes.filter(n=>(n.collision_role??'solid')!=='none'&&n.id!==actorID);
+   let reported=0;
+   for(let i=1;i<absolute.length&&reported<4;i++){
+    const a=absolute[i-1],b=absolute[i];
+    const eyeA=isViewer?a[1]:a[1]+eye,eyeB=isViewer?b[1]:b[1]+eye;
+    const bodyLow=Math.min(eyeA,eyeB)-eye+0.15,bodyHigh=Math.max(eyeA,eyeB);
+    for(const solid of solids){
+     const bounds=worldBounds(solid.id);
+     if(bodyHigh<bounds.min[1]||bodyLow>bounds.max[1])continue;
+     const gap=segmentRectDistance(a,b,bounds);
+     if(gap<radius){fail('/motion_paths/'+path.id,'route_clearance',`Route ${path.id} segment ${i-1} from ${JSON.stringify(a)} to ${JSON.stringify(b)} passes ${gap.toFixed(2)}m from solid node "${solid.id}" (body radius ${radius}m, blocking bounds ${JSON.stringify(bounds)}). Move the route or "${solid.id}" so the swept body clears it; keep the authored destination and purpose.`);reported++;break;}
+    }
+    if(['walk','run'].includes(path.purpose)){
+     const length=Math.hypot(b[0]-a[0],b[1]-a[1],b[2]-a[2]),count=Math.max(1,Math.ceil(length/0.25));
+     for(let sample=0;sample<=count;sample++){
+      const t=sample/count,x=a[0]+(b[0]-a[0])*t,z=a[2]+(b[2]-a[2])*t,footY=a[1]+(b[1]-a[1])*t-(isViewer?eye:0);
+      const supported=supports.some(n=>{const bounds=worldBounds(n.id);return x>=bounds.min[0]-0.02&&x<=bounds.max[0]+0.02&&z>=bounds.min[2]-0.02&&z<=bounds.max[2]+0.02&&bounds.max[1]>=footY-0.35&&bounds.max[1]<=footY+0.3;});
+      if(!supported){fail('/motion_paths/'+path.id,'route_support',`Route ${path.id} segment ${i-1} has no supporting surface under the body near [${x.toFixed(2)},${footY.toFixed(2)},${z.toFixed(2)}] (sample ${sample}). Add or extend ground geometry under the authored route; do not lower the participant through the floor.`);reported++;break;}
+     }
     }
    }
   }

@@ -4,14 +4,15 @@ import {mkdir,writeFile} from 'node:fs/promises';
 import {fileURLToPath} from 'node:url';
 import path from 'node:path';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
+const verification=process.argv.includes('--verification');
 const base='http://127.0.0.1:8788';
 let occupied=false;
 try { await fetch(base+'/health',{signal:AbortSignal.timeout(1000)}); occupied=true; } catch {}
 if(occupied) throw Error('Port 8788 is already in use. Stop the existing test deliberately before starting a synthetic check.');
-const child=spawn(process.execPath,[path.join(root,'scripts/start-phone-test.mjs')],{cwd:root,env:{...process.env,META_REQUEST_LIMIT:'5',META_MAX_COST_USD:'3.00',BRAIVE_ALLOW_AUDIO:'false'},stdio:['ignore','pipe','pipe']});
+const child=spawn(process.execPath,[path.join(root,'scripts/start-phone-test.mjs'),...(verification?['--verification']:[])],{cwd:root,env:{...process.env,META_REQUEST_LIMIT:'5',META_MAX_COST_USD:'3.00',BRAIVE_ALLOW_AUDIO:'false'},stdio:['ignore','pipe','pipe']});
 child.stdout.on('data',()=>{});child.stderr.on('data',()=>{});
 // Eight minutes: inside the product's ten-minute generation ceiling, long
-// enough for author, editor, builder and one bounded repair to complete.
+// enough for author, editor and the single builder generation to complete.
 const globalDeadline=setTimeout(()=>{child.kill('SIGTERM');console.error('Bounded test reached its overall shutdown deadline.');process.exitCode=1;},480000);
 const headers={Authorization:`Bearer ${process.env.BRAIVE_TOKEN}`,'Content-Type':'application/json'};
 let jobID;

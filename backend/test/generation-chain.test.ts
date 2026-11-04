@@ -2,6 +2,7 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {generateExperience,experienceSceneIssues} from '../src/generation-chain.js';
 import {constructionRequirements} from '../src/construction.js';
+import {generationReport,withGenerationIdentity} from '../src/diagnostics.js';
 import {AppError,validateSceneBuilderOutput} from '../src/contracts.js';
 import type {ExperienceDraft} from '../src/experience.js';
 import type {PlanRequest,Job,SessionPlan,SceneSpec,SceneNode} from '../../docs/handoff/contracts.js';
@@ -102,8 +103,9 @@ test('builder schema permits compiler-owned stage fields to be omitted and final
   if(call.role==='scene_builder'){
    const candidate=sceneFor(call.input.plan);
    for(const step of candidate.scenario!.steps){
-    for(const field of ['terminal','completion','conversation_target','review_viewpoint_id','focus_node_ids','announce_on_entry'])delete (step as any)[field];
+    for(const field of ['terminal','completion','conversation_target','review_viewpoint_id','focus_node_ids','announce_on_entry','prompt','start_operations','actions'])delete (step as any)[field];
    }
+   for(const field of ['objective','initial_step_id','dialogue_policy','progression'])delete (candidate.scenario as any)[field];
    validateSceneBuilderOutput(call.input.plan,call.input.audio,candidate);
    return candidate;
   }
@@ -112,7 +114,20 @@ test('builder schema permits compiler-owned stage fields to be omitted and final
  assert.equal(result.scene.scenario!.steps.at(-1)!.terminal,true);
  assert.equal(result.scene.scenario!.steps[0].review_viewpoint_id,result.scene.initial_viewpoint_id);
  assert.ok(result.scene.scenario!.steps[0].focus_node_ids!.length);
+ assert.equal(result.scene.scenario!.steps[0].prompt,'');
+ assert.deepEqual(result.scene.scenario!.steps[0].start_operations,[]);
+ assert.deepEqual(result.scene.scenario!.steps[0].actions,[]);
  assert.equal(h.repairs(),0);
+});
+
+test('a missing travel route is recorded as failed stage compilation without a paid repair',async()=>{
+ const edited=draft();edited.experience.requires_motion=true;edited.experience.stages[0].movement='walk';
+ edited.experience.stages[0].goal='Walk calmly through the room';edited.experience.stages[0].sensory_brief='The room moves past during a gentle walk';
+ const h=harness({edited,automaticSceneRepair:false});
+ await assert.rejects(withGenerationIdentity(h.job,()=>h.run()),/Stage graph requires route geometry/);
+ const report=generationReport(h.job,'failed',1,[]);
+ assert.ok(report.phases.some(phase=>phase.phase==='stage_compilation'&&phase.outcome==='failed'&&phase.issue_rules?.includes('route_binding')));
+ assert.equal(h.calls.filter(call=>call.role==='scene_builder').length,1);
 });
 
 test('editor final plan reaches construction, with original context and compact planning capabilities',async()=>{

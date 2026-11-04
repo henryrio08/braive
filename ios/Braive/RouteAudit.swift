@@ -107,7 +107,14 @@ import SceneKit
     do { try check(root:root,points:points,walking:true) }
     catch { rejected=error.localizedDescription.contains("node route_audit_wall") }
     guard rejected else { throw ScenePreflight.error("Route audit accepted a thin blocking wall") }
-    wall.removeFromParentNode();floor.removeFromParentNode();rejected=false
+    wall.removeFromParentNode()
+    // A floor outside the downward support probe cannot support the route.
+    floor.position.y = -1
+    rejected=false
+    do { try check(root:root,points:points,walking:true) }
+    catch { rejected=error.localizedDescription.contains("Route support missing") }
+    guard rejected else { throw ScenePreflight.error("Route audit accepted a floor beyond its support probe") }
+    floor.removeFromParentNode();rejected=false
     do { try check(root:root,points:points,walking:true) } catch { rejected=true }
     guard rejected else { throw ScenePreflight.error("Route audit accepted unsupported walking") }
     try check(root:root,points:points,walking:false)

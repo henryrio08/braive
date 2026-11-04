@@ -145,11 +145,12 @@ struct API {
     }
   }
   /// Establish reachability and pairing without generating a scene or renewing paid access.
-  func checkConnection() async throws {
+  @discardableResult func checkConnection() async throws -> JSON {
     let health = try await call("/health", timeout: 5)
     guard health["status"].text == "ok" else { throw URLError(.badServerResponse) }
     let pairing = try await call("/v1/connection", timeout: 5)
     guard pairing["status"].text == "ok" else { throw URLError(.badServerResponse) }
+    return pairing
   }
   /// The server owns an accepted job. Retry reads of that job, never another paid POST.
   func pollJob(_ id: String, deadline: Double, retryDelay: TimeInterval = 0.6,

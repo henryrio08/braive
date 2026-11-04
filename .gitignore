@@ -12,6 +12,7 @@ backend/data/
 
 # Temporary locally generated output for explicit offline visual review.
 ios/Braive/Review/
+ios/Braive/Resources/BuildIdentity.json
 
 __pycache__/
 

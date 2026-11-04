@@ -3250,7 +3250,7 @@
           },
           "eye_height_meters": {
             "type": "number",
-            "minimum": 0.8,
+            "minimum": 0.5,
             "maximum": 2.2
           },
           "start_position": {
@@ -3978,7 +3978,7 @@
           },
           "eye_height_meters": {
             "type": "number",
-            "minimum": 0.8,
+            "minimum": 0.5,
             "maximum": 2.2
           }
         },

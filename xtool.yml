@@ -4,6 +4,7 @@ product: Braive
 infoPath: xtool-Info.plist
 iconPath: ios/Braive/Assets.xcassets/AppIcon.appiconset/AppIcon.png
 resources:
+  - ios/Braive/Resources/BuildIdentity.json
   - ios/Braive/Assets.xcassets/BrandMark.imageset/BrandMark.png
   - ios/Braive/Audio/crowd.wav
   - ios/Braive/Audio/forest.wav
