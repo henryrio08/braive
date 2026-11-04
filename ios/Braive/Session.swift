@@ -298,29 +298,29 @@ import SwiftUI
     Task {
       defer { connecting = false }
       do {
-        connection = "Checking practice server…"
+        connection = "Checking your connection…"
         do {
           try await api.checkConnection()
         } catch {
           let failure = error as NSError
           let detail: String
           if server.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            detail = "Open Settings → Connection setup and enter the practice computer’s reachable address and pairing code. Phone tests normally use port 8788."
+            detail = "Open Settings → Connection setup to connect this phone to the practice computer. You’ll need its address and pairing code."
           } else if failure.domain == "Braive" && failure.code == 401 {
-            detail = "The server rejected this pairing code. Check Settings → Connection setup."
+            detail = "The pairing code doesn’t match. Check it in Settings → Connection setup."
           } else if failure.domain == "Braive" && failure.code == 404 {
-            detail = "Update the practice server to the same branch as this app, then reconnect."
+            detail = "The phone and practice computer need the same Braive update. Update both, then reconnect."
           } else {
-            detail = "Cannot verify the practice server. Check its address, port and network in Settings → Connection setup. " + error.localizedDescription
+            detail = "We couldn’t reach the practice computer. Check that both devices are connected and check Connection setup in Settings."
           }
           throw NSError(domain: "BraiveConnection", code: 1, userInfo: [
             NSLocalizedDescriptionKey: detail
           ])
         }
-        connection = "Practice server reachable · Preparing on-device voice…"
+        connection = "Connected · Getting voice ready…"
         try await audio.start(api: api)
         setupNotice = ""
-        connection = "On-device voice ready · Practice server reachable"
+        connection = "Connected · Voice ready"
         go(.lobby, "When you’re ready to start, say START!")
         headsetReady = false
         world.scene.isPaused = !pauses.isEmpty
@@ -331,8 +331,8 @@ import SwiftUI
         loading = false
         pendingPhase = nil
         connection = "Not connected"
-        setupNotice = "Practice couldn’t start: " + error.localizedDescription
-        connection = error.localizedDescription
+        print("[practice connection] \(error.localizedDescription)")
+        setupNotice = (error as NSError).domain == "BraiveConnection" ? error.localizedDescription : "Voice couldn’t start. Check microphone and speech access in iPhone Settings, then try again."
       }
     }
   }
@@ -712,7 +712,7 @@ import SwiftUI
       return
     }
     guard remoteConsent && liveEnabled else {
-      message = "This is an offline forest preview. Live practice needs approved Meta access."
+      message = "You can explore the forest here. To prepare a personal practice, connect in Settings and allow your practice details to be processed."
       audio.say(message)
       return
     }
@@ -727,7 +727,7 @@ import SwiftUI
     jobID = ""
     go(
       .planning,
-      "I’ll get the scene ready. If there’s anything additional you’d like to say, just say ‘hey builder!’ and let me know!"
+      "I’ll prepare your practice. To add something, say ‘hey builder.’"
     )
     generation = Task {
       do {
@@ -735,11 +735,11 @@ import SwiftUI
         do {
           job = try await api.callResuming("/v1/session-plans", request(),
             deadline: min(generationDeadline, ProcessInfo.processInfo.systemUptime + 20)) {
-              self.message = "Reconnecting to your Mac…"
+              self.message = "Reconnecting to the practice computer…"
             }
         } catch {
           if API.isTransientConnection(error) {
-            throw world.failure("Couldn’t reach the Mac. Check Braive’s Local Network permission and the connection address in Settings.")
+            throw NSError(domain: "BraiveConnection", code: 1, userInfo: [NSLocalizedDescriptionKey: "Couldn’t reach the practice computer."])
           }
           throw error
         }
@@ -748,7 +748,7 @@ import SwiftUI
           return
         }
         jobID = job["job_id"].text
-        message = "Preparing your scene…"
+        message = "Getting your practice ready…"
         while !Task.isCancelled {
           guard ProcessInfo.processInfo.systemUptime < generationDeadline else {
             _ = try? await api.call("/v1/jobs/" + jobID, method: "DELETE")
@@ -758,14 +758,15 @@ import SwiftUI
           }
           try await Task.sleep(for: .milliseconds(600))
           let j = try await api.pollJob(jobID, deadline: generationDeadline) {
-            self.message = "Reconnecting to your Mac. Scene preparation will continue."
+            self.message = "Reconnecting. We’re keeping your place."
           }
           guard owner == sessionID, rev == revision, !Task.isCancelled else { return }
-          message = j["stage"].text.isEmpty ? "Preparing your scene…" : j["stage"].text
+          message = PreparationCopy.progress(j["stage"].text)
           if j["status"].text == "failed" {
             throw NSError(
               domain: "Generation", code: 1,
-              userInfo: [NSLocalizedDescriptionKey: j["error"]["message"].text])
+              userInfo: [NSLocalizedDescriptionKey: j["error"]["message"].text,
+                "BraiveErrorCode": j["error"]["code"].text, "BraiveRequestID": j["error"]["request_id"].text])
           }
           if j["status"].text == "cancelled" { throw world.failure("Scene preparation was cancelled. Retry, revise, or cancel.") }
           if j["status"].text == "succeeded" {
@@ -1212,7 +1213,8 @@ import SwiftUI
     audio.silence()
     phase = .error
     loading = false
-    message = error.localizedDescription + " Say retry, revise, or cancel."
-    audio.say(message)
+    print("[practice preparation] \((error as NSError).domain): \(error.localizedDescription)")
+    message = PreparationCopy.failure(error)
+    audio.say(message + " Say RETRY to try again, REVISE to change the details, or CANCEL to return to the forest.")
   }
 }

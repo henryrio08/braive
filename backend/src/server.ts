@@ -73,7 +73,7 @@ async function generate(request:PlanRequest, job:Job, signal:AbortSignal) {
  signal.throwIfAborted();
  if(revisions.get(request.session_id)!==request.revision)throw new AppError('CANCELLED','Superseded revision');
  const {experience,...wire}=result;
- job.result=wire;approved.set(request.session_id,result);job.status='succeeded';job.stage='Ready for device validation';
+ job.result=wire;approved.set(request.session_id,result);job.status='succeeded';job.stage='Getting ready to begin…';
 }
 app.post(['/v1/session-plans','/v1/scene-revisions'],(req,res,next)=>{
  try {
@@ -86,7 +86,7 @@ app.post(['/v1/session-plans','/v1/scene-revisions'],(req,res,next)=>{
   if(revisions.get(input.session_id)===input.revision)throw new AppError('CONFLICT','Revision must increase',[],409);
   supersedeGeneration(input.session_id,jobs,running);
   revisions.set(input.session_id,input.revision);
-  const job:Job={job_id:randomUUID(),session_id:input.session_id,revision:input.revision,status:'running',stage:'Starting generation'};
+  const job:Job={job_id:randomUUID(),session_id:input.session_id,revision:input.revision,status:'running',stage:'Getting your practice ready…'};
   attempts.set(job.job_id,{deadline:Date.now()+generationLimitMs,deadlineCap:Date.now()+generationLimitMs+5*60*1000,planningRepairUsed:false,constructionRepairUsed:false,deviceRepairUsed:false});
   jobs.set(job.job_id,job); const controller=new AbortController(); running.set(job.job_id,controller);
   requests.set(job.job_id,structuredClone(input));
@@ -114,7 +114,7 @@ app.post('/v1/jobs/:id/validation',async(req,res,next)=>{
   if(block==='used')throw new AppError('CONFLICT','This scene already used its one automatic fix and still needs changes. Revise the scene or start again; your practice details are unchanged.',[],409);
   grantRepairWindow(attempt!,Date.now(),240*1000);
   if(!claimRepair(attempt,'device'))throw new AppError('TIMEOUT','The time reserved for building this scene has ended, so its automatic fix cannot start. Your practice details are unchanged; start again when you are ready.',[],408);
-  job.status='running';job.stage='Repairing device visibility checks';
+  job.status='running';job.stage='Adjusting your view…';
   const controller=new AbortController();running.set(job.job_id,controller);
   const timer=setTimeout(()=>controller.abort(),Math.max(1,attempt.deadline-Date.now()));
   res.status(202).json(job);
@@ -129,11 +129,11 @@ app.post('/v1/jobs/:id/validation',async(req,res,next)=>{
    const repaired=compileScene(plan,staged.scene,audio);
    const errors=[...sceneIssues(plan,repaired,audio),...(experience?experienceSceneIssues(experience,plan,repaired):[])];if(errors.length) throw new AppError('INVALID_MODEL_OUTPUT','Native repair invalid',errors);
    controller.signal.throwIfAborted();if(revisions.get(job.session_id)!==job.revision)return;
-   job.result={plan,audio,scene:repaired};approved.set(job.session_id,{...job.result,experience});job.status='succeeded';job.stage='Ready for device validation';
+   job.result={plan,audio,scene:repaired};approved.set(job.session_id,{...job.result,experience});job.status='succeeded';job.stage='Getting ready to begin…';
   }catch(e:any){if(jobs.get(job.job_id)?.status!=='cancelled'){
    if(!controller.signal.aborted&&(e.code==='PROVIDER_UNAVAILABLE'||e.code==='RATE_LIMITED')){
     // No candidate was produced; keep the scene and its repair for a later retry.
-    releaseRepair(attempt,'device');job.status='succeeded';job.stage='Ready for device validation';
+    releaseRepair(attempt,'device');job.status='succeeded';job.stage='Getting ready to begin…';
    } else {job.status='failed';job.error={code:controller.signal.aborted?'TIMEOUT':e.code??'INVALID_MODEL_OUTPUT',message:e.message,retryable:true,request_id:job.job_id,issues:e.issues};}
   }}
   finally{clearTimeout(timer);releaseGeneration(job.job_id,controller,running);}

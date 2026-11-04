@@ -24,8 +24,14 @@ The builder was instructed to omit compiler-owned stage fields but its output wa
 - Read-only replay of the seven newest retained candidates: six pass preparation and backend/experience validation. The remaining indoor-walk candidate still fails its real participant-route/floor intersection. No generation calls or fixture edits were made.
 - All four entries in Henry's recovery fixture (two rejected, two corrected) pass local preparation, full output validation and experience checks. Positive-time route points and destinations remain unchanged. Compiler-owned reports on corrected saved scenes are stripped before treating them as builder inputs.
 - Native compilation passed using the existing Docker xtool environment: `xtool/Braive.app` was produced. No dependencies were installed or downloaded.
-- Physical iPhone playback and Metal visual controls were not run here. An unchanged standalone API transport harness failed its byte-identical POST-body assertion under Linux; `API.swift`, `JSON.swift` and that harness were not modified. The native application itself compiles.
+- Physical iPhone playback and Metal visual controls were not run here. The standalone API transport harness failed its byte-identical POST-body assertion under Linux before the UI follow-up; request encoding and retry logic were not changed. The UI follow-up adds error metadata and copy helpers in `JSON.swift`. The native application itself compiles.
 - No paid model-generation verification was performed.
+
+## User-facing preparation
+
+Preparation now uses plain progress copy on the phone, in the viewer and in backend job stages: shaping the practice, checking details, creating surroundings and getting ready to begin. Older/unknown technical stage strings are mapped to these user-facing states rather than displayed verbatim. No estimated percentages or completion-time claims are introduced.
+
+Preparation errors explain the consequence and retained description instead of speaking raw schema/geometry/provider failures. Connection, pairing, timeout, service availability and route failures have appropriate recovery wording; original diagnostic errors remain in developer logs and backend job details. Phone buttons explain the existing voice actions as Try again, Change details and Return to forest. Spoken RETRY/REVISE/CANCEL commands remain supported. A standalone offline Swift check covers legacy/unknown stages, diagnostic filtering and recovery categories (`scripts/check-preparation-copy.swift`).
 
 ## Henry's rollout
 
