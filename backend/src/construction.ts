@@ -257,6 +257,15 @@ export function compileConstruction(plan:SessionPlan,source:SceneSpec):SceneSpec
  for(const path of paths.values())if(!cp.routes.some(r=>r.path_id===path.id))fail('/construction_plan/routes','coverage','Every motion path needs an explicit route and clearance profile');
  // Zone membership is usable world-space volume, not just a semantic label.
  // A small boundary allowance accommodates wall/ceiling thickness at its edge.
+ const requiredGeometry=new Set([
+  ...scene.nodes.filter(n=>n.role!=='environment').map(n=>n.id),
+  ...cp.requirements.flatMap(r=>r.node_ids),...(scene.viewer_attached_node_ids??[]),
+  ...cp.relations.filter(r=>r.required).flatMap(r=>[r.subject_id,anchors.get(r.target_id)?.node_id??r.target_id]),
+ ]);
+ // A required object's actual support matters; unrelated decoration in the
+ // same assembly does not acquire a requirement merely by sharing its label.
+ for(const id of requiredGeometry){const support=nodes.get(id)?.support_node_id;if(support)requiredGeometry.add(support);}
+ const nodeIndices=new Map(scene.nodes.map((node,index)=>[node.id,index]));
  for(const assembly of cp.assemblies){
   const zone=zones.get(assembly.zone_id)!;
   const volume={min:zone.center.map((v,i)=>v-zone.size[i]/2) as Vec3,max:zone.center.map((v,i)=>v+zone.size[i]/2) as Vec3};
@@ -266,7 +275,11 @@ export function compileConstruction(plan:SessionPlan,source:SceneSpec):SceneSpec
   for(const id of assembly.member_node_ids){
    const bounds=worldBounds(id);
    const measured:Bounds={min:volume.min,max:openTop?[volume.max[0],Math.max(volume.max[1],bounds.max[1]),volume.max[2]]:volume.max};
-   if(!contains(measured,bounds,0.2))fail('/construction_plan/assemblies/'+assembly.id,'zone_fit',`${id} world bounds ${JSON.stringify(bounds)} exceed zone ${zone.id} ${JSON.stringify(volume)} (0.2m boundary allowance). Child transforms are local to their parent, not world coordinates.`,assembly.requirement_ids.length>0||nodes.get(id)?.role!=='environment');
+   if(!contains(measured,bounds,0.2)){
+    const parent=nodes.get(id)?.parent_id;
+    const frame=parent?` ${id} is a child of ${parent}, whose scale ${JSON.stringify(nodes.get(parent)?.scale)} also scales its geometry and local offset.`:'';
+    fail(`/nodes/${nodeIndices.get(id)}`,'zone_fit',`${id} world bounds ${JSON.stringify(bounds)} exceed zone ${zone.id} ${JSON.stringify(volume)} (0.2m boundary allowance).${frame} Use independent world roots for static objects, or correct local transforms for genuine children.`,requiredGeometry.has(id));
+   }
   }
  }
  // Recheck placement after all dependent placements resolve; a later relation

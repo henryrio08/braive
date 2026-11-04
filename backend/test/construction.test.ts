@@ -167,3 +167,27 @@ test('open-air zones have no virtual ceiling, but enclosures and explicit contai
  cp.relations.push({id:'contain_table',kind:'inside',subject_id:'table',target_id:'room',offset:[0,0,0],clearance:0,tolerance:0.01,required:true});
  assert.throws(()=>compileConstruction(plan,scene),(e:any)=>e.issues.some((i:any)=>i.rule==='fit'));
 });
+
+test('unbound decoration in a task assembly warns, while required objects and supports must fit',()=>{
+ const {plan,scene}=setup();const cp=scene.construction_plan!;
+ scene.nodes.push({...structuredClone(scene.nodes[0]),id:'backdrop',position:[40,0,-3]});
+ cp.assemblies[0].member_node_ids.push('backdrop');cp.assemblies[0].requirement_ids=['task'];
+ assert.ok(compileConstruction(plan,scene).construction_report!.warnings.some(i=>i.rule==='zone_fit'&&i.message.includes('backdrop')));
+ const binding=cp.requirements.find(r=>r.requirement_id==='task')!;
+ binding.node_ids.push('backdrop');
+ assert.throws(()=>compileConstruction(plan,scene),(e:any)=>e.issues.some((i:any)=>i.rule==='zone_fit'&&i.message.includes('backdrop')));
+ binding.node_ids.pop();cp.relations=[];scene.nodes[1].position=[1,0.5,-3];scene.nodes[1].support_node_id='backdrop';
+ assert.throws(()=>compileConstruction(plan,scene),(e:any)=>e.issues.some((i:any)=>i.rule==='zone_fit'&&i.message.includes('backdrop')));
+});
+
+test('repair keeps every failing member of the same assembly and names its parent frame',()=>{
+ const {plan,scene}=setup();
+ for(const [id,position] of [['left_part',[-30,0,0]],['far_part',[0,0,-30]]] as [string,[number,number,number]][]){
+  scene.nodes.push({...structuredClone(scene.nodes[1]),id,position,parent_id:'table',role:'prop'});
+  scene.construction_plan!.assemblies[0].member_node_ids.push(id);
+ }
+ assert.throws(()=>compileScene(plan,scene,{session_id:plan.session_id,revision:1,layers:[]} as unknown as AudioPlan),(e:any)=>{
+  for(const [index,id] of [[2,'left_part'],[3,'far_part']])assert.ok(e.issues.some((i:any)=>i.path===`/nodes/${index}`&&i.rule==='zone_fit'&&i.message.includes(id)&&i.message.includes('child of table')));
+  return true;
+ });
+});
