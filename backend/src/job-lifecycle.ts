@@ -2,11 +2,31 @@ import type {Job,PlanRequest} from '../../docs/handoff/contracts.js';
 import {isDeepStrictEqual} from 'node:util';
 import {AppError} from './contracts.js';
 
-export type GenerationAttempt={deadline:number;constructionRepairUsed:boolean;deviceRepairUsed:boolean};
+export type GenerationAttempt={deadline:number;deadlineCap?:number;constructionRepairUsed:boolean;deviceRepairUsed:boolean};
 export function claimRepair(attempt:GenerationAttempt|undefined,kind:'construction'|'device',now=Date.now()):boolean {
  const slot=kind==='construction'?'constructionRepairUsed':'deviceRepairUsed';
  if(!attempt||now>=attempt.deadline||attempt[slot])return false;
  attempt[slot]=true;return true;
+}
+
+export type RepairBlock='missing'|'deadline'|'used';
+/** Explain why a repair cannot start so callers never merge distinct failures. */
+export function repairBlock(attempt:GenerationAttempt|undefined,kind:'construction'|'device',now=Date.now()):RepairBlock|undefined {
+ if(!attempt)return 'missing';
+ if(now>=attempt.deadline&&(attempt.deadlineCap===undefined||now>=attempt.deadlineCap))return 'deadline';
+ const slot=kind==='construction'?'constructionRepairUsed':'deviceRepairUsed';
+ return attempt[slot]?'used':undefined;
+}
+/** A provider or transport failure produced no candidate; it must not consume the repair. */
+export function releaseRepair(attempt:GenerationAttempt|undefined,kind:'construction'|'device'):void {
+ if(!attempt)return;
+ if(kind==='construction')attempt.constructionRepairUsed=false;else attempt.deviceRepairUsed=false;
+}
+/** Give a claimed device repair enough clock to finish, inside a hard cap. */
+export function grantRepairWindow(attempt:GenerationAttempt,now:number,windowMs:number):number {
+ const cap=attempt.deadlineCap??attempt.deadline;
+ attempt.deadline=Math.max(attempt.deadline,Math.min(now+windowMs,cap));
+ return attempt.deadline;
 }
 
 /** A lost acknowledgement must not turn a network retry into another paid generation. */

@@ -255,6 +255,61 @@ export function compileConstruction(plan:SessionPlan,source:SceneSpec):SceneSpec
  }
  if(new Set(cp.routes.map(r=>r.path_id)).size!==cp.routes.length)fail('/construction_plan/routes','unique','Duplicate route bindings');
  for(const path of paths.values())if(!cp.routes.some(r=>r.path_id===path.id))fail('/construction_plan/routes','coverage','Every motion path needs an explicit route and clearance profile');
+ // Mirror the native swept-body route audit with transformed bounds so a route
+ // blocked by solid geometry fails here, where repair feedback can name the
+ // blocking node, instead of only after native mesh loading. Bounds are
+ // conservative for concave assets; the native check remains authoritative.
+ const operations=[...(scene.scenario?.steps.flatMap(s=>[...s.start_operations,...s.actions.flatMap(a=>a.operations)])??[]),...scene.events.map(e=>e.operation)];
+ const viewerPathIDs=new Set(operations.filter(o=>o.type==='move_viewer').map(o=>('path_id' in o?o.path_id:'')));
+ const nodeActors=new Map<string,string>();
+ for(const op of operations)if(op.type==='move_node'&&'path_id' in op&&'node_id' in op&&!nodeActors.has(op.path_id))nodeActors.set(op.path_id,op.node_id);
+ const attachedIDs=new Set(scene.viewer_attached_node_ids??[]);
+ const initialView=(scene.viewpoints.find(v=>v.id===scene.initial_viewpoint_id)?.position??[0,1.6,0]) as Vec3;
+ const orient2=(p:Vec3,q:Vec3,r:Vec3)=>(q[0]-p[0])*(r[2]-p[2])-(q[2]-p[2])*(r[0]-p[0]);
+ const pointSegment=(pt:Vec3,u:Vec3,w:Vec3)=>{const dx=w[0]-u[0],dz=w[2]-u[2];const length2=dx*dx+dz*dz;const t=length2<1e-12?0:Math.max(0,Math.min(1,((pt[0]-u[0])*dx+(pt[2]-u[2])*dz)/length2));return Math.hypot(pt[0]-(u[0]+t*dx),pt[2]-(u[2]+t*dz));};
+ const segmentRectDistance=(a:Vec3,b:Vec3,bounds:Bounds)=>{
+  const inside=(p:Vec3)=>p[0]>=bounds.min[0]&&p[0]<=bounds.max[0]&&p[2]>=bounds.min[2]&&p[2]<=bounds.max[2];
+  if(inside(a)||inside(b))return 0;
+  const corners:Vec3[]=[[bounds.min[0],0,bounds.min[2]],[bounds.max[0],0,bounds.min[2]],[bounds.max[0],0,bounds.max[2]],[bounds.min[0],0,bounds.max[2]]];
+  let best=Infinity;
+  for(let e=0;e<4;e++){
+   const r=corners[e],s=corners[(e+1)%4];
+   const o1=orient2(a,b,r),o2=orient2(a,b,s),o3=orient2(r,s,a),o4=orient2(r,s,b);
+   if(((o1>0&&o2<0)||(o1<0&&o2>0))&&((o3>0&&o4<0)||(o3<0&&o4>0)))return 0;
+   best=Math.min(best,pointSegment(a,r,s),pointSegment(b,r,s),pointSegment(r,a,b));
+  }
+  return best;
+ };
+ for(const route of cp.routes){
+  const path=paths.get(route.path_id);if(!path)continue;
+  const isViewer=viewerPathIDs.has(path.id),actorID=nodeActors.get(path.id);
+  if(!isViewer&&!actorID)continue;
+  const eye=route.eye_height_meters,radius=route.clearance_radius_meters;
+  const origin:Vec3=isViewer?((path.start_position as Vec3|undefined)??[...initialView] as Vec3):point(frames(actorID!),[0,0,0]);
+  const absolute:Vec3[]=path.coordinate_space==='relative'?[origin,...path.points.map(p=>[origin[0]+p.position[0],origin[1]+p.position[1],origin[2]+p.position[2]] as Vec3)]:[origin,...path.points.map(p=>p.position as Vec3)];
+  const solids=scene.nodes.filter(n=>(n.collision_role??'solid')==='solid'&&n.id!==actorID&&!(isViewer&&attachedIDs.has(n.id)));
+  const supports=scene.nodes.filter(n=>(n.collision_role??'solid')!=='none'&&n.id!==actorID);
+  let reported=0;
+  for(let i=1;i<absolute.length&&reported<4;i++){
+   const a=absolute[i-1],b=absolute[i];
+   const eyeA=isViewer?a[1]:a[1]+eye,eyeB=isViewer?b[1]:b[1]+eye;
+   const bodyLow=Math.min(eyeA,eyeB)-eye+0.15,bodyHigh=Math.max(eyeA,eyeB);
+   for(const solid of solids){
+    const bounds=worldBounds(solid.id);
+    if(bodyHigh<bounds.min[1]||bodyLow>bounds.max[1])continue;
+    const gap=segmentRectDistance(a,b,bounds);
+    if(gap<radius){fail('/motion_paths/'+path.id,'route_clearance',`Route ${path.id} segment ${i-1} from ${JSON.stringify(a)} to ${JSON.stringify(b)} passes ${gap.toFixed(2)}m from solid node "${solid.id}" (body radius ${radius}m, blocking bounds ${JSON.stringify(bounds)}). Move the route or "${solid.id}" so the swept body clears it; keep the authored destination and purpose.`);reported++;break;}
+   }
+   if(['walk','run'].includes(path.purpose)){
+    const length=Math.hypot(b[0]-a[0],b[1]-a[1],b[2]-a[2]),count=Math.max(1,Math.ceil(length/0.25));
+    for(let sample=0;sample<=count;sample++){
+     const t=sample/count,x=a[0]+(b[0]-a[0])*t,z=a[2]+(b[2]-a[2])*t,footY=a[1]+(b[1]-a[1])*t-(isViewer?eye:0);
+     const supported=supports.some(n=>{const bounds=worldBounds(n.id);return x>=bounds.min[0]-0.02&&x<=bounds.max[0]+0.02&&z>=bounds.min[2]-0.02&&z<=bounds.max[2]+0.02&&bounds.max[1]>=footY-0.35&&bounds.max[1]<=footY+0.3;});
+     if(!supported){fail('/motion_paths/'+path.id,'route_support',`Route ${path.id} segment ${i-1} has no supporting surface under the body near [${x.toFixed(2)},${footY.toFixed(2)},${z.toFixed(2)}] (sample ${sample}). Add or extend ground geometry under the authored route; do not lower the participant through the floor.`);reported++;break;}
+    }
+   }
+  }
+ }
  // Zone membership is usable world-space volume, not just a semantic label.
  // A small boundary allowance accommodates wall/ceiling thickness at its edge.
  for(const assembly of cp.assemblies){
