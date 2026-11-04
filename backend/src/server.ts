@@ -1,4 +1,6 @@
 import {activeBudget} from './budget.js';
+import {automaticSceneRepairEnabled} from './recovery-policy.js';
+import {materializeStageGraph} from './stage-compiler.js';
 import {cancelGeneration,releaseGeneration,supersedeGeneration,repeatedGeneration,claimRepair,repairBlock,releaseRepair,grantRepairWindow,type GenerationAttempt} from './job-lifecycle.js';
 import {PhoneTestWindow} from './phone-test-window.js';
 import {canonicalSceneReferences} from './scene-references.js';
@@ -71,7 +73,7 @@ async function generate(request:PlanRequest, job:Job, signal:AbortSignal) {
  signal.throwIfAborted();
  if(revisions.get(request.session_id)!==request.revision)throw new AppError('CANCELLED','Superseded revision');
  const {experience,...wire}=result;
- job.result=wire;approved.set(request.session_id,result);job.status='succeeded';job.stage='Ready for device validation';
+ job.result=wire;approved.set(request.session_id,result);job.status='succeeded';job.stage='Getting ready to begin…';
 }
 app.post(['/v1/session-plans','/v1/scene-revisions'],(req,res,next)=>{
  try {
@@ -84,7 +86,7 @@ app.post(['/v1/session-plans','/v1/scene-revisions'],(req,res,next)=>{
   if(revisions.get(input.session_id)===input.revision)throw new AppError('CONFLICT','Revision must increase',[],409);
   supersedeGeneration(input.session_id,jobs,running);
   revisions.set(input.session_id,input.revision);
-  const job:Job={job_id:randomUUID(),session_id:input.session_id,revision:input.revision,status:'running',stage:'Starting generation'};
+  const job:Job={job_id:randomUUID(),session_id:input.session_id,revision:input.revision,status:'running',stage:'Getting your practice ready…'};
   attempts.set(job.job_id,{deadline:Date.now()+generationLimitMs,deadlineCap:Date.now()+generationLimitMs+5*60*1000,planningRepairUsed:false,constructionRepairUsed:false,deviceRepairUsed:false});
   jobs.set(job.job_id,job); const controller=new AbortController(); running.set(job.job_id,controller);
   requests.set(job.job_id,structuredClone(input));
@@ -105,13 +107,14 @@ app.post('/v1/jobs/:id/validation',async(req,res,next)=>{
   if(revisions.get(job.session_id)!==job.revision)throw new AppError('CONFLICT','A newer scene revision has replaced this job',[],409);
   if(running.size>=3)throw new AppError('RATE_LIMITED','Too many active generation jobs',[],429);
   if(typeof req.body.message!=='string' || req.body.message.length>2000) throw new AppError('INVALID_INPUT','Provide a bounded validation explanation');
+  if(!automaticSceneRepairEnabled())throw new AppError('CONFLICT','Automatic scene repair is disabled. Your practice details and generated scene are preserved; revise or retry when ready.',[],409);
   const block=repairBlock(attempt,'device');
   if(block==='missing')throw new AppError('CONFLICT','This scene is no longer available for automatic repair. Your practice details are unchanged; start again to rebuild the scene.',[],409);
   if(block==='deadline')throw new AppError('TIMEOUT','The time reserved for building this scene has ended, so its automatic fix cannot start. Your practice details are unchanged; start again when you are ready.',[],408);
   if(block==='used')throw new AppError('CONFLICT','This scene already used its one automatic fix and still needs changes. Revise the scene or start again; your practice details are unchanged.',[],409);
   grantRepairWindow(attempt!,Date.now(),240*1000);
   if(!claimRepair(attempt,'device'))throw new AppError('TIMEOUT','The time reserved for building this scene has ended, so its automatic fix cannot start. Your practice details are unchanged; start again when you are ready.',[],408);
-  job.status='running';job.stage='Repairing device visibility checks';
+  job.status='running';job.stage='Adjusting your view…';
   const controller=new AbortController();running.set(job.job_id,controller);
   const timer=setTimeout(()=>controller.abort(),Math.max(1,attempt.deadline-Date.now()));
   res.status(202).json(job);
@@ -119,16 +122,18 @@ app.post('/v1/jobs/:id/validation',async(req,res,next)=>{
    const {plan,audio,scene}=job.result;
    const experience=approved.get(job.session_id)?.experience;
    const output=await model('SceneSpec',{plan,audio,approved_experience:experience,requirements:constructionRequirements(plan),previous_scene:authoredScene(scene),capabilities,issues:[{path:'/nodes',rule:'native_preflight',message:req.body.message}]},builderInstructions,controller.signal,'scene_builder');
-   validate('SceneSpec',output);validateProviderOutput('SceneSpec',output);
    const authored=deterministicCorrections(canonicalSceneReferences(plan,output,audio)).scene;
-   const repaired=compileScene(plan,authored,audio);
+   const staged=experience?materializeStageGraph(experience,plan,authored):{scene:authored,issues:[]};
+   if(staged.issues.length)throw new AppError('INVALID_MODEL_OUTPUT','Stage graph requires route geometry',staged.issues);
+   validate('SceneSpec',staged.scene);validateProviderOutput('SceneSpec',staged.scene);
+   const repaired=compileScene(plan,staged.scene,audio);
    const errors=[...sceneIssues(plan,repaired,audio),...(experience?experienceSceneIssues(experience,plan,repaired):[])];if(errors.length) throw new AppError('INVALID_MODEL_OUTPUT','Native repair invalid',errors);
    controller.signal.throwIfAborted();if(revisions.get(job.session_id)!==job.revision)return;
-   job.result={plan,audio,scene:repaired};approved.set(job.session_id,{...job.result,experience});job.status='succeeded';job.stage='Ready for device validation';
+   job.result={plan,audio,scene:repaired};approved.set(job.session_id,{...job.result,experience});job.status='succeeded';job.stage='Getting ready to begin…';
   }catch(e:any){if(jobs.get(job.job_id)?.status!=='cancelled'){
    if(!controller.signal.aborted&&(e.code==='PROVIDER_UNAVAILABLE'||e.code==='RATE_LIMITED')){
     // No candidate was produced; keep the scene and its repair for a later retry.
-    releaseRepair(attempt,'device');job.status='succeeded';job.stage='Ready for device validation';
+    releaseRepair(attempt,'device');job.status='succeeded';job.stage='Getting ready to begin…';
    } else {job.status='failed';job.error={code:controller.signal.aborted?'TIMEOUT':e.code??'INVALID_MODEL_OUTPUT',message:e.message,retryable:true,request_id:job.job_id,issues:e.issues};}
   }}
   finally{clearTimeout(timer);releaseGeneration(job.job_id,controller,running);}

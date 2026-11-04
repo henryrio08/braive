@@ -3,7 +3,7 @@ import {assetManifest} from './assets.js';
 import {AppError,document,sceneIssues} from './contracts.js';
 import type {SceneSpec,SceneNode,SessionPlan,ValidationIssue,ConstructionPlan,AudioPlan} from '../../docs/handoff/contracts.js';
 import {identity,multiply,inverse,point,transform,transformedBounds,contains,distance,type Vec3,type Bounds} from './spatial-math.js';
-import {classifyVisual,evaluateAcceptance,zoneSeverity,type ClassifiedIssue} from './acceptance.js';
+import {classifyVisual,evaluateAcceptance,zoneSeverity,visualStrictness,type ClassifiedIssue} from './acceptance.js';
 
 export type ConstructionRequirement={id:string;kind:'task'|'cast'|'prop'|'stage'|'motion'|'boundary'|'outcome';target:string;description:string};
 export function constructionRequirements(plan:SessionPlan):ConstructionRequirement[]{
@@ -289,7 +289,13 @@ export function compileScene(plan:SessionPlan,source:SceneSpec,audio:AudioPlan):
 export function compileConstruction(plan:SessionPlan,source:SceneSpec):SceneSpec {
  if(!source.construction_plan)return source; // Saved scenes predate this compiler.
  const scene=constructionSource(source),cp=scene.construction_plan!,issues:ValidationIssue[]=[],warnings:ValidationIssue[]=[];
- const fail=(path:string,rule:string,message:string,required=true,meta?:Partial<ClassifiedIssue>)=>(required?issues:warnings).push({path,rule,message,...meta});
+ // These annotations describe construction quality, not executable scene data.
+ // The approved plan and actual route audits remain authoritative.
+ const advisoryRules=new Set(['priority','coverage','bounds','support','fit','zone_fit','placement','orientation','clearance','anchor_alignment']);
+ const fail=(path:string,rule:string,message:string,required=true,meta?:Partial<ClassifiedIssue>)=>{
+  const advisory=visualStrictness()==='permissive'&&advisoryRules.has(rule);
+  (required&&!advisory?issues:warnings).push({path,rule,message,...meta,...(advisory?{classification:'soft' as const}:{})});
+ };
  const map=<T extends {id:string}>(items:T[],path:string)=>{const result=new Map(items.map(i=>[i.id,i]));if(result.size!==items.length)fail(path,'unique','Duplicate construction IDs');return result;};
  const nodes=map(scene.nodes,'/nodes'),zones=map(cp.zones,'/construction_plan/zones'),anchors=map(cp.anchors,'/construction_plan/anchors');
  for(const [index,node] of scene.nodes.entries()){
@@ -588,6 +594,7 @@ export function compileConstruction(plan:SessionPlan,source:SceneSpec):SceneSpec
  const acceptance=evaluateAcceptance(classified);
  if(classified.some(issue=>issue.classification!=='soft')||acceptance.reasons.length)throw new AppError('INVALID_MODEL_OUTPUT','Construction constraints require repair',classified);
  warnings.push(...acceptance.acceptedSoft);
- scene.construction_report={compiler_version:'1',resolved_relation_ids:[...done].sort(),warnings:[...new Map(warnings.map(w=>[JSON.stringify(w),w])).values()],...(acceptance.acceptedSoft.length?{accepted_defects:acceptance.acceptedSoft}:{})} as SceneSpec['construction_report'];
+ const acceptedDefects=warnings.filter(issue=>(issue as ClassifiedIssue).classification==='soft');
+ scene.construction_report={compiler_version:'1',resolved_relation_ids:[...done].sort(),warnings:[...new Map(warnings.map(w=>[JSON.stringify(w),w])).values()],...(acceptedDefects.length?{accepted_defects:acceptedDefects}:{})} as SceneSpec['construction_report'];
  return scene;
 }

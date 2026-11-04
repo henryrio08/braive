@@ -1,4 +1,10 @@
-import {test} from 'node:test';
+import {test,beforeEach,afterEach} from 'node:test';
+
+// Keep the historical construction diagnostics testable in explicit standard
+// mode. Production permissive behavior is covered by the generation tests.
+let previousVisualMode:string|undefined;
+beforeEach(()=>{previousVisualMode=process.env.BRAIVE_VISUAL_STRICTNESS;process.env.BRAIVE_VISUAL_STRICTNESS='standard';});
+afterEach(()=>{if(previousVisualMode===undefined)delete process.env.BRAIVE_VISUAL_STRICTNESS;else process.env.BRAIVE_VISUAL_STRICTNESS=previousVisualMode;});
 import assert from 'node:assert/strict';
 import {compileConstruction,compileScene,constructionRequirements} from '../src/construction.js';
 import {transform,inverse,point,multiply,identity} from '../src/spatial-math.js';

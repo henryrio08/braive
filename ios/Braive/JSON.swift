@@ -75,6 +75,44 @@ struct JSON: Codable, Equatable {
   }
 }
 
+/// User copy is independent of backend diagnostics and geometry error wording.
+enum PreparationCopy {
+  static func progress(_ stage: String) -> String {
+    let stage = stage.lowercased()
+    if stage.contains("adjust") || stage.contains("repair") { return "Adjusting your practice…" }
+    if stage.contains("ready for device") || stage.contains("ready to begin") { return "Getting ready to begin…" }
+    if stage.contains("building") || stage.contains("surroundings") { return "Creating your surroundings…" }
+    if stage.contains("review") || stage.contains("checking the details") { return "Checking the details…" }
+    if stage.contains("planning") || stage.contains("shaping") { return "Shaping your practice…" }
+    return "Getting your practice ready…"
+  }
+
+  static func failure(_ error: Error) -> String {
+    let failure = error as NSError
+    let code = failure.userInfo["BraiveErrorCode"] as? String ?? ""
+    let detail = failure.localizedDescription.lowercased()
+    if failure.domain == "Braive" && failure.code == 401 {
+      return "Your phone needs to reconnect to the practice computer. Check the pairing code in Settings."
+    }
+    if code == "TIMEOUT" || (failure.domain == NSURLErrorDomain && failure.code == URLError.timedOut.rawValue) || detail.contains("deadline") {
+      return "This practice took too long to prepare. Your description is still here."
+    }
+    if failure.domain == "BraiveConnection" || API.isTransientConnection(error) {
+      return "We lost the connection to the practice computer. Check the connection in Settings. Your description is still here."
+    }
+    if code == "PROVIDER_UNAVAILABLE" || code == "RATE_LIMITED" {
+      return "Practice preparation is unavailable right now. Your description is still here, so you can try again later."
+    }
+    if detail.contains("route clearance") || detail.contains("supporting surface") {
+      return "We couldn’t make a clear path through this practice. Your description is still here."
+    }
+    if detail.contains("focal point") {
+      return "We couldn’t get a clear view of your practice. Your description is still here."
+    }
+    return "We couldn’t get this practice ready. Your description is still here."
+  }
+}
+
 struct API {
   var base: String
   var token: String
@@ -160,7 +198,8 @@ struct API {
       let status = (response as? HTTPURLResponse)?.statusCode ?? 0
       let detail = result?["message"].text ?? ""
       throw NSError(
-        domain: "Braive", code: status, userInfo: [NSLocalizedDescriptionKey: detail.isEmpty ? "The practice server returned HTTP \(status)." : detail])
+        domain: "Braive", code: status, userInfo: [NSLocalizedDescriptionKey: detail.isEmpty ? "The practice server returned HTTP \(status)." : detail,
+          "BraiveErrorCode": result?["code"].text ?? "", "BraiveRequestID": result?["request_id"].text ?? ""])
     }
     try Task.checkCancellation()
     return data.isEmpty ? JSON() : try JSONDecoder().decode(JSON.self, from: data)

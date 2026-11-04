@@ -198,14 +198,16 @@ struct ContentView: View {
             Button("No") { panel = nil; send("no") }
           }
           if s.phase == .error {
-            ForEach(s.pendingPostSave == nil ? ["Retry", "Revise", "Cancel"] : ["Retry"], id: \.self) { value in
-              Button(value) { panel = nil; send(value) }
+            Button(s.pendingPostSave == nil ? "Try again" : "Save again") { panel = nil; send("retry") }
+            if s.pendingPostSave == nil {
+              Button("Change details") { panel = nil; send("revise") }
+              Button("Return to forest") { panel = nil; send("cancel") }
             }
           }
           Button("Type an answer") { panel = .typing }
           Button("Settings") { panel = .settings }
         }
-        Section("Full prompt") {
+        Section("What’s happening") {
           Text(s.message).textSelection(.enabled)
         }
         if !s.transcript.isEmpty {

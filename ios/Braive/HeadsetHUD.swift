@@ -109,7 +109,7 @@ struct HeadsetHUD: View {
     case .intake: return HeadsetCopy(title: "What would you like to practice?", detail: "Describe the moment, place and people.", command: "Say THAT’S ALL when finished", hint: "START OVER to replace your answer")
     case .ability: return HeadsetCopy(title: "What feels manageable?", detail: "Share your comfort level and boundaries.", command: "Say THAT’S ALL when finished", hint: "START OVER to replace your answer")
     case .history: return HeadsetCopy(title: "Build on past practice?", detail: "Include your previous sessions this time?", command: "Say YES or NO")
-    case .planning: return HeadsetCopy(title: jobID.isEmpty ? "Connecting to your Mac…" : "Shaping your practice…", detail: message.isEmpty ? loadingTip : HeadsetCopy.excerpt(message), hint: "STOP to pause")
+    case .planning: return HeadsetCopy(title: "Getting your practice ready", detail: message.isEmpty ? loadingTip : HeadsetCopy.excerpt(message), hint: "Add something: say HEY BUILDER · STOP to pause")
     case .intro: return HeadsetCopy(title: "Listen. Picture yourself here.", hint: "STOP to pause")
     case .reveal: return HeadsetCopy(title: "Take a look around.", hint: "STOP to pause")
     case .active: return HeadsetCopy(title: "", detail: scenarioActions.isEmpty ? "" : scenarioActions.prefix(3).joined(separator: " · "), hint: "STOP to pause")
@@ -122,7 +122,7 @@ struct HeadsetHUD: View {
       return HeadsetCopy(title: "Your practice, reflected.", detail: message == "Reviewing your session…" ? loadingTip : record["feedback"].object != nil ? "Listen to your feedback." : "Listen to your session update.", hint: "CONTINUE to move on")
     case .saving: return HeadsetCopy(title: "Saving your practice…", detail: loadingTip)
     case .repeatPrompt: return HeadsetCopy(title: "Ready for another try?", detail: adapting ? loadingTip : "Build on what you just practiced.", command: adapting ? "" : "Say YES or NO")
-    case .error: return HeadsetCopy(title: "Let’s take a moment.", detail: HeadsetCopy.excerpt(message), command: pendingPostSave == nil ? "Say RETRY, REVISE or CANCEL" : "Say RETRY to save again", hint: "Full details in phone controls")
+    case .error: return HeadsetCopy(title: "Let’s take a moment.", detail: HeadsetCopy.excerpt(message), command: pendingPostSave == nil ? "RETRY to try again · REVISE to change details" : "Say RETRY to save again", hint: pendingPostSave == nil ? "CANCEL to return to the forest" : "Your practice is kept while you retry")
     }
   }
   var pausedHeadsetCopy: HeadsetCopy {
