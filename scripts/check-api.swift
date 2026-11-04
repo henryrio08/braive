@@ -12,19 +12,39 @@ final class OfflineProtocol: URLProtocol {
  private static let lock = NSLock()
  nonisolated(unsafe) private static var replies: [Reply] = []
  nonisolated(unsafe) private static var captured: [URLRequest] = []
+ nonisolated(unsafe) private static var bodies: [Data?] = []
  static func configure(_ values: [Reply]) {
   lock.lock(); defer { lock.unlock() }
-  replies = values; captured = []
+  replies = values; captured = []; bodies = []
  }
  static var requests: [URLRequest] {
   lock.lock(); defer { lock.unlock() }
   return captured
  }
+ static var requestBodies: [Data?] {
+  lock.lock(); defer { lock.unlock() }
+  return bodies
+ }
+ private func readBody() -> Data? {
+  if let body = request.httpBody { return body }
+  // Foundation may expose the POST body to URLProtocol as an input stream.
+  guard let stream = request.httpBodyStream else { return nil }
+  stream.open(); defer { stream.close() }
+  var data = Data(), buffer = [UInt8](repeating: 0, count: 1024)
+  while true {
+   let count = stream.read(&buffer, maxLength: buffer.count)
+   if count < 0 { return nil }
+   if count == 0 { return data }
+   data.append(contentsOf: buffer.prefix(count))
+  }
+ }
  override class func canInit(with request: URLRequest) -> Bool { true }
  override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
  override func startLoading() {
+  let body = readBody()
   Self.lock.lock()
   Self.captured.append(request)
+  Self.bodies.append(body)
   let reply = Self.replies.isEmpty ? nil : Self.replies.removeFirst()
   Self.lock.unlock()
   guard let reply else { client?.urlProtocol(self,didFailWithError:URLError(.unknown)); return }
@@ -127,7 +147,15 @@ final class OfflineProtocol: URLProtocol {
   let submission=JSON(["session_id":id,"revision":1])
   let resumed=try await api.callResuming("/v1/session-plans",submission,deadline:ProcessInfo.processInfo.systemUptime+5,retryDelay:.zero)
   precondition(resumed["job_id"].text == id && OfflineProtocol.requests.count == 2)
-  precondition(OfflineProtocol.requests.allSatisfy { $0.httpMethod == "POST" && $0.httpBody == OfflineProtocol.requests.first?.httpBody })
+  let bodies=OfflineProtocol.requestBodies, body=bodies[0]
+  precondition(body.flatMap { try? JSONDecoder().decode(JSON.self,from:$0) } == submission)
+  precondition(OfflineProtocol.requests.allSatisfy { $0.httpMethod == "POST" } && bodies == [body,body])
+  OfflineProtocol.configure([.init(error:URLError(.cannotConnectToHost))])
+  let submissionStarted=ProcessInfo.processInfo.systemUptime
+  do { _ = try await api.callResuming("/v1/session-plans",submission,deadline:submissionStarted+0.1,retryDelay:.seconds(2));fatalError("A submission retry must stop at the readiness deadline") }
+  catch { precondition(isURLFailure(error,.timedOut)) }
+  precondition(OfflineProtocol.requests.count == 1)
+  precondition(ProcessInfo.processInfo.systemUptime-submissionStarted < 1,"Submission retry sleep must be bounded by the deadline")
   OfflineProtocol.configure([])
   do { _ = try await api.callResuming("/v1/jobs/test",deadline:ProcessInfo.processInfo.systemUptime-1);fatalError("Expired deadline must stop") }
   catch { precondition(isURLFailure(error,.timedOut) && OfflineProtocol.requests.isEmpty) }
