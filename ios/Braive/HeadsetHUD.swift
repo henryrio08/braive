@@ -35,7 +35,7 @@ struct HeadsetHUD: View {
       VStack(spacing: 12) {
         HStack(spacing: 6) {
           Image(systemName: "waveform").font(.system(size: 10))
-          Text(status).font(.system(size: status == "Listening" ? 10 : 12, weight: .semibold))
+          Text(status).font(.system(size: 12, weight: .semibold))
           Spacer()
           if let remaining {
             Text(Duration.seconds(remaining).formatted(.time(pattern: .minuteSecond)))
@@ -53,7 +53,7 @@ struct HeadsetHUD: View {
             Text(copy.command).font(.system(size: 14, weight: .semibold)).foregroundStyle(accent)
           }
           if !copy.hint.isEmpty {
-            Text(copy.hint).font(.system(size: 11)).foregroundStyle(.white.opacity(0.65))
+            Text(copy.hint).font(.system(size: 12)).foregroundStyle(.white.opacity(0.85))
           }
         }.fixedSize(horizontal: false, vertical: true)
       }
@@ -112,7 +112,7 @@ struct HeadsetHUD: View {
     case .planning: return HeadsetCopy(title: jobID.isEmpty ? "Connecting to your Mac…" : "Shaping your practice…", detail: message.isEmpty ? loadingTip : HeadsetCopy.excerpt(message), hint: "STOP to pause")
     case .intro: return HeadsetCopy(title: "Listen. Picture yourself here.", hint: "STOP to pause")
     case .reveal: return HeadsetCopy(title: "Take a look around.", hint: "STOP to pause")
-    case .active: return HeadsetCopy(title: "", hint: "STOP to pause")
+    case .active: return HeadsetCopy(title: "", detail: scenarioActions.isEmpty ? "" : scenarioActions.prefix(3).joined(separator: " · "), hint: "STOP to pause")
     case .selfReport: return HeadsetCopy(title: "How difficult did it feel?", command: "Say a number from 0 to 10", hint: "Or say SKIP")
     case .readiness: return HeadsetCopy(title: "How ready do you feel now?", command: "Say a number from 0 to 10", hint: "Or say SKIP")
     case .reflectionPrompt: return HeadsetCopy(title: "Keep a spoken reflection?", command: "Say YES or NO")

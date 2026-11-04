@@ -11,7 +11,7 @@ import {generateExperience,authoredScene,experienceSceneIssues,type ApprovedExpe
 import {builderInstructions} from './generation-prompts.js';
 import { createServer } from 'node:http';
 import { randomUUID, timingSafeEqual } from 'node:crypto';
-import {writeFileSync} from 'node:fs';
+import {mkdirSync,writeFileSync} from 'node:fs';
 import { WebSocketServer, WebSocket } from 'ws';
 import { AppError, validate, validateProviderOutput, sceneIssues } from './contracts.js';
 import { model, provenance, requestCount, reservedCostUSD, usageLog } from './meta.js';
@@ -51,6 +51,7 @@ const generationLimitMs=10*60*1000;
 const jobs=new Map<string,Job>(); const running=new Map<string,AbortController>(); const revisions=new Map<string,number>();
 
 const capabilities={version:'iphone-initial-1',nodes:350,resolved_nodes:1000,primitives:180000,geometry_bytes:24000000,resource_notes:'Draw-call, texture and resident-memory targets require physical-device profiling; they are not runtime-enforced caps.',units:'meters',eye_height:1.6,initial_forward:'negative Z',geometry:['box','plane','sphere','cylinder','asset'],characters:'Use approved soft_adult character.base assets with their original palette. These are intentionally simple, friendly stylized people. Keep comfortable personal space; default at least 2.5m from the viewer unless the user asks for closer contact. Do not use legacy neutral/casual models for new experiences.',voices:['default'],asset_catalog_format:'category.subcategory: [[asset_id, triangle_count], ...]. All assets normalized to meters, base y=0, forward -Z. Use each GLB intact; do not author its mesh or skeleton children.',assets:meshCatalog, audio_assets:['forest','piano','wind','room','crowd','whoosh']};
+capabilities.asset_catalog_format+=' Rest bounds in asset_bounds are authoritative for each asset\'s wide and thin axes (for example, window assets are thin in X and wide in Z at rest, facing sideways); a 90-degree yaw swaps the horizontal extents. Compute the transformed bounds from the rest bounds, your rotation and scale before placing any rotated asset.';
 capabilities.version='iphone-construction-visuals-5';
 Object.assign(capabilities,{construction_version:'1',asset_bounds:Object.fromEntries(assetManifest.map(a=>[a.id,a.bounds_meters])),surface_profiles:['matte','ground','water','glass','foliage'],sky:'App-owned procedural cubemap or solid background; explicit fog distances. No image-generation call or arbitrary shader source.'});
 Object.assign(capabilities,{scenario_engine:'Guided automatic stages: movement and events start on stage entry and advance by time or motion completion. No WALK/SIT/ASK or stage-advance commands. Natural user speech reaches the approved character only in authored conversation_target windows. Quiet scenes need no speaking.',movement:'move_viewer follows an authored motion_paths trajectory in meters; each path starts at the current camera position, points are absolute destinations at increasing positive seconds. Preserve head-tracked orientation. Paths can be interrupted by another path without teleporting; STOP freezes the active clock. walk, run, swim, climb, fall, glide, ride and other trajectories use the same generic system. move_node animates another actor/prop along a path, optionally facing its travel direction.',view_distance_meters:10000});
@@ -60,10 +61,10 @@ async function generate(request:PlanRequest, job:Job, signal:AbortSignal) {
  const result=await generateExperience(request,job,{
   model,capabilities,previous,
   isCurrent:()=>revisions.get(request.session_id)===request.revision,
-  consumeRepair:()=>claimRepair(attempts.get(job.job_id),'construction'),
+  consumeRepair:(kind)=>claimRepair(attempts.get(job.job_id),kind),
   onRejected:(candidate,error)=>{
    if(process.env.BRAIVE_TEST_MODE==='true'){
-    try{writeFileSync(new URL('../data/last-rejected-scene.json',import.meta.url),JSON.stringify({...candidate,issues:error instanceof AppError?error.issues:[]},null,2),{mode:0o600});}catch{}
+    try{const payload=JSON.stringify({...candidate,issues:error instanceof AppError?error.issues:[]},null,2);writeFileSync(new URL('../data/last-rejected-scene.json',import.meta.url),payload,{mode:0o600});mkdirSync(new URL('../data/rejected',import.meta.url),{recursive:true});writeFileSync(new URL(`../data/rejected/${job.job_id}.json`,import.meta.url),payload,{mode:0o600});}catch{}
    }
   }
  },signal);
@@ -84,7 +85,7 @@ app.post(['/v1/session-plans','/v1/scene-revisions'],(req,res,next)=>{
   supersedeGeneration(input.session_id,jobs,running);
   revisions.set(input.session_id,input.revision);
   const job:Job={job_id:randomUUID(),session_id:input.session_id,revision:input.revision,status:'running',stage:'Starting generation'};
-  attempts.set(job.job_id,{deadline:Date.now()+generationLimitMs,deadlineCap:Date.now()+generationLimitMs+5*60*1000,constructionRepairUsed:false,deviceRepairUsed:false});
+  attempts.set(job.job_id,{deadline:Date.now()+generationLimitMs,deadlineCap:Date.now()+generationLimitMs+5*60*1000,planningRepairUsed:false,constructionRepairUsed:false,deviceRepairUsed:false});
   jobs.set(job.job_id,job); const controller=new AbortController(); running.set(job.job_id,controller);
   requests.set(job.job_id,structuredClone(input));
   const timer=setTimeout(()=>controller.abort(new Error('Ten-minute generation ceiling reached')),generationLimitMs);

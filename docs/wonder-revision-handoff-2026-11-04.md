@@ -1,176 +1,101 @@
-# Wonder product revision handoff — November 4, 2026
+# Braive revision handoff — current state, November 4, 2026
 
-Branch: `codex/wonder-product-revision` from `origin/main` (`703ae6b`).
-Worktree: `.build/worktrees/wonder-revision`. The pre-existing `codex/braive-work`
-checkout and its uncommitted iOS edits were left untouched.
+Working branch: `codex/wonder-generation-reliability` from integrated main
+`6daf896`. Earlier work (backend route audit, repair accounting, forest
+lobby, containment semantics) is merged in main via PRs #5–#7. This file
+describes the present state; older play-by-play is in git history.
 
-## Root causes and fixes
+## Generation reliability (verified live)
 
-**1. Backend/native route disagreement (reported native failure).**
-The backend construction compiler validated references, relations, zones and
-anchors, but never tested motion paths against solid geometry. Only the phone
-did (mesh hit-tests in `RouteAudit`/`StageAudit`). A backend-accepted scene
-could therefore fail on device with the generic message "Route clearance
-failed on segment 0: body intersects solid geometry", which gave the single
-device repair nothing actionable to fix.
+Root causes found across retained failures, each fixed generally:
 
-Fix (`backend/src/construction.ts`): construction now sweeps every executed
-viewer/node route against transformed solid bounds at the route's clearance
-radius and eye height, and checks walk/run support every 0.25 m. Failures are
-`route_clearance`/`route_support` issues naming the path, segment, blocking
-node and measured gap, so the existing construction repair can correct them.
-Bounds are conservative for concave assets; the native mesh check remains
-authoritative and still rejects genuinely obstructed scenes. The builder
-prompt now states this contract. Deterministic tests reproduce the old
-disagreement (route through a wall; unsupported walk) and pass after the fix.
-Evidential limit: the retained route-failure fixture
-(`backend/data/construction-reference-live-check.json`) is not present in this
-checkout, so the reproduction is a focused synthetic fixture, not the original
-13-node scene. The available `last-rejected-scene.json` fails earlier on empty
-asset IDs and was not used as route evidence.
+- Backend never checked routes against solid geometry (native-only check).
+  Construction now sweeps executed routes against transformed bounds with
+  walk/run support sampling, naming path, segment, blocking node and gap.
+- `inside` both placed and contained, relocating authored objects (island).
+  `within` now checks containment at the authored position without moving;
+  `inside` keeps legacy placement, including zero-offset placement at a
+  target center. Henry's island offset `[0,-1.9,-12]` and waypoint
+  `[0, 0.35, -20.5]` pass on the attached scene.
+- Window assets are thin in X / wide in Z at rest, contradicting the generic
+  forward-axis assumption; the builder yawed them through the wall. Zone and
+  containment diagnostics now report rest bounds, authored rotation/scale,
+  transformed bounds, per-axis overflow and the responsible relation;
+  capabilities and builder instructions state the rest-bounds contract.
+- Repair starvation and opacity: planning (author/editor) and construction
+  (builder) each own one bounded repair; provider failures release the
+  device repair; missing/expired/used repairs have distinct messages;
+  rejected candidates are retained per job under `backend/data/rejected/`.
+- Dangling route-anchor annotations no longer fail valid routes (trajectory
+  is authoritative; the annotation is dropped with a warning).
+- Builder reasoning experiment: one medium-reasoning builder run failed on
+  requirement bookkeeping at similar cost, so the default stays low;
+  `BRAIVE_BUILDER_REASONING` can repeat the experiment.
 
-**2. "Device repair allowance or generation deadline exhausted".**
-Three distinct situations shared one misleading message: the repair record was
-gone, the original ten-minute deadline had passed, or the one device repair
-was already used. The device slot was also claimed before the repair model
-call, so a provider failure (for example HTTP 503) consumed the repair without
-producing a candidate, and the repair shared whatever time generation had
-left, so it could be aborted mid-call.
+Fresh live evidence (real author → editor → builder, bounded repair as
+noted; artifacts in `backend/data/live-test/result-<scenario>-<job>.json`):
 
-Fix (`backend/src/job-lifecycle.ts`, `backend/src/server.ts`): blocks are now
-distinguished with specific, input-preserving messages; a claimed device
-repair grants a bounded four-minute window inside a hard cap of fifteen
-minutes from job creation; provider/rate-limit failures release the claim and
-keep the accepted scene so the phone can retry. The phone
-(`ios/Braive/Session.swift`) extends its readiness deadline after the backend
-accepts a repair and shows the backend stage text without appending builder
-instructions on every poll.
+| Attempt | Scenario | Outcome | Calls | Settled |
+| --- | --- | --- | --- | --- |
+| library | indoor library proposal | success (repaired) | 4 | ~$0.73 |
+| swim | cove-to-island swim | success (repaired) | 4 | ~$0.53 |
+| library | indoor library proposal | success (repaired) | 4 | ~$0.79 |
+| swim | cove-to-island swim | success (repaired) | 4 | ~$0.65 |
 
-**3. Native repair feedback.** `RouteAudit` errors now name the blocking node
-(nearest named ancestor), matching the backend's feedback shape.
+The last three are consecutive. All successes used the one construction
+repair; no first-pass successes in this set. Earlier failed attempts
+(window rotation, floor/window zone overflow, swim body depth, palm/zone
+height, dangling anchor, one medium-reasoning coverage drop) are preserved
+in the same artifact folder and drove the fixes above. Backend validation
+enforces preservation of the approved stages, cast, props, timing and
+movement on every accepted result; character counts above come from the
+validated scenes.
 
-## UX and rendering changes
+Ledger: 58 entries, $9.71 charged of the $50 file cap, $40.29 remaining
+(includes one retained $1.10 unsettled reservation; nothing was reset).
+The $50 file cap is superseded as policy per the project prompt; it was not
+reached and no funds were added.
 
-- Welcome screen: removed a redundant eyebrow and a repeated slogan; the
-  remaining supporting line states the privacy fact ("Speech stays on this
-  iPhone."). Approved mark, headline and consent flow are unchanged.
-- Generation status shows the actual backend stage only (honest status per
-  the UX research); STOP, pause, resume/quit, self-report, optional
-  reflection/feedback, history/export and adapted-repeat flows are untouched.
-- Legacy scenes without an authored environment keep fog to at least 30 m
-  instead of 8 m; procedural clouds take the sky's horizon tint instead of
-  pure white. Authored environments, posterization, shadows, SSAO and the
-  stereo pipeline are unchanged. These two rendering edits are small and were
-  chosen because no renderer is available in this environment to verify
-  larger visual changes.
+## UX and forest (implemented; compile-verified)
 
-## November 4 continuation (presentation, UX, live evidence)
+- Forest lobby: deterministic composed clearing (foreground tufts, five
+  clustered tree groups, background tree line, grounded rocks, clear
+  participant area), sharing the generated-scene procedural sky, fog,
+  lighting environment and posterized style; sun casts shadows. No paid
+  call. Grounding uses measured asset bases; participant clearing and a
+  forward corridor stay empty by construction.
+- Phone: flat setup presentation, connection readiness always visible,
+  discoverable Add details during generation, live backend stage text.
+- Headset: Speaking is now distinguished from Listening, active stages
+  surface authored speech labels, error cue excerpts what happened,
+  REVISE keeps situation/boundaries and asks only for changes, cues are
+  12 pt with higher contrast. STOP/pause, ratings, reflection/feedback,
+  history/export and adapted repeats are behaviorally unchanged.
 
-- Rendering (`ios/Braive/World.swift`): fixed exposure (no adaptation pumping
-  during head movement); the directional shadow frustum now scales with the
-  authored scene's bounds (16–44 m, 2048 maps at room scale, 1024 beyond) so
-  grounding shadows survive outside the old fixed 18 m box. The builder prompt
-  now requires depth-layered composition (focus / mid-ground / background),
-  plausible scale and clustered props.
-- UX (`ios/Braive/HeadsetHUD.swift`): the planning headset cue now shows the
-  current backend stage (excerpted) instead of only rotating tips, so asking /
-  listening / processing state is legible in the viewer. Phone-side planning
-  already shows the same stage text.
-- Live generation (bounded `scripts/live-generation.mjs`, escalated sandbox):
-  run 1 passed author (27.6 s, $0.015) and editor (17.6 s, $0.016), then the
-  harness's own $1.00 reservation cap blocked the Wonder builder
-  ("1.066 USD reserved") — a test-harness limit, not a product failure. Run 2
-  with the cap temporarily raised reached the builder ($0.354 settled); its
-  scene failed on three repairable issues (anchor fit, relation priority,
-  conversation target), the single construction repair engaged, and the
-  harness's 125 s overall deadline stopped the run mid-repair. End-to-end
-  success is therefore still unproven. Session spend: $1.52 including one
-  $1.104 unsettled repair reservation retained per project rules; ledger
-  synced back to the main checkout (22 entries, $3.7245 charged, $46.28 of
-  $50 remaining). No further live runs were made: each retry costs real
-  credit and the 125 s harness deadline, not the product, is the blocker.
-- Complete journey checks (readiness blackout, both landscape orientations,
-  voice, reveal, STOP/resume, persistence, adapted repeat) and actual-renderer
-  before/after captures remain unrun: this environment has no Swift toolchain,
-  simulator or device, and native edits above still need that pass. On device,
-  use the existing DEBUG audits (`PreflightAudit`, `StageAudit`,
-  `--render-scenario-review`) for before/after captures.
+## Verification status
 
-## November 4 continuation 2 (containment semantics, lobby, UX, live attempts)
+- Backend: full suite passing (145/145: `npm --prefix backend test`),
+  `tsc --noEmit` clean. New regression coverage: island
+  containment/placement, rotated-asset diagnostics, dangling anchors,
+  planning-vs-construction repair allocation, doorway/transformed/relative
+  routes.
+- Native compilation: verified on Windows via Docker xtool
+  (`xtool dev build`, Swift 6.4.1 + Darwin SDK 27.1): "Build complete!",
+  `xtool/Braive.app` produced, after both the merged UX work and this
+  branch's Swift edits. One known benign warning was fixed (feedback task
+  capture).
+- Not available here: simulator/device playback, stereo renderer captures,
+  and physical-headset checks (the paired iPhone is locked/asleep and Mac
+  mini access is denied from this shell). Native preflight/playback of a
+  generated scene remains a device task: install `xtool/Braive.app`, run
+  the DEBUG PreflightAudit/StageAudit/`--render-scenario-review` paths.
+  These are unverified, not passed.
 
-Branch `codex/wonder-ux-visual-revision` from integrated main (`9bbdcbd`).
-
-- Construction: `inside` (place-then-check, legacy behavior unchanged,
-  including zero-offset placement at a target center) is now distinct from
-  the new `within` kind (containment-only at the authored position, never
-  moves). Added to the OpenAPI enum, TS contracts, compiler, authoring
-  prompts and builder instructions; offsets are documented as intended world
-  position minus the resolved target origin/zone center. Zone failures name
-  the responsible relation and resolved origin. The attached island scene
-  reproduces the four `zone_fit` failures before the fix; Henry's offset
-  `[0,-1.9,-12]` and offshore waypoint `[0, 0.35, -20.5]` pass on the real
-  attached scene, as does the `within` variant. Regression tests also cover
-  doorway openings, scaled-parent geometry and relative routes. One partner
-  fixture that routed through a table edge was moved aside (assertions
-  unchanged); it was genuinely obstructed under native semantics too.
-- Lobby (`World.lobby()`): deterministic composed clearing — foreground
-  tufts, five clustered tree groups with undergrowth, a background tree
-  line, grounded rocks, a clear participant area and forward corridor —
-  sharing the generated-scene procedural sky, fog, lighting environment and
-  posterized style; its sun casts shadows. No paid call; blackout/reveal
-  behavior untouched.
-- UX: flat solid setup scrim/panel (no gradient/glass), connection readiness
-  always visible, discoverable "Add details" phone action during generation,
-  headset error cue excerpting what actually happened. Automatic progression,
-  STOP/pause, ratings, reflection/feedback, history/export and repeats are
-  unchanged in behavior.
-- Harness: live-generation deadline 125 s → 480 s (inside the product's
-  ten-minute ceiling) and reservation cap $1 → $3; request limit stays 5.
-- Live attempts (fresh synthetic library scenario, 4 model calls each):
-  run 1 failed final validation on one genuine 7 cm window/zone overflow
-  after its repair, with the new relation diagnostic in the message;
-  run 2 used the new `within` kind and was correctly rejected for oversized
-  windows authored outside the zone. Both are legitimate rejections with
-  actionable feedback, not compiler defects; end-to-end success is still
-  not demonstrated. Settled live spend this continuation: about $1.55.
-  Ledger (synced to the main checkout): 30 entries, $5.27 charged of $50,
-  $44.73 remaining, including the retained $1.104 unsettled reservation.
-- Backend suite: 139/139 passing, typecheck clean. Native compilation,
-  simulator/device journey checks and renderer captures remain unrun (no
-  Swift toolchain, simulator or device in this environment).
-
-## Verification
-
-- Backend: `tsc --noEmit` clean; full suite 127/127 passing (123 baseline plus
-  4 new tests), including the two server-boot tests that need an escalated
-  sandbox to bind a local port.
-- Not run: Swift compilation, simulator and physical-device checks (no Swift
-  toolchain or device in this environment), live Meta generation (no provider
-  spend was authorized for this session; the `$50` ledger in this checkout
-  shows $2.20 settled and was preserved untouched), stereo/visual review, and
-  performance/memory measurement. Native edits were kept conservative and
-  reviewed as diffs; they need the usual simulator + iPhone pass before demo.
-
-## Running the updated product
-
-Backend checks (no provider calls):
+## Running
 
 ```sh
 npm --prefix backend run check
 npm --prefix backend test
+node scripts/live-generation.mjs            # BRAIVE_LIVE_SCENARIO=library|swim
+node scripts/start-phone-test.mjs           # live phone testing (test mode)
 ```
-
-Live phone testing still uses `node scripts/start-phone-test.mjs` under the
-existing cumulative approval; ordinary launches keep Meta spending disabled.
-
-## Remaining limitations
-
-- Backend route clearance uses asset bounding boxes, so a concave asset whose
-  bounds block a route the mesh would allow can still reach native preflight;
-  it now fails there with the blocking node named, and the device repair
-  receives that name.
-- Relative viewer routes are checked at the initial viewpoint with identity
-  heading on the backend; native heading-relative checks remain authoritative.
-- The construction repair is still shared across planning stages; if planning
-  consumes it, construction failures surface without a retry. Separating those
-  budgets needs a product decision on cost.

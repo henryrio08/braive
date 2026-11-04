@@ -17,6 +17,15 @@ export function constructionRequirements(plan:SessionPlan):ConstructionRequireme
  return [...new Map(requirements.map(r=>[r.id,r])).values()];
 }
 
+/** Traceable authored-vs-compiled geometry for repair feedback on assets. */
+export function describeAuthored(node:SceneNode):string {
+ if(node.geometry.kind!=='asset')return '';
+ try {
+  const rest=geometryBounds(node);
+  return ` (asset ${node.geometry.asset_id} rest bounds ${JSON.stringify(rest)}, authored rotation ${JSON.stringify(node.rotation_radians)}, scale ${JSON.stringify(node.scale)}; a 90-degree yaw swaps its horizontal extents)`;
+ } catch { return ''; }
+}
+
 export function geometryBounds(node:SceneNode):Bounds {
  const g=node.geometry;
  if(g.kind==='asset'){
@@ -246,7 +255,7 @@ export function compileConstruction(plan:SessionPlan,source:SceneSpec):SceneSpec
    // Containment-only: verify the authored position, never move the subject.
    const box=zone?{min:zone.center.map((v,i)=>v-zone.size[i]/2) as Vec3,max:zone.center.map((v,i)=>v+zone.size[i]/2) as Vec3}:worldBounds(relation.target_id);
    const available={min:box.min.map(v=>v+relation.clearance) as Vec3,max:box.max.map(v=>v-relation.clearance) as Vec3};
-   if(!contains(available,worldBounds(n.id),relation.tolerance))fail(at,'fit',`${n.id} bounds ${JSON.stringify(worldBounds(n.id))} is not within ${relation.target_id} usable bounds ${JSON.stringify(available)} at its authored position (within checks containment only; nothing was moved). Fix the authored position, or use inside with offset = intended world position minus the target origin/zone center to place it.`,relation.required);
+   if(!contains(available,worldBounds(n.id),relation.tolerance))fail(at,'fit',`${n.id} bounds ${JSON.stringify(worldBounds(n.id))} is not within ${relation.target_id} usable bounds ${JSON.stringify(available)} at its authored position (within checks containment only; nothing was moved)${describeAuthored(n)}. Fix the authored position or rotation, or use inside with offset = intended world position minus the target origin/zone center to place it.`,relation.required);
   }else if(['near','attached_to','inside'].includes(relation.kind)){
    move(n.id,destination);
    placedBy.set(n.id,relation.id);
@@ -254,7 +263,7 @@ export function compileConstruction(plan:SessionPlan,source:SceneSpec):SceneSpec
    if(relation.kind==='inside'){
     const box=zone?{min:zone.center.map((v,i)=>v-zone.size[i]/2) as Vec3,max:zone.center.map((v,i)=>v+zone.size[i]/2) as Vec3}:worldBounds(relation.target_id);
     const available={min:box.min.map(v=>v+relation.clearance) as Vec3,max:box.max.map(v=>v-relation.clearance) as Vec3};
-    if(!contains(available,worldBounds(n.id),relation.tolerance))fail(at,'fit',`${n.id} bounds ${JSON.stringify(worldBounds(n.id))} cannot fit ${relation.target_id} usable bounds ${JSON.stringify(available)} at tolerance ${relation.tolerance}m`,relation.required);
+    if(!contains(available,worldBounds(n.id),relation.tolerance))fail(at,'fit',`${n.id} bounds ${JSON.stringify(worldBounds(n.id))} cannot fit ${relation.target_id} usable bounds ${JSON.stringify(available)} at tolerance ${relation.tolerance}m${describeAuthored(n)}`,relation.required);
    }
   }
   visiting.delete(relation.id);done.add(relation.id);
@@ -282,7 +291,13 @@ export function compileConstruction(plan:SessionPlan,source:SceneSpec):SceneSpec
   const path=paths.get(route.path_id);
   if(!path||route.stage_ids.some(id=>!stages.has(id))||route.requirement_ids.some(id=>!expected.has(id))){fail('/construction_plan/routes','reference','Route references an unknown path, stage or requirement');continue;}
   if((route.from_anchor_id||route.to_anchor_id)&&path.coordinate_space==='relative'){fail('/construction_plan/routes','frame','Anchored routes require world coordinates; relative routes are checked against the current heading on the phone');continue;}
-  if(route.from_anchor_id&&!anchors.has(route.from_anchor_id)||route.to_anchor_id&&!anchors.has(route.to_anchor_id)){fail('/construction_plan/routes','reference','Route anchor is missing');continue;}
+  // Anchor links are annotations on the authoritative trajectory (see the
+  // alignment check below). A dangling link is dropped with a warning rather
+  // than failing an otherwise valid route; endpoints never move.
+  for(const side of ['from_anchor_id','to_anchor_id'] as const){
+   const id=route[side];
+   if(id&&!anchors.has(id)){fail('/construction_plan/routes/'+path.id+'/'+side,'anchor_alignment',`Route ${path.id} ${side} names missing anchor ${id}; the annotation was dropped and the authored trajectory preserved.`,false);delete route[side];}
+  }
   const viewer=scene.scenario?.steps.some(s=>s.start_operations.some(o=>o.type==='move_viewer'&&o.path_id===path.id));
   // These optional links describe the route; they must not relocate its actual
   // authored trajectory or break continuity between adjacent motion stages.
@@ -373,8 +388,10 @@ export function compileConstruction(plan:SessionPlan,source:SceneSpec):SceneSpec
    if(!contains(measured,bounds,0.2)){
     const parent=nodes.get(id)?.parent_id;
     const via=placedBy.get(id)?` Placed by relation ${placedBy.get(id)} at resolved origin ${JSON.stringify(point(frames(id),[0,0,0]))}.`:'';
+    const overflow=[0,1,2].map(axis=>{const low=measured.min[axis]-bounds.min[axis],high=bounds.max[axis]-measured.max[axis];return (low>0?` ${'xyz'[axis]} low by ${low.toFixed(2)}m`:'')+(high>0?` ${'xyz'[axis]} high by ${high.toFixed(2)}m`:'');}).join('').trim();
+    const overflowText=overflow?` Overflow:${overflow}.`:'';
     const frame=parent?` ${id} is a child of ${parent}, whose scale ${JSON.stringify(nodes.get(parent)?.scale)} also scales its geometry and local offset.`:'';
-    fail(`/nodes/${nodeIndices.get(id)}`,'zone_fit',`${id} world bounds ${JSON.stringify(bounds)} exceed zone ${zone.id} ${JSON.stringify(volume)} (0.2m boundary allowance).${frame}${via} Use independent world roots for static objects, or correct local transforms for genuine children.`,requiredGeometry.has(id));
+    fail(`/nodes/${nodeIndices.get(id)}`,'zone_fit',`${id} world bounds ${JSON.stringify(bounds)} exceed zone ${zone.id} ${JSON.stringify(volume)} (0.2m boundary allowance).${frame}${via}${overflowText}${describeAuthored(nodes.get(id)!)} Use independent world roots for static objects, or correct local transforms for genuine children.`,requiredGeometry.has(id));
    }
   }
  }

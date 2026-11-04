@@ -297,6 +297,30 @@ test('routes pass through genuine openings and respect transformed and relative 
  assert.throws(()=>compileConstruction(relative.plan,relative.scene),(e:any)=>e.issues.some((i:any)=>i.rule==='route_clearance'&&i.message.includes('wall')));
 });
 
+test('a dangling route anchor annotation is dropped with a warning and the trajectory is preserved',()=>{
+ const {plan,scene}=routeSetup('walk',false);
+ scene.motion_paths![0].points.forEach(p=>{p.position[0]=-3;});
+ scene.construction_plan!.routes[0].from_anchor_id='missing_anchor';
+ const compiled=compileConstruction(plan,scene);
+ assert.equal(compiled.construction_plan!.routes[0].from_anchor_id,undefined);
+ assert.ok(compiled.construction_report!.warnings.some(i=>i.rule==='anchor_alignment'&&i.message.includes('missing_anchor')));
+ assert.deepEqual(compiled.motion_paths![0].points,scene.motion_paths![0].points);
+});
+
+test('zone failures on rotated assets report rest and transformed bounds for repair',()=>{
+ const {plan,scene}=setup();
+ const win:SceneNode={id:'window_east',parent_id:null,role:'environment',geometry:{kind:'asset',asset_id:'architecture.window.building_wall_window_wide_square_detailed_01'},position:[5.35,0.4,-3.2],rotation_radians:[0,-Math.PI/2,0],scale:[1,1,1],material:{color:'#aabbcc',roughness:0.8},animation:'none',description:'window'} as unknown as SceneNode;
+ scene.nodes.push(win);
+ scene.construction_plan!.zones[0].center=[0,1.5,0];scene.construction_plan!.zones[0].size=[11,4,10];
+ scene.construction_plan!.relations.push({id:'rel_window_zone',kind:'within',subject_id:'window_east',target_id:'room',offset:[0,0,0],clearance:0.2,tolerance:0.2,required:true});
+ assert.throws(()=>compileConstruction(plan,scene),(e:any)=>e.issues.some((i:any)=>(i.rule==='fit'||i.rule==='zone_fit')&&i.message.includes('window_east')&&i.message.includes('rest bounds')&&i.message.includes('architecture.window')));
+ const unrotated=setup();
+ const win2=structuredClone(win);win2.rotation_radians=[0,0,0];win2.position=[9.8,0.4,-3.2];
+ unrotated.scene.nodes.push(win2);
+ unrotated.scene.construction_plan!.zones[0].size=[30,4,20];
+ assert.ok(compileConstruction(unrotated.plan,unrotated.scene).construction_report);
+});
+
 test('open-air zones have no virtual ceiling, but enclosures and explicit containment still do',()=>{
  const {plan,scene}=setup();scene.nodes[1].geometry={kind:'box',size:[2,8,1]};scene.nodes[1].position=[1,4,-3];
  const cp=scene.construction_plan!;cp.relations=[];cp.zones[0].kind='outdoor';

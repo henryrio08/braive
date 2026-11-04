@@ -56,7 +56,7 @@ async function modelAttempt(schema:string,input:unknown,instructions:string,sign
  try {
  const response=await fetch(`${process.env.META_BASE_URL ?? 'https://api.meta.ai/v1'}/chat/completions`,{
   method:'POST',signal,headers:{Authorization:`Bearer ${process.env.MODEL_API_KEY}`,'Content-Type':'application/json'},
-  body:JSON.stringify({model:modelID,messages,response_format:responseFormat,reasoning_effort:role==='dialogue'?'minimal':'low',max_completion_tokens:outputLimit})
+  body:JSON.stringify({model:modelID,messages,response_format:responseFormat,reasoning_effort:role==='dialogue'?'minimal':role==='scene_builder'?(process.env.BRAIVE_BUILDER_REASONING??'low'):'low',max_completion_tokens:outputLimit})
  });
  if(!response.ok){
   if([502,503,504].includes(response.status))throw new TemporaryProviderError(response.status);
