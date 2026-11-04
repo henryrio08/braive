@@ -7,7 +7,7 @@ export type RepairKind='planning'|'construction'|'device';
 const repairSlot=(kind:RepairKind)=>kind==='planning'?'planningRepairUsed':kind==='construction'?'constructionRepairUsed':'deviceRepairUsed';
 export function claimRepair(attempt:GenerationAttempt|undefined,kind:RepairKind,now=Date.now()):boolean {
  const slot=repairSlot(kind);
- if(!attempt||now>=attempt.deadline||attempt[slot])return false;
+ if(!attempt||now>=attempt.deadline||attempt.planningRepairUsed||attempt.constructionRepairUsed||attempt.deviceRepairUsed)return false;
  attempt[slot]=true;return true;
 }
 
@@ -17,7 +17,7 @@ export function repairBlock(attempt:GenerationAttempt|undefined,kind:RepairKind,
  if(!attempt)return 'missing';
  if(now>=attempt.deadline&&(attempt.deadlineCap===undefined||now>=attempt.deadlineCap))return 'deadline';
  const slot=repairSlot(kind);
- return attempt[slot]?'used':undefined;
+ return attempt.planningRepairUsed||attempt.constructionRepairUsed||attempt.deviceRepairUsed?'used':undefined;
 }
 /** A provider or transport failure produced no candidate; it must not consume the repair. */
 export function releaseRepair(attempt:GenerationAttempt|undefined,kind:RepairKind):void {

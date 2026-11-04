@@ -1,10 +1,11 @@
 import {createHash} from 'node:crypto';
-import {assetManifest} from './assets.js';
+import {assetManifest,assetIDs,allTextureIDs} from './assets.js';
 import {AppError,document,sceneIssues} from './contracts.js';
 import type {SceneSpec,SceneNode,SessionPlan,ValidationIssue,ConstructionPlan,AudioPlan} from '../../docs/handoff/contracts.js';
 import {identity,multiply,inverse,point,transform,transformedBounds,contains,distance,type Vec3,type Bounds} from './spatial-math.js';
 import {classifyVisual,evaluateAcceptance,zoneSeverity,visualStrictness,type ClassifiedIssue} from './acceptance.js';
 import {normalizePathSamples} from './scene-references.js';
+import {finishedRoom} from './finished-room.js';
 
 export type ConstructionRequirement={id:string;kind:'task'|'cast'|'prop'|'stage'|'motion'|'boundary'|'outcome';target:string;description:string};
 export function constructionRequirements(plan:SessionPlan):ConstructionRequirement[]{
@@ -146,10 +147,10 @@ export function deterministicCorrections(source:SceneSpec):{scene:SceneSpec;corr
    node.role='environment';
    corrections.push(`Classified unnamed procedural scenery ${node.id} as environment; geometry and collision are unchanged.`);
   }
-  // The renderer registers no texture assets. When the authored material
+  // Unregistered texture references are unusable; registered textures are preserved. When the authored material
   // already carries a color, that color is the defined fallback: retain it
   // and drop the unusable optional reference instead of failing the scene.
-  if(node.material.texture_asset_id&&node.material.color){
+  if(node.material.texture_asset_id&&!allTextureIDs().has(node.material.texture_asset_id)&&node.material.color){
    corrections.push(`Removed unsupported texture reference ${node.material.texture_asset_id} from ${node.id}; retained its authored material color ${node.material.color}.`);
    delete node.material.texture_asset_id;
   }
@@ -264,6 +265,9 @@ export function deterministicCorrections(source:SceneSpec):{scene:SceneSpec;corr
   for(const relation of cp.relations??[]){
    const declared=new Map((cp.anchors??[]).map(a=>[a.id,a]));
    if(['within','inside'].includes(relation.kind)){
+    if(relation.anchor_id&&(nodeById.has(relation.target_id)||cp.zones.some(z=>z.id===relation.target_id))){
+     delete relation.anchor_id;corrections.push(`Removed point-anchor annotation from volume relation ${relation.id}; the actual node/zone volume remains authoritative.`);
+    }
     if(relation.anchor_id&&!declared.has(relation.anchor_id)){delete relation.anchor_id;corrections.push(`Dropped undeclared anchor reference from containment relation ${relation.id}; containment targets the zone/node volume.`);}
    }
    if(relation.kind!=='on'){
@@ -350,9 +354,101 @@ export function compileScene(plan:SessionPlan,source:SceneSpec,audio:AudioPlan):
 
 /** Lower the authored spatial relationships into the existing native scene.
  * IDs, cast, stages, intensity and duration are never regenerated here. */
+function mulberry32(seed:number){let a=seed>>>0;return()=>{a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+
+/** Lower bounded assembly macros into ordinary nodes. Idempotent by
+ * preservation: a complete prior expansion (recorded by its
+ * `${id}_assembly` membership, with every member still present) is kept
+ * exactly as-is, so recompilation after compilation has grounded the root
+ * cannot drift the generated local positions. Only macros without a
+ * complete prior expansion are (re)generated. */
+export function expandAssemblyMacros(scene:SceneSpec):void {
+ const cp=scene.construction_plan;if(!cp?.macros?.length)return;
+ const preserved=new Set<string>();
+ for(const macro of cp.macros){
+  const prior=cp.assemblies.find(a=>a.id===`${macro.id}_assembly`);
+  if(!prior)continue;
+  const nodeIDs=new Set(scene.nodes.map(n=>n.id));
+  if(prior.member_node_ids.every(id=>nodeIDs.has(id))){preserved.add(macro.id);continue;}
+  const drop=new Set(prior.member_node_ids);scene.nodes=scene.nodes.filter(n=>!drop.has(n.id));cp.assemblies=cp.assemblies.filter(a=>a.id!==prior.id);
+ }
+ const byID=new Map(scene.nodes.map(n=>[n.id,n]));
+ const fail=(message:string)=>{throw new AppError('INVALID_MODEL_OUTPUT','Assembly macro requires repair',[{path:'/construction_plan/macros',rule:'macro',message}]);};
+ for(const macro of cp.macros){
+  if(preserved.has(macro.id))continue;
+  const root=byID.get(macro.root_node_id);if(!root){fail(`Macro ${macro.id} root ${macro.root_node_id} is missing`);throw new Error('unreachable');}
+  if(root.rotation_radians.some(v=>Math.abs(v)>1e-6)||root.scale.some(v=>Math.abs(v-1)>1e-6))fail(`Macro ${macro.id} root must be unrotated and unit-scale so generated local positions stay world-aligned`);
+  const local=(world:Vec3):Vec3=>world.map((v,i)=>v-root.position[i]) as Vec3;
+  const add=(suffix:string,geometry:SceneNode['geometry'],world:Vec3,yaw=0)=>{
+   const node:SceneNode={id:`${macro.id}_${suffix}`,parent_id:root.id,role:'environment',geometry,position:local(world),rotation_radians:[0,yaw,0],scale:[1,1,1],material:{color:'#8a7a68',roughness:0.9},animation:'none',description:`${macro.kind} generated by ${macro.id}`,collision_role:'solid',support_node_id:null} as SceneNode;
+   if(byID.has(node.id))fail(`Macro ${macro.id} generated duplicate node ${node.id}`);
+   scene.nodes.push(node);byID.set(node.id,node);return node.id;
+  };
+  const members:string[]=[];
+  const facing=(assetID:string,yaw:number)=>yaw+(assetManifest.find(a=>a.id===assetID)?.semantic_front_yaw_radians??0);
+  if(macro.kind==='room_shell'){
+   const parts=finishedRoom(macro);
+   root.geometry={kind:'box',size:[macro.size[0],.1,macro.size[2]]};root.position=[macro.center[0],macro.center[1]-.05,macro.center[2]];
+   root.material=structuredClone(macro.floor_material);root.collision_role='solid';root.description='Finished room floor';
+   if(!cp.assemblies.some(a=>a.member_node_ids.includes(root.id)))members.push(root.id);
+   for(const part of parts){const id=add(part.suffix,{kind:'box',size:part.size},part.position);const node=byID.get(id)!;node.material=part.material;node.collision_role=part.collision_role;members.push(id);}
+  }else if(macro.kind==='seating_rows'){
+   if(!assetIDs.has(macro.chair_asset_id))fail(`Macro ${macro.id} chair asset ${macro.chair_asset_id} is not registered`);
+   if(macro.character_node_ids&&macro.character_node_ids.length>macro.rows*macro.seats_per_row)fail('Every bound character needs an actual seat.');
+   for(let r=0;r<macro.rows;r++)for(let s=0;s<macro.seats_per_row;s++){
+    const x=macro.origin[0]+(s-(macro.seats_per_row-1)/2)*macro.seat_spacing;
+    const position:Vec3=[x,macro.origin[1],macro.origin[2]+r*macro.row_spacing];
+    const seatID=add(`seat_${r}_${s}`,{kind:'asset',asset_id:macro.chair_asset_id},position,facing(macro.chair_asset_id,macro.facing_yaw));members.push(seatID);
+    const actorID=macro.character_node_ids?.[r*macro.seats_per_row+s];
+    if(actorID){const actor=byID.get(actorID);if(!actor||actor.role!=='character'||actor.geometry.kind!=='asset')fail('Seating must bind actual approved character nodes.');
+     actor!.parent_id=root.id;actor!.position=local(position);actor!.rotation_radians=[0,macro.facing_yaw,0];actor!.animation='sit';actor!.support_node_id=seatID;
+     if(!cp.assemblies.some(a=>a.member_node_ids.includes(actorID)))cp.assemblies.push({id:macro.id+'_cast_'+actorID,root_node_id:actorID,member_node_ids:[actorID],zone_id:macro.zone_id,requirement_ids:[]});
+    }
+   }
+  }else if(macro.kind==='enclosure'){
+   const [cx,cy,cz]=macro.center,[w,h,d]=[macro.size[0],macro.wall_height,macro.size[2]],wallT=0.15,gap=Math.min(macro.opening_width,w-0.3);
+   const seg=(w-gap)/2;
+   members.push(add('wall_north',{kind:'box',size:[w,h,wallT]},[cx,cy+h/2,cz-d/2]));
+   members.push(add('wall_east',{kind:'box',size:[wallT,h,d]},[cx+w/2,cy+h/2,cz]));
+   members.push(add('wall_west',{kind:'box',size:[wallT,h,d]},[cx-w/2,cy+h/2,cz]));
+   if(seg>0.05){members.push(add('wall_south_a',{kind:'box',size:[seg,h,wallT]},[cx-(gap/2+seg/2),cy+h/2,cz+d/2]));members.push(add('wall_south_b',{kind:'box',size:[seg,h,wallT]},[cx+(gap/2+seg/2),cy+h/2,cz+d/2]));}
+  }else if(macro.kind==='scatter'){
+   if(!assetIDs.has(macro.asset_id))fail(`Macro ${macro.id} asset ${macro.asset_id} is not registered`);
+   const rand=mulberry32((cp.seed+macro.seed_offset+[...macro.id].reduce((n,c)=>n+c.charCodeAt(0),0))>>>0);
+   const placed:Vec3[]=[];let attempts=0;
+   while(placed.length<macro.count&&attempts<macro.count*40){attempts++;
+    const candidate:Vec3=[macro.area_center[0]+(rand()-0.5)*macro.area_size[0],macro.area_center[1],macro.area_center[2]+(rand()-0.5)*macro.area_size[1]];
+    if(placed.some(p=>Math.hypot(p[0]-candidate[0],p[2]-candidate[2])<macro.min_spacing))continue;
+    placed.push(candidate);
+   }
+   placed.forEach((pos,i)=>members.push(add(`item_${i}`,{kind:'asset',asset_id:macro.asset_id},pos,rand()*Math.PI*2)));
+  }else if(macro.kind==='platform_steps'){
+   if(!Number.isInteger(macro.steps)||macro.steps<1||macro.steps>12||!(macro.step_height>=0.05&&macro.step_height<=0.5)||!(macro.step_depth>=0.2&&macro.step_depth<=1)||!(macro.width>=0.5&&macro.width<=6)||!(macro.platform_depth>=0.5&&macro.platform_depth<=6))fail(`Macro ${macro.id} platform_steps fields are out of bounds (steps 1..12, step_height 0.05..0.5, step_depth 0.2..1, width 0.5..6, platform_depth 0.5..6)`);
+   // Convention: origin is the base front-center (front edge of step_0 at origin.z, floor at origin.y). Step i spans y [origin.y+i*step_height, origin.y+(i+1)*step_height] (box height step_height, centered between) and its center is at z=origin.z-(i+0.5)*step_depth, ascending away from the front (-Z). platform_top (0.15 thick) sits behind the last step at center z=origin.z-steps*step_depth-platform_depth/2 with its top exactly at origin.y+steps*step_height, flush with the last step top, so its center y is 0.075 below that.
+   for(let i=0;i<macro.steps;i++){
+    members.push(add(`step_${i}`,{kind:'box',size:[macro.width,macro.step_height,macro.step_depth]},[macro.origin[0],macro.origin[1]+(i+0.5)*macro.step_height,macro.origin[2]-(i+0.5)*macro.step_depth]));
+   }
+   members.push(add('platform_top',{kind:'box',size:[macro.width,0.15,macro.platform_depth]},[macro.origin[0],macro.origin[1]+macro.steps*macro.step_height-0.075,macro.origin[2]-macro.steps*macro.step_depth-macro.platform_depth/2]));
+  }else if(macro.kind==='functional_group'){
+   if(!assetIDs.has(macro.chair_asset_id))fail(`Macro ${macro.id} chair asset ${macro.chair_asset_id} is not registered`);
+   if(macro.include_desk&&macro.desk_asset_id&&!assetIDs.has(macro.desk_asset_id))fail(`Macro ${macro.id} desk asset ${macro.desk_asset_id} is not registered`);
+   // Facing direction uses the compiler yaw convention (yaw=atan2(-dx,-dz)), so forward is [-sin(yaw),0,-cos(yaw)]. Chairs sit on opposite sides of the desk along that axis and face each other; cast remains authored elsewhere.
+   const dir:Vec3=[-Math.sin(macro.facing_yaw),0,-Math.cos(macro.facing_yaw)];
+   if(macro.include_desk){
+    if(macro.desk_asset_id)members.push(add('desk',{kind:'asset',asset_id:macro.desk_asset_id},[macro.origin[0],macro.origin[1],macro.origin[2]],macro.facing_yaw));
+    else members.push(add('desk',{kind:'box',size:[1.4,0.75,0.7]},[macro.origin[0],macro.origin[1]+0.375,macro.origin[2]],macro.facing_yaw));
+   }
+   members.push(add('chair_0',{kind:'asset',asset_id:macro.chair_asset_id},[macro.origin[0]+dir[0]*0.85,macro.origin[1],macro.origin[2]+dir[2]*0.85],facing(macro.chair_asset_id,macro.facing_yaw+Math.PI)));
+   members.push(add('chair_1',{kind:'asset',asset_id:macro.chair_asset_id},[macro.origin[0]-dir[0]*0.85,macro.origin[1],macro.origin[2]-dir[2]*0.85],facing(macro.chair_asset_id,macro.facing_yaw)));
+  }
+  cp.assemblies.push({id:`${macro.id}_assembly`,root_node_id:macro.root_node_id,member_node_ids:members,zone_id:macro.zone_id,requirement_ids:[]});
+ }
+}
+
 export function compileConstruction(plan:SessionPlan,source:SceneSpec):SceneSpec {
  if(!source.construction_plan)return source; // Saved scenes predate this compiler.
  const scene=constructionSource(plan,source),cp=scene.construction_plan!,issues:ValidationIssue[]=[],warnings:ValidationIssue[]=[];
+ expandAssemblyMacros(scene);
  // These annotations describe construction quality, not executable scene data.
  // The approved plan and actual route audits remain authoritative.
  const advisoryRules=new Set(['priority','coverage','bounds','support','fit','zone_fit','placement','orientation','clearance','anchor_alignment']);
@@ -455,7 +551,8 @@ export function compileConstruction(plan:SessionPlan,source:SceneSpec):SceneSpec
  for(const relation of relations.values()){
   const at='/construction_plan/relations/'+relation.id;
   const targetAnchor=anchors.get(relation.target_id),targetNodeID=targetAnchor?.node_id??relation.target_id;
-  if(!nodes.has(relation.subject_id)||(!nodes.has(targetNodeID)&&!zones.has(relation.target_id)&&relation.target_id!=='viewer'&&!viewpointTarget(relation)))fail(at,'reference','Relation subject or target is missing');
+  const pointSubject=relation.kind==='near'&&viewpoints.has(relation.subject_id);
+  if(!nodes.has(relation.subject_id)&&!pointSubject||(!nodes.has(targetNodeID)&&!zones.has(relation.target_id)&&relation.target_id!=='viewer'&&!viewpointTarget(relation)))fail(at,'reference','Relation subject or target is missing');
   if(relation.anchor_id&&anchors.get(relation.anchor_id)?.node_id!==targetNodeID)fail(at,'reference','Target anchor must belong to its target node');
   if(targetAnchor&&relation.anchor_id&&targetAnchor.id!==relation.anchor_id)fail(at,'reference','A relation cannot select two different target anchors');
   if(relation.subject_anchor_id&&anchors.get(relation.subject_anchor_id)?.node_id!==relation.subject_id)fail(at,'reference','Contact anchor must belong to its subject');
@@ -474,10 +571,13 @@ export function compileConstruction(plan:SessionPlan,source:SceneSpec):SceneSpec
   for(const dependency of relations.values())if(dependency.subject_id===targetNodeID&&!['clear_of','faces'].includes(dependency.kind))apply(dependency);
   const n=nodes.get(relation.subject_id),target=nodes.get(targetNodeID),zone=zones.get(relation.target_id),viewpoint=viewpointTarget(relation);
   const at='/construction_plan/relations/'+relation.id;
-  if(!n||(!target&&!zone&&!viewpoint&&relation.target_id!=='viewer')){fail(at,'reference','Relation subject or target is missing',relation.required);visiting.delete(relation.id);done.add(relation.id);return;}
+  const pointSubject=relation.kind==='near'?scene.viewpoints.find(v=>v.id===relation.subject_id):undefined;
+  if(!n&&!pointSubject||(!target&&!zone&&!viewpoint&&relation.target_id!=='viewer')){fail(at,'reference','Relation subject or target is missing',relation.required);visiting.delete(relation.id);done.add(relation.id);return;}
   let center:Vec3=targetAnchor?anchorPoint(targetAnchor.id):zone?.center??viewpoint??point(frames(targetNodeID),[0,0,0]);
   if(relation.anchor_id){const anchor=anchors.get(relation.anchor_id);if(!anchor||anchor.node_id!==targetNodeID){fail(at,'reference','Anchor must belong to the relation target',relation.required);visiting.delete(relation.id);done.add(relation.id);return;}center=anchorPoint(anchor.id);}
   const destination=center.map((v,i)=>v+relation.offset[i]) as Vec3;
+  if(pointSubject){pointSubject.position=destination;viewpoints.set(pointSubject.id,destination);visiting.delete(relation.id);done.add(relation.id);return;}
+  if(!n)throw new AppError('INVALID_MODEL_OUTPUT','The relation has no executable subject');
   if(relation.kind==='faces'){
    const localTarget=n.parent_id?point(inverse(frames(n.parent_id)),destination):destination;
    n.rotation_radians[1]=Math.atan2(-(localTarget[0]-n.position[0]),-(localTarget[2]-n.position[2]));

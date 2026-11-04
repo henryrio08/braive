@@ -122,20 +122,27 @@ struct HeadsetHUD: View {
       return HeadsetCopy(title: "Your practice, reflected.", detail: message == "Reviewing your session…" ? loadingTip : record["feedback"].object != nil ? "Listen to your feedback." : "Listen to your session update.", hint: "CONTINUE to move on")
     case .saving: return HeadsetCopy(title: "Saving your practice…", detail: loadingTip)
     case .repeatPrompt: return HeadsetCopy(title: "Ready for another try?", detail: adapting ? loadingTip : "Build on what you just practiced.", command: adapting ? "" : "Say YES or NO")
+    case .repeatPreparation: return HeadsetCopy(title:"Your next try, in the same place.",detail:HeadsetCopy.excerpt(message),command:"HEY BUILDER to change it · START when ready",hint:"STOP to cancel")
     case .error: return HeadsetCopy(title: "Let’s take a moment.", detail: HeadsetCopy.excerpt(message), command: pendingPostSave == nil ? "RETRY to try again · REVISE to change details" : "Say RETRY to save again", hint: pendingPostSave == nil ? "CANCEL to return to the forest" : "Your practice is kept while you retry")
     }
   }
   var pausedHeadsetCopy: HeadsetCopy {
+    if pauses.contains("user_stop") {
+      if isPostSession { return HeadsetCopy(title:"Return to the forest?",detail:phase == .reflection && !reflectionDraft.text.isEmpty ? "Your unfinished reflection will be discarded. Saved practice stays." : "Your saved practice stays.",command:"YES to return · NO to continue") }
+      return HeadsetCopy(title: "End this practice?", detail: pauses.contains("portrait") ? "Turn the phone sideways to resume." : "Your place is saved.", command: "Say YES to end · NO to continue")
+    }
     if pauses.contains("tracking_unavailable") {
       return HeadsetCopy(title: "Your practice is paused.", detail: "Head tracking is unavailable.", command: "Remove the viewer", hint: "Keep the app open or reopen it to restore tracking")
     }
     if pauses.contains("command_channel_unavailable") || pauses.contains("audio_interruption") {
       return HeadsetCopy(title: "Your place is saved.", detail: "Voice needs reconnecting.", command: "Remove the viewer", hint: "Hold the screen for phone controls")
     }
-    if pauses.contains("user_stop") {
-      return HeadsetCopy(title: "End this practice?", detail: pauses.contains("portrait") ? "Turn the phone sideways to resume." : "Your place is saved.", command: "Say YES to end · NO to continue")
+    if pauses.contains("builder_edit") {
+      return HeadsetCopy(title: "Your practice is paused.", detail: editPreparing ? "Preparing your change." : builderEditing ? "Describe your change, then say THAT'S ALL." : HeadsetCopy.excerpt(message),
+        command: editPreparing ? "CANCEL to keep the original · STOP to end" : "RESUME to continue · CANCEL to undo", hint: "HEY BUILDER for another change")
     }
     if pauses.contains("portrait") { return HeadsetCopy(title: "Take a moment.", command: "Turn the phone sideways to continue") }
+    if pauses.contains("recovery_resume") { return HeadsetCopy(title:"Your place is saved.",detail:"Ready to continue after the interruption?",command:"Say RESUME when ready") }
     return HeadsetCopy(title: "Your practice is paused.", detail: "Your place is saved.")
   }
 }

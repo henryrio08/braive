@@ -19,6 +19,7 @@ struct AssetEntry: Decodable {
   let normalization: Normalization
   let material_tint_names: [String]?
   let generation_enabled: Bool?
+  let semantic_front_yaw_radians: Float?
 }
 
 /// Only byte-preserved, CC0 manifest assets can enter the renderer. No procedural object fallback.
@@ -42,6 +43,7 @@ struct AssetEntry: Decodable {
   private static let poses = NSMapTable<SCNNode, RigPose>(
     keyOptions: .weakMemory, valueOptions: .strongMemory)
   private static var templates: [String: SCNNode] = [:]
+  private static var templateRecency: [String] = []
   private static var clips: [String: [String: SCNAnimation]] = [:]
   private static let postures = NSMapTable<SCNNode, NSString>(keyOptions: .weakMemory, valueOptions: .strongMemory)
   private static let activeClips = NSMapTable<SCNNode, NSString>(keyOptions: .weakMemory, valueOptions: .strongMemory)
@@ -123,6 +125,7 @@ struct AssetEntry: Decodable {
         case "run", "sprint": role = "run"
         case "sitting", "sit": role = "sit"
         case "wave", "interact", "emote-yes": role = "gesture"
+        case "gesture_seated": role = "gesture_seated"
         default: role = nil
         }
         if let role, registered[role] == nil || name == "idle_neutral" || name == "wave" {
@@ -133,6 +136,10 @@ struct AssetEntry: Decodable {
       templates[id] = placement
     }
     let instance = try clone(templates[id]!)
+    templateRecency.removeAll { $0 == id };templateRecency.append(id)
+    while templateRecency.count > 64 {
+      let expired = templateRecency.removeFirst();templates.removeValue(forKey:expired);clips.removeValue(forKey:expired)
+    }
     instanceIDs.setObject(id as NSString, forKey: instance)
     for (role, source) in clips[id] ?? [:] {
       let animation = source.copy() as! SCNAnimation
@@ -224,7 +231,7 @@ struct AssetEntry: Decodable {
     if behavior == "sit" { postures.setObject("sit", forKey: node) }
     if ["walk", "run", "swim"].contains(behavior) { postures.removeObject(forKey: node) }
     let seated = postures.object(forKey: node) == "sit"
-    let wanted = seated ? "sit" : ["listen", "speak"].contains(behavior) ? "idle" : behavior
+    let wanted = seated ? (behavior == "gesture" && node.animationPlayer(forKey:"braive_clip_gesture_seated") != nil ? "gesture_seated" : "sit") : ["listen", "speak"].contains(behavior) ? "idle" : behavior
     if node.animationKeys.contains(where: { $0.hasPrefix("braive_clip_") }) {
       let key = node.animationPlayer(forKey: "braive_clip_" + wanted) != nil ? "braive_clip_" + wanted : "braive_clip_idle"
       for name in node.animationKeys {
@@ -314,6 +321,7 @@ struct AssetEntry: Decodable {
     }
     bone.runAction(.repeatForever(movement), forKey: "braive_behavior")
   }
+  static func posture(_ node: SCNNode) -> String { postures.object(forKey:node) as String? ?? "stand" }
   static func auditAll() throws -> Int {
     let all = try entries
     for entry in all {

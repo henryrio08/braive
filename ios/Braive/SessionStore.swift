@@ -28,7 +28,7 @@ import Foundation
     try? rebuildCSV()
   }
   var recoverable: JSON? {
-    records.reversed().first { $0["outcome"].text == "interrupted" && $0["checkpoint"]["version"].value == 1 && $0["scene"].object != nil }
+    records.reversed().first { ($0["outcome"].text == "prepared" || $0["outcome"].text == "interrupted" && $0["checkpoint"]["version"].value == 1) && $0["scene"].object != nil }
   }
   func save(_ record: JSON, rebuild: Bool = true) throws {
     let id = record["session_id"].text
@@ -39,6 +39,14 @@ import Foundation
     records.append(record)
     records.sort { $0["started_at"].text < $1["started_at"].text }
     if rebuild { try rebuildCSV() }
+  }
+  func removeUnstartedAttempt(_ id: String) throws {
+    guard UUID(uuidString:id) != nil else { throw CocoaError(.fileWriteInvalidFileName) }
+    guard let record = records.first(where: { $0["session_id"].text == id }),
+      record["active_seconds"].value == 0,record["checkpoint"]["version"].number == nil, ["prepared","running","interrupted"].contains(record["outcome"].text) else { return }
+    let path = root.appendingPathComponent("Sessions/\(id).json")
+    if FileManager.default.fileExists(atPath:path.path) { try FileManager.default.removeItem(at:path) }
+    records.removeAll { $0["session_id"].text == id }; try rebuildCSV()
   }
   func reflection(_ text: String, topic: String, date: Date = Date()) throws -> JSON {
     let d = DateFormatter()
@@ -102,7 +110,7 @@ import Foundation
       let t = ["=", "+", "-", "@"].contains(String(trimmed.prefix(1))) ? "'" + s : s
       return "\"" + t.replacingOccurrences(of: "\"", with: "\"\"") + "\""
     }
-    let lines = records.map { r -> String in
+    let lines = records.filter { $0["outcome"].text != "prepared" }.map { r -> String in
       let vals: [String] = keys.map { k in
         let v: JSON =
           k == "started_at_utc"

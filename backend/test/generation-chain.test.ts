@@ -54,7 +54,7 @@ type Call={schema:string;input:any;role:string};
 function harness(options:{edited?:ExperienceDraft;model?:(call:Call,index:number)=>unknown|Promise<unknown>;repairAvailable?:boolean;automaticSceneRepair?:boolean}={}) {
  const calls:Call[]=[],controller=new AbortController();let current=true,repairs=0;const used=new Set<string>();
  const deps:Parameters<typeof generateExperience>[2]={
-  automaticSceneRepair:options.automaticSceneRepair??true, // Legacy recovery tests explicitly exercise opt-in mode.
+  automaticSceneRepair:options.automaticSceneRepair??true,
   capabilities:{assets:{test_inventory:[['not_for_the_planner',1]]},asset_bounds:{not_for_the_planner:{min:[0,0,0],max:[1,1,1]}}},
   model:async(schema,input,_instructions,_signal,role)=>{
    const call={schema,input:structuredClone(input),role};calls.push(call);
@@ -73,14 +73,14 @@ function harness(options:{edited?:ExperienceDraft;model?:(call:Call,index:number
   run:()=>generateExperience(input,job,deps,controller.signal)};
 }
 
-test('default production policy never buys a repair or rebuild for an unexecutable scene',async()=>{
+test('default production policy allows only one correction for an unexecutable scene',async()=>{
  const h=harness({model:call=>{
   if(call.role==='scene_builder'){const candidate=sceneFor(call.input.plan);candidate.nodes[1].parent_id='missing_parent';return candidate;}
  }});
  delete h.deps.automaticSceneRepair;
  await assert.rejects(h.run(),(error:AppError)=>error.code==='INVALID_MODEL_OUTPUT');
- assert.deepEqual(h.calls.map(call=>call.role),['experience_author','experience_editor','scene_builder']);
- assert.equal(h.repairs(),0);
+ assert.deepEqual(h.calls.map(call=>call.role),['experience_author','experience_editor','scene_builder','scene_builder']);
+ assert.equal(h.repairs(),1);
 });
 
 test('missing scenery support annotation reaches readiness locally without a model repair',async()=>{
@@ -179,7 +179,7 @@ test('editor final plan reaches construction, with original context and compact 
  assert.equal(h.repairs(),0);
 });
 
-test('a planning repair does not consume the construction repair',async t=>{
+test('a planning correction consumes the shared allowance and prevents another builder request',async t=>{
  const previous=process.env.BRAIVE_VISUAL_STRICTNESS;process.env.BRAIVE_VISUAL_STRICTNESS='standard';
  t.after(()=>{if(previous===undefined)delete process.env.BRAIVE_VISUAL_STRICTNESS;else process.env.BRAIVE_VISUAL_STRICTNESS=previous;});
  let builderCalls=0;
@@ -188,10 +188,9 @@ test('a planning repair does not consume the construction repair',async t=>{
   if(call.role==='experience_editor'&&!call.input.issues){const bad=draft();bad.experience.stages[0].duration_sec=30;return bad;}
   if(call.role==='scene_builder'){builderCalls++;if(builderCalls===1){const bad=sceneFor(call.input.plan);bad.construction_plan!.relations[0].offset=[0,0,-30];const subj=bad.nodes.find(n=>n.id===bad.construction_plan!.relations[0].subject_id)!;subj.position=[0,0,25];return bad;}}
  }});
- const result=await h.run();
- assert.ok(result.scene.construction_report);
- assert.deepEqual(h.calls.map(c=>c.role),['experience_author','experience_editor','experience_editor','scene_builder','scene_repair']);
- assert.equal(h.repairs(),2);
+ await assert.rejects(h.run(),(error:AppError)=>error.code==='INVALID_MODEL_OUTPUT');
+ assert.deepEqual(h.calls.map(c=>c.role),['experience_author','experience_editor','experience_editor','scene_builder']);
+ assert.equal(h.repairs(),1);assert.equal(builderCalls,1);
 });
 
 test('a localized construction failure is repaired with a scoped patch, not a rebuild',async t=>{
@@ -212,7 +211,7 @@ test('a localized construction failure is repaired with a scoped patch, not a re
 test('a structural failure takes the bounded complete rebuild, not a patch',async()=>{
  let builderCalls=0;
  const h=harness({model:call=>{
-  if(call.role==='scene_builder'){builderCalls++;if(builderCalls===1){const bad=sceneFor(call.input.plan);bad.construction_plan!.requirements=[];return bad;}}
+  if(call.role==='scene_builder'){builderCalls++;if(builderCalls===1){const bad=sceneFor(call.input.plan);bad.nodes[1].parent_id='missing_structural_parent';return bad;}}
  }});
  const result=await h.run();
  assert.ok(result.scene.construction_report);
@@ -430,7 +429,7 @@ function movingConversation():ExperienceDraft {
  const experience=draft();
  experience.topic='A gentle walk with a friendly host';experience.interaction_mode='mixed';
  experience.characters=[{name:'Host',role:'Friendly companion',appearance_brief:'Approved friendly stylized adult',
-  goal:'Answer the participant naturally during a gentle walk.',behavior_boundaries:['Keep questions friendly.'],asset_id:'character.base.soft_adult_01'}];
+  goal:'Answer the participant naturally during a gentle walk.',behavior_boundaries:['Keep questions friendly.'],asset_id:'character.base.civilian_01'}];
  experience.experience={kind:'conversation',objective:'Experience a gentle walk with a friendly host',requires_motion:true,
   stages:[{goal:'A gentle walk together',duration_sec:27,sensory_brief:'Warm daylight and a friendly companion.',movement:'walk',conversation_character_index:0}]};
  return experience;

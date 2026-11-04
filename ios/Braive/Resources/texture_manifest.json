@@ -1,0 +1,6 @@
+[
+  {"id": "texture.surface.grass_01", "relative_path": "Textures/grass.png", "kind": "texture", "format": "png", "width": 256, "height": 256, "license": "Braive original (procedurally generated in-repo)", "description": "Tileable stylized grass albedo"},
+  {"id": "texture.surface.wood_01", "relative_path": "Textures/wood.png", "kind": "texture", "format": "png", "width": 256, "height": 256, "license": "Braive original (procedurally generated in-repo)", "description": "Tileable stylized wood-plank albedo"},
+  {"id": "texture.surface.stone_01", "relative_path": "Textures/stone.png", "kind": "texture", "format": "png", "width": 256, "height": 256, "license": "Braive original (procedurally generated in-repo)", "description": "Tileable stylized stone-block albedo"},
+  {"id": "texture.surface.fabric_01", "relative_path": "Textures/fabric.png", "kind": "texture", "format": "png", "width": 256, "height": 256, "license": "Braive original (procedurally generated in-repo)", "description": "Tileable stylized woven fabric albedo"}
+]

@@ -37,20 +37,26 @@ struct ContentView: View {
           ink.opacity(0.97).ignoresSafeArea()
           ScrollView(.vertical) { welcome }.scrollIndicators(.hidden)
         } else {
-          if [.intro, .planning, .error].contains(s.phase) || s.loading {
+          if ([.intro, .planning, .error].contains(s.phase) || s.loading) && !s.headsetReady {
             Color.black.opacity(s.phase == .intro ? 1 : 0.82).ignoresSafeArea()
           }
           if s.phase == .reveal { Color.black.opacity(max(0, 1 - s.revealFadeProgress)).ignoresSafeArea() }
-          HStack(spacing: 0) {
-            eyeHUD.frame(width: geo.size.width / 2)
-            eyeHUD.frame(width: geo.size.width / 2)
+          // Headset text is rendered in-world through both eye cameras
+          // (HeadsetPanels); the SwiftUI copy remains only outside the headset.
+          if !s.headsetReady {
+            HStack(spacing: 0) {
+              eyeHUD.frame(width: geo.size.width / 2)
+              eyeHUD.frame(width: geo.size.width / 2)
+            }
           }
         }
-        if !s.pauses.isEmpty {
+        if !s.pauses.isEmpty && !s.headsetReady {
           Color.black.opacity(0.91).ignoresSafeArea()
-          HStack(spacing: 0) {
-            pauseHUD.frame(width: geo.size.width / 2)
-            pauseHUD.frame(width: geo.size.width / 2)
+          if !s.headsetReady {
+            HStack(spacing: 0) {
+              pauseHUD.frame(width: geo.size.width / 2)
+              pauseHUD.frame(width: geo.size.width / 2)
+            }
           }
         }
         if s.launching {
@@ -176,6 +182,9 @@ struct ContentView: View {
           if s.pauses.contains("command_channel_unavailable") || s.pauses.contains("audio_interruption") {
             Button(s.connecting ? "Reconnecting…" : "Reconnect voice") { s.reconnect() }.disabled(s.connecting)
           }
+          if s.pauses.contains("recovery_resume") {
+            Button("Resume after interruption") { panel = nil;s.pause("phone_controls",enabled:false);s.resumeAfterInterruption() }
+          }
           if s.pauses.contains("user_stop") {
             Button("Continue practice") { panel = nil; s.pause("phone_controls",enabled:false); s.confirmStop(end:false) }
             Button("End practice") { panel = nil; s.pause("phone_controls",enabled:false); s.confirmStop(end:true) }
@@ -278,6 +287,18 @@ struct ContentView: View {
         Section("Your sessions") {
           ShareLink("Export session history", item: s.store.root.appendingPathComponent("SESSIONS.csv"))
           Button("Delete history and reflections", role: .destructive) { confirmDelete = true }
+        }
+        Section("Preview checks") {
+          Button(s.reviewRunning ? "Preparing pictures…" : "Check the headset pictures") { s.runNativeReview() }
+            .disabled(s.reviewRunning || ![.setup,.lobby].contains(s.phase))
+          Button("Check sixteen people for three minutes") { s.runNativePerformanceReview() }
+            .disabled(s.reviewRunning || ![.setup,.lobby].contains(s.phase))
+          if s.reviewRunning { Button("Cancel the check") { s.cancelNativeReview() } }
+          Text("Review the forest, text, characters, and saved worlds before your practice.").font(.caption).foregroundStyle(.secondary)
+          if !s.reviewStatus.isEmpty { Text(s.reviewStatus).font(.caption) }
+          if let frame = s.reviewLastFrame { ShareLink("Share the latest picture",item:frame) }
+          if let report = s.reviewReport { ShareLink("Share the check report",item:report) }
+          if !s.reviewFiles.isEmpty { ShareLink(items:s.reviewFiles) { Text("Share all pictures and the report") } }
         }
         Section("Voice controls") {
           Text("Finish a setup answer with THAT’S ALL. Say HELP during practice to hear your next options. STOP pauses practice; NO resumes from your place.")

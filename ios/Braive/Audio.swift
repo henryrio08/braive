@@ -153,10 +153,10 @@ import AVFoundation
     speech.stopSpeaking(at: .immediate)
     speechFinished()
   }
-  func confirmQuit(completion: @escaping () -> Void) {
+  func confirmQuit(_ text: String = "Practice paused. Would you like to end it?", completion: @escaping () -> Void) {
     promptSpeech.stopSpeaking(at: .immediate)
     discardRecognition?(0)
-    confirmationText = "Practice paused. Would you like to end it?"
+    confirmationText = text
     let utterance = SpeechVoice.utterance(confirmationText)
     confirmationID = ObjectIdentifier(utterance); confirmationFinished = completion
     promptSpeech.speak(utterance)

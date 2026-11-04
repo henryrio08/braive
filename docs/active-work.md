@@ -1,4 +1,18 @@
-# Current coordination — November 3, 2026
+# Current coordination — November 4, 2026
+
+Rehearsal-worlds direction is implemented on branch `rehearsal-worlds` per docs/rehearsal-worlds-implementation-plan-2026-11-04.md: explicit inside containment behavior with the island/cove regression fixed generally, bounded assembly macros, registered texture references, in-world headset text panels, polished bundled forest clearing, and bounded same-world active edits (audience 8→16, lighting) with RESUME. See docs/rehearsal-worlds-evidence-2026-11-04.md for verified vs unverified status. Older contradictory flow/scene notes below are superseded where they conflict.
+
+# Current coordination — November 4, 2026
+
+## Current Windows build/deployment status
+
+The Windows xtool route succeeded on November 3: the project compiled, signed, installed, and verified on the iPhone. Read [PHONE_TEST_HANDOFF.txt](PHONE_TEST_HANDOFF.txt) and [xtool-windows.md](xtool-windows.md) before treating older environment notes as current blockers. On November 4, read-only checks confirmed `braive-xtool-ready` is running, xtool reports version 1.24.0, `swift sdk list` reports `darwin`, `/work/Package.swift` and `/work/xtool.yml` exist, and `xtool auth status` reports **Logged in**. No credentials are recorded here.
+
+Use `docker exec braive-xtool-ready sh -lc 'cd /work && xtool dev build'` for compilation. Signing/installation uses `USBMUXD_SOCKET_ADDRESS=host.docker.internal:27015 xtool dev run --usb` in that same container, with Apple Devices for Windows and an unlocked/trusted iPhone. Avoid the previously failed USBIPD deployment route. Tap the installed app's icon; a separate xtool launch failure is not a build or installation failure.
+
+A default restricted command on November 4 could not open the Docker named pipe; the same read-only inspection succeeded through command approval. A Docker access denial does not establish a missing SDK, expired xtool login, or Swift compilation failure. Request scoped approval for the necessary Docker operation. These checks verified the environment and saved login; they did not rebuild or install the currently changing source.
+
+## Earlier coordination notes
 
 **Current state and next chat:** read the [combined handoff](combined-handoff-2026-11-03.md). Main includes the complete published partner work and all tested follow-ups. The last generated scene passed backend validation but was rejected by native route clearance. Older entries below are chronological evidence, not current branch or installation instructions.
 
@@ -24,7 +38,7 @@ November 3: Henry requested removal of readback/BEGIN PRACTICE and an orientatio
 
 The partner's contextual loading tips, post-session save/feedback/repeat fixes, and generation cancellation fixes are integrated into BraveWork; see [loading-tips.md](loading-tips.md) and [post-session-audit.md](post-session-audit.md). The later branch-wide [consistency review](consistency-review-2026-11-02.md) is integrated too: audio mixing, deletion/recovery, consent, native preflight and import validation fixes. Its route support improvement is combined with BraveWork's explicit object contact-point check. Scene generation, visual construction and model prompts remain on BraveWork.
 
-On November 2, xtool 1.24.0 detected the plugged-in iPhone 14 through WSL and validated pairing after the phone was unlocked. Device details reported iOS 27.0.1. Braive did not appear in the phone's user-installed app list during this check. The merged visual/post-session build remains untested on device: this Windows xtool container has no Darwin Swift SDK or Apple Developer login, this checkout has no Xcode XIP/SDK archive, and the app is presently an Xcode project rather than an xtool SwiftPM project. USB was detached after the read-only check.
+Historical November 2 check: xtool detected the iPhone 14 through WSL and validated pairing, but Braive was not installed at that time. The SDK, Apple sign-in, SwiftPM configuration, and successful installation were subsequently completed on November 3. Use the current Windows status and deployment handoff above; the former missing-SDK/login/project-format blockers are resolved.
 
 Runtime handoff: the automatic-flow, pause-confirmation and approved soft-character changes are finished and pushed. Henry has assigned further scene generation and visual work to the Codex working on BraveWork. See [guided-runtime-handoff.md](guided-runtime-handoff.md) for exact evidence, limitations and installation status. Do not continue overlapping scene/visual work from this chat.
 

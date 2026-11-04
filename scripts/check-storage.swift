@@ -41,6 +41,34 @@ import Foundation
     interrupted["outcome"] = JSON("completed")
     try recovered.save(interrupted)
     guard SessionStore(root:dir).recoverable == nil else { fatalError("Completed runs must not offer practice recovery") }
+    var prepared = row
+    let preparedID = UUID().uuidString
+    prepared["session_id"] = JSON(preparedID)
+    prepared["started_at"] = JSON("2026-11-04T20:00:00Z")
+    prepared["active_seconds"] = JSON(0)
+    prepared["outcome"] = JSON("prepared")
+    prepared["scene"] = JSON(["description":"Prepared, not yet practiced"])
+    try recovered.save(prepared)
+    let preparedStore = SessionStore(root:dir)
+    guard preparedStore.recoverable?["session_id"].text == preparedID,
+      preparedStore.recoverable?["outcome"].text == "prepared",
+      !(try String(contentsOf:dir.appendingPathComponent("SESSIONS.csv"),encoding:.utf8)).contains(preparedID),
+      !preparedStore.relevant("Public speaking").contains(where: { $0["session_id"].text == preparedID })
+    else { fatalError("Prepared draft must recover without inventing a performance or history row") }
+    try preparedStore.removeUnstartedAttempt(preparedID)
+    guard !preparedStore.records.contains(where: { $0["session_id"].text == preparedID }),
+      !FileManager.default.fileExists(atPath:dir.appendingPathComponent("Sessions/\(preparedID).json").path),
+      SessionStore(root:dir).recoverable == nil
+    else { fatalError("Cancelling an unstarted draft must delete its durable recovery entry") }
+    var startedAtZero = prepared
+    startedAtZero["outcome"] = JSON("interrupted")
+    startedAtZero["checkpoint"] = JSON(["version":1,"world":["elapsed":0]])
+    try preparedStore.save(startedAtZero)
+    try preparedStore.removeUnstartedAttempt(preparedID)
+    guard preparedStore.recoverable?["session_id"].text == preparedID,
+      FileManager.default.fileExists(atPath:dir.appendingPathComponent("Sessions/\(preparedID).json").path)
+    else { fatalError("A checkpointed attempt at time zero must survive setup cancellation") }
+    try preparedStore.deleteAll()
     let fixed = Date(timeIntervalSince1970: 1793635200)
     let topic = String(repeating: "A",count:40) + "/unsafe"
     let first = try store.reflection("Exact first words.",topic:topic,date:fixed)
@@ -55,7 +83,7 @@ import Foundation
     guard !recovered.relevant("Public speaking").contains(where: { $0["session_id"].text == pending["session_id"].text })
     else { fatalError("Unfinished practice leaked into relevant completed history") }
     print(
-      "Storage checks passed: idempotent save, CSV escaping, reflection file, durable recovery, null versus zero ratings."
+      "Storage checks passed: idempotent save, CSV escaping, reflection files, interrupted/prepared recovery, draft cancellation, checkpoint preservation, null versus zero ratings."
     )
   }
 }

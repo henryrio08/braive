@@ -16,7 +16,7 @@ for path in sorted(app.rglob('*')):
  if not path.is_file():continue
  relative=PurePosixPath(path.relative_to(app).as_posix())
  if any(part.endswith('.xcassets') for part in relative.parts):continue
- if relative.parts[:2]==('Resources','LowPoly'):continue
+ if relative.parts[:2] in [('Resources','LowPoly'),('Resources','Textures')]:continue
  if 'Review' in relative.parts and '--include-review' not in sys.argv:continue
  kind='sourcecode.swift' if path.suffix=='.swift' else 'text.plist.xml' if path.suffix=='.plist' else 'sourcecode.metal' if path.suffix=='.metal' else 'text.json' if path.suffix=='.json' else 'file' if path.suffix=='.glb' else 'text' if path.suffix=='.txt' else 'audio.wav'
  ref=add(str(relative),f'isa = PBXFileReference; lastKnownFileType = {kind}; path = "Braive/{relative}"; sourceTree = "<group>";');files.append(ref)
@@ -29,6 +29,8 @@ for catalog in sorted(app.glob('*.xcassets')):
  files.append(ref);resources.append(add('build'+catalog.name,f'isa = PBXBuildFile; fileRef = {ref};'))
 lowpoly=add('lowpolyfolder','isa = PBXFileReference; lastKnownFileType = folder; path = Braive/Resources/LowPoly; sourceTree = "<group>";')
 files.append(lowpoly);resources.append(add('lowpolybuild',f'isa = PBXBuildFile; fileRef = {lowpoly};'))
+textures=add('texturesfolder','isa = PBXFileReference; lastKnownFileType = folder; path = Braive/Resources/Textures; sourceTree = "<group>";')
+files.append(textures);resources.append(add('texturesbuild',f'isa = PBXBuildFile; fileRef = {textures};'))
 package=add('gltfpackage','isa = XCRemoteSwiftPackageReference; repositoryURL = "https://github.com/warrenm/GLTFKit2.git"; requirement = { kind = exactVersion; version = 0.5.15; };')
 packageProduct=add('gltfproduct',f'isa = XCSwiftPackageProductDependency; package = {package}; productName = GLTFKit2;')
 packageBuild=add('gltfbuild',f'isa = PBXBuildFile; productRef = {packageProduct};')

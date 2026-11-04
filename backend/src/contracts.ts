@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import Ajv from 'ajv';
-import {assetIDs,characterIDs,generationCharacterIDs,assetManifest} from './assets.js';
+import {assetIDs,characterIDs,generationCharacterIDs,assetManifest,allTextureIDs,textureBudgetIssues} from './assets.js';
 import {scenarioGraphIssues} from './scenario-graph.js';
 import addFormats from 'ajv-formats';
 import type { ValidationIssue, SceneSpec, SessionPlan, AudioPlan, WorldOperation } from '../../docs/handoff/contracts.js';
@@ -34,6 +34,7 @@ export function validateProviderOutput(name:string,value:unknown) {
 export function sceneIssues(plan: SessionPlan, scene: SceneSpec, audio: AudioPlan): ValidationIssue[] {
  const issues: ValidationIssue[] = [];
  const fail = (path: string, rule: string, message: string) => issues.push({path,rule,message});
+ for(const message of textureBudgetIssues(scene))fail('/nodes','texture_budget',message);
  for (const [key, output] of Object.entries({scene,audio})) if(output.session_id !== plan.session_id || output.revision !== plan.revision) fail(`/${key}/revision`,'revision','Must match approved plan');
  for(const [i,l] of audio.layers.entries()) {
   if(audio.layers.findIndex(other=>other.id===l.id)!==i)fail(`/audio/layers/${i}/id`,'unique','Audio layer IDs must be unique');
@@ -63,13 +64,15 @@ export function sceneIssues(plan: SessionPlan, scene: SceneSpec, audio: AudioPla
   if(n.material.surface&&((g.kind==='asset'&&characterIDs.has(g.asset_id))||n.role==='character'))fail(`/nodes/${i}/material/surface`,'palette','Approved character materials cannot receive environmental surface profiles');
   if(n.material.surface?.profile==='water'&&n.collision_role!=='none')fail(`/nodes/${i}/collision_role`,'medium','Visual water surfaces must not be solid route obstacles; support needs separate real geometry');
   if(n.support_node_id && (!nodes.has(n.support_node_id)||n.support_node_id===n.id))fail(`/nodes/${i}/support_node_id`,'reference','Support must name another loaded node');
-  if(n.material.texture_asset_id)fail(`/nodes/${i}/material/texture_asset_id`,'capability','No texture assets are registered by this renderer');
+  if(n.material.texture_asset_id!==undefined&&!allTextureIDs().has(n.material.texture_asset_id))fail(`/nodes/${i}/material/texture_asset_id`,'asset',`Texture ${n.material.texture_asset_id} is not a registered texture; use an ID from the registered texture list (mesh/GLB asset IDs are not textures); trusted code loads it`);
+  if((n.material as any).texture_scale!==undefined&&!((n.material as any).texture_scale>0))fail(`/nodes/${i}/material/texture_scale`,'size','Texture UV scale must be positive');
   const approvedProp=!!n.prop_name&&!!plan.props?.includes(n.prop_name);
   if(n.prop_name&&!approvedProp)fail(`/nodes/${i}/prop_name`,'prop_match','Scene prop name must match an approved plan prop');
   if(g.kind!=='asset' && n.role!=='environment' && !(plan.experience&&(n.role==='task_focus'||n.role==='prop'&&(approvedProp||carried(n.id))))) fail(`/nodes/${i}/geometry`,'architecture_only','Use GLBs or coherent procedural assemblies bound to an approved plan prop; characters require the registered rig');
   if(n.role==='character' && (g.kind!=='asset' || !characterIDs.has(g.asset_id))) fail(`/nodes/${i}/geometry`,'neutral_character','Characters must use a registered rigged character.base asset');
   if(n.animation==='sit'&&(g.kind!=='asset'||!supportsSit(g.asset_id)))fail(`/nodes/${i}/animation`,'supported_pose','A seated actor requires a registered authored sitting pose');
-  if(g.kind==='asset' && !assetIDs.has(g.asset_id)) fail(`/nodes/${i}/geometry`,'asset','Use only registered individual object assets.');
+  if(g.kind==='asset' && !g.asset_id?.trim()) fail(`/nodes/${i}/geometry`,'asset','Empty asset_id is invalid; use a registered asset or dimensioned procedural geometry.');
+  else if(g.kind==='asset' && !assetIDs.has(g.asset_id)) fail(`/nodes/${i}/geometry`,'asset','Use only registered individual object assets.');
   if(g.kind==='box' && g.size.some(v=>v<=0) || g.kind==='sphere' && g.radius<=0 || g.kind==='cylinder' && (g.radius<=0 || g.height<=0) || g.kind==='plane' && (g.width<=0 || g.height<=0)) fail(`/nodes/${i}/geometry`,'size','Positive geometry dimensions required');
  }
  if(!scene.nodes.some(n=>n.role==='task_focus')) fail('/nodes','task_focus','Visible task_focus required');
@@ -196,7 +199,6 @@ export function planIssues(plan: SessionPlan): ValidationIssue[] {
   if(!stages.length||new Set(stages.map(s=>s.id)).size!==stages.length)fail('/experience/stages','unique','Unique executable stages required');
   if(plan.experience.kind==='action'&&plan.interaction_mode==='dialogue')fail('/experience','task_focus','An action experience cannot be replaced by a conversation');
   if(plan.experience.progression==='guided'&&stages.some(s=>s.action_ids.length))fail('/experience/stages','guided','The participant experiences movement and events automatically; no command checklist');
-  if(plan.experience.progression==='guided'&&plan.characters.some(c=>!generationCharacterIDs.has(c.asset_id??'')))fail('/characters','appearance','Use a currently approved comfortable character style');
  }
  return issues;
 }

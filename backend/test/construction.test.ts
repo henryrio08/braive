@@ -108,6 +108,121 @@ test('zone fit catches world coordinates mistakenly repeated on a local child',(
  assert.ok(compileConstruction(plan,scene).construction_report);
 });
 
+test('within checks containment at the authored position without moving the subject (island/cove regression)',()=>{
+ const {plan,scene}=setup();
+ const island={...scene.nodes[1],id:'island',position:[0,-0.9,-28]} as any; delete island.prop_name; island.role='environment';
+ scene.nodes.push(island);
+ scene.construction_plan!.zones.push({id:'cove',center:[0,1,-16],size:[70,12,70],kind:'outdoor'});
+ scene.construction_plan!.assemblies.push({id:'island_assembly',root_node_id:'island',member_node_ids:['island'],zone_id:'cove',requirement_ids:[]});
+ scene.construction_plan!.relations.push({id:'rel_island_in_cove',kind:'within',subject_id:'island',target_id:'cove',offset:[0,0,0],clearance:0,tolerance:0.5,required:true});
+ const compiled=compileConstruction(plan,scene);
+ assert.deepEqual(compiled.nodes.find(n=>n.id==='island')!.position,[0,-0.9,-28]);
+});
+test('within fails at the authored position with measured bounds when outside',()=>{
+ const {plan,scene}=setup();
+ const island={...scene.nodes[1],id:'island',position:[0,-0.9,-60]} as any; delete island.prop_name; island.role='environment';
+ scene.nodes.push(island);
+ scene.construction_plan!.zones.push({id:'cove',center:[0,1,-16],size:[70,12,70],kind:'outdoor'});
+ scene.construction_plan!.assemblies.push({id:'island_assembly',root_node_id:'island',member_node_ids:['island'],zone_id:'cove',requirement_ids:[]});
+ scene.construction_plan!.relations.push({id:'rel_island_in_cove',kind:'within',subject_id:'island',target_id:'cove',offset:[0,0,0],clearance:0,tolerance:0.5,required:true});
+ assert.throws(()=>compileConstruction(plan,scene),(e:any)=>e.issues.some((i:any)=>i.rule==='fit'&&i.message.includes('is not within')&&i.message.includes('-60')));
+});
+test('legacy inside without explicit behavior still places at target center plus offset',()=>{
+ const {plan,scene}=setup();
+ scene.construction_plan!.relations=[{id:'place_table',kind:'inside',subject_id:'table',target_id:'room',offset:[0,-1.5,0],clearance:0,tolerance:0.5,required:true}];
+ const compiled=compileConstruction(plan,scene);
+ assert.deepEqual(compiled.nodes[1].position,[0,0.5,0]);
+});
+test('empty asset IDs are rejected instead of treated as registered geometry',()=>{
+ const {plan,scene}=setup();
+ (scene.nodes[1].geometry as any)={kind:'asset',asset_id:''};
+ const issues=sceneIssues(plan,scene,{session_id:plan.session_id,revision:1,layers:[]} as unknown as AudioPlan);
+ assert.ok(issues.some(i=>i.rule==='asset'&&/empty/i.test(i.message)),JSON.stringify(issues));
+});
+test('assembly macros lower seating rows into existing node contracts',()=>{
+ const {plan,scene}=setup();
+ (scene.construction_plan as any).macros=[{id:'aud',kind:'seating_rows',root_node_id:'table',zone_id:'room',chair_asset_id:'furniture.chair.classic_chair_01',rows:2,seats_per_row:4,origin:[0,0,-6],seat_spacing:0.9,row_spacing:1.1,facing_yaw:0}];
+ const compiled=compileConstruction(plan,scene);
+ const chairs=compiled.nodes.filter(n=>n.id.startsWith('aud_seat_'));
+ assert.equal(chairs.length,8);
+ assert.ok(chairs.every(n=>n.geometry.kind==='asset'));
+});
+test('macro expansion is idempotent across recompilation',()=>{
+ const {plan,scene}=setup();
+ (scene.construction_plan as any).macros=[{id:'aud',kind:'seating_rows',root_node_id:'table',zone_id:'room',chair_asset_id:'furniture.chair.classic_chair_01',rows:2,seats_per_row:4,origin:[0,0,-6],seat_spacing:0.9,row_spacing:1.1,facing_yaw:0}];
+ const compiled=compileConstruction(plan,scene);
+ const recompiled=compileConstruction(plan,compiled);
+ assert.deepEqual(recompiled,compiled);
+ assert.equal(recompiled.nodes.filter(n=>n.id.startsWith('aud_seat_')).length,8);
+ });
+test('enclosure and scatter macros lower bounded finished geometry',()=>{
+ const {plan,scene}=setup();
+ (scene.construction_plan as any).macros=[
+  {id:'room_walls',kind:'enclosure',root_node_id:'table',zone_id:'room',center:[0,0,-3],size:[8,3,6],wall_height:2.6,opening_width:1.2},
+  {id:'plants',kind:'scatter',root_node_id:'table',zone_id:'room',asset_id:'nature.bush.nature_plant_bush_01',count:6,area_center:[0,0,-3],area_size:[6,4],min_spacing:0.8,seed_offset:3}];
+ const compiled=compileConstruction(plan,scene);
+ const walls=compiled.nodes.filter(n=>n.id.startsWith('room_walls_wall_'));
+ assert.ok(walls.length>=4,JSON.stringify(walls.map(w=>w.id)));
+ assert.equal(compiled.nodes.filter(n=>n.id.startsWith('plants_item_')).length,6);
+});
+test('platform_steps macro generates ascending steps and a flush top platform',()=>{
+ const {plan,scene}=setup();
+ scene.nodes.push({...structuredClone(scene.nodes[0]),id:'stage_root',position:[0,0,0],geometry:{kind:'box',size:[0.5,0.1,0.5]}});
+ (scene.construction_plan as any).macros=[{id:'stairs',kind:'platform_steps',root_node_id:'stage_root',zone_id:'room',origin:[0,0,2],steps:4,step_height:0.2,step_depth:0.4,width:2,platform_depth:1.2}];
+ const compiled=compileConstruction(plan,scene);
+ const generated=compiled.nodes.filter(n=>n.id.startsWith('stairs_'));
+ assert.equal(generated.length,5);
+ const steps=generated.filter(n=>n.id.startsWith('stairs_step_'));
+ assert.equal(steps.length,4);
+ const tops=steps.map(n=>n.position[1]+(n.geometry as any).size[1]/2);
+ tops.forEach((top,i)=>assert.ok(Math.abs(top-(0+(i+1)*0.2))<1e-6,`step ${i} top ${top}`));
+ assert.ok(tops.every((top,i)=>i===0||top>tops[i-1]));
+ const platform=compiled.nodes.find(n=>n.id==='stairs_platform_top')!;
+ assert.deepEqual((platform.geometry as any).size,[2,0.15,1.2]);
+ assert.ok(Math.abs((platform.position[1]+(platform.geometry as any).size[1]/2)-(0+4*0.2))<1e-6);
+});
+test('platform_steps macro expansion is idempotent across recompilation',()=>{
+ const {plan,scene}=setup();
+ scene.nodes.push({...structuredClone(scene.nodes[0]),id:'stage_root',position:[0,0,0],geometry:{kind:'box',size:[0.5,0.1,0.5]}});
+ (scene.construction_plan as any).macros=[{id:'stairs',kind:'platform_steps',root_node_id:'stage_root',zone_id:'room',origin:[0,0,2],steps:3,step_height:0.25,step_depth:0.5,width:1.5,platform_depth:1}];
+ const compiled=compileConstruction(plan,scene);
+ const recompiled=compileConstruction(plan,compiled);
+ assert.deepEqual(recompiled,compiled);
+ assert.equal(recompiled.nodes.filter(n=>n.id.startsWith('stairs_')).length,4);
+});
+test('functional_group macro generates a desk and two chairs facing each other',()=>{
+ const {plan,scene}=setup();
+ scene.nodes.push({...structuredClone(scene.nodes[0]),id:'stage_root',position:[0,0,0],geometry:{kind:'box',size:[0.5,0.1,0.5]}});
+ (scene.construction_plan as any).macros=[{id:'interview',kind:'functional_group',root_node_id:'stage_root',zone_id:'room',origin:[0,0,-2],facing_yaw:0.3,desk_asset_id:'furniture.desk.classic_desk_01',chair_asset_id:'furniture.chair.classic_chair_01',include_desk:true}];
+ const compiled=compileConstruction(plan,scene);
+ const generated=compiled.nodes.filter(n=>n.id.startsWith('interview_'));
+ assert.equal(generated.length,3);
+ const desk=compiled.nodes.find(n=>n.id==='interview_desk')!;
+ assert.deepEqual(desk.geometry,{kind:'asset',asset_id:'furniture.desk.classic_desk_01'});
+ const chair0=compiled.nodes.find(n=>n.id==='interview_chair_0')!;
+ const chair1=compiled.nodes.find(n=>n.id==='interview_chair_1')!;
+ assert.deepEqual(chair0.geometry,{kind:'asset',asset_id:'furniture.chair.classic_chair_01'});
+ assert.deepEqual(chair1.geometry,{kind:'asset',asset_id:'furniture.chair.classic_chair_01'});
+ const yawDiff=Math.abs(Math.atan2(Math.sin(chair0.rotation_radians[1]-chair1.rotation_radians[1]),Math.cos(chair0.rotation_radians[1]-chair1.rotation_radians[1])));
+ assert.ok(Math.abs(yawDiff-Math.PI)<1e-9,`yaw diff ${yawDiff}`);
+ assert.ok(Math.abs((chair0.position[0]+chair1.position[0])/2-0)<1e-6);
+ assert.ok(Math.abs((chair0.position[2]+chair1.position[2])/2-(-2))<1e-6);
+ assert.ok(Math.abs(Math.hypot(chair0.position[0]-0,chair0.position[2]-(-2))-0.85)<1e-6);
+ assert.ok(Math.abs(Math.hypot(chair1.position[0]-0,chair1.position[2]-(-2))-0.85)<1e-6);
+});
+test('functional_group macro falls back to a box desk and can omit the desk',()=>{
+ const {plan,scene}=setup();
+ scene.nodes.push({...structuredClone(scene.nodes[0]),id:'stage_root',position:[0,0,0],geometry:{kind:'box',size:[0.5,0.1,0.5]}});
+ (scene.construction_plan as any).macros=[
+  {id:'boxdesk',kind:'functional_group',root_node_id:'stage_root',zone_id:'room',origin:[2,0,-2],facing_yaw:0,chair_asset_id:'furniture.chair.classic_chair_01',include_desk:true},
+  {id:'nodsk',kind:'functional_group',root_node_id:'stage_root',zone_id:'room',origin:[-2,0,-2],facing_yaw:0,chair_asset_id:'furniture.chair.classic_chair_01',include_desk:false}];
+ const compiled=compileConstruction(plan,scene);
+ const boxDesk=compiled.nodes.find(n=>n.id==='boxdesk_desk')!;
+ assert.deepEqual(boxDesk.geometry,{kind:'box',size:[1.4,0.75,0.7]});
+ assert.equal(compiled.nodes.filter(n=>n.id.startsWith('boxdesk_')).length,3);
+ assert.equal(compiled.nodes.find(n=>n.id==='nodsk_desk'),undefined);
+ assert.equal(compiled.nodes.filter(n=>n.id.startsWith('nodsk_')).length,2);
+});
 test('water behavior needs a declared medium region and an actual visual surface',()=>{
  const {plan,scene}=setup();
  plan.construction_brief={spatial_intent:'Quiet shallow pool',must_preserve:[],expected_outcomes:[],medium_behavior:{substance:'water',motion:'still',visibility:'clear',participant_motion:'none',unsupported_dynamics:['No buoyancy simulation']}};

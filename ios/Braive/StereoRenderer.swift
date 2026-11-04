@@ -1,4 +1,4 @@
-import MetalKit
+@preconcurrency import MetalKit
 import SceneKit
 import SwiftUI
 
@@ -108,9 +108,39 @@ struct StereoWorld: UIViewRepresentable {
       encoder.setFragmentBytes(&shade, length: MemoryLayout<Float>.size, index: 1)
       encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
       encoder.endEncoding()
+      if let destination = world.captureRequest {
+        let width = drawable.texture.width, height = drawable.texture.height
+        let stride = ((width * 4 + 255) / 256) * 256
+        if let pixels = device.makeBuffer(length:stride*height,options:.storageModeShared),
+          let copy = buffer.makeBlitCommandEncoder() {
+          copy.copy(from:drawable.texture,sourceSlice:0,sourceLevel:0,sourceOrigin:MTLOrigin(x:0,y:0,z:0),
+            sourceSize:MTLSize(width:width,height:height,depth:1),to:pixels,destinationOffset:0,
+            destinationBytesPerRow:stride,destinationBytesPerImage:stride*height)
+          copy.endEncoding();world.captureRequest = nil
+          let world = world
+          buffer.addCompletedHandler { command in
+            let data = Data(bytes:pixels.contents(),count:stride*height)
+            Task { @MainActor in
+              do {
+                guard command.status == .completed, let provider = CGDataProvider(data:data as CFData),
+                  let frame = CGImage(width:width,height:height,bitsPerComponent:8,bitsPerPixel:32,bytesPerRow:stride,
+                    space:CGColorSpaceCreateDeviceRGB(),bitmapInfo:[.byteOrder32Little,CGBitmapInfo(rawValue:CGImageAlphaInfo.premultipliedFirst.rawValue)],
+                    provider:provider,decode:nil,shouldInterpolate:false,intent:.defaultIntent),
+                  let png = UIImage(cgImage:frame).pngData() else { throw CocoaError(.fileWriteUnknown) }
+                try FileManager.default.createDirectory(at:destination.deletingLastPathComponent(),withIntermediateDirectories:true)
+                try png.write(to:destination,options:.atomic);world.onCapture?(.success(destination))
+              } catch { world.onCapture?(.failure(error)) }
+            }
+          }
+        }
+      }
       world.metrics.eyeTextureBytes=textures.reduce(0) { $0+$1.width*$1.height*4 }+depths.reduce(0) { $0+$1.width*$1.height*4 }
       world.metrics.frame(cpuMS:(ProcessInfo.processInfo.systemUptime-encodedAt)*1000,metalBytes:device.currentAllocatedSize)
       let metrics=world.metrics
+      drawable.addPresentedHandler { drawable in
+        let time = drawable.presentedTime
+        Task { @MainActor in metrics.presented(at:time) }
+      }
       buffer.addCompletedHandler { command in
         let ms=max(0,command.gpuEndTime-command.gpuStartTime)*1000
         Task { @MainActor in metrics.gpu(milliseconds:ms) }

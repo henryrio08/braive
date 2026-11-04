@@ -6,7 +6,7 @@ export type HistoryRow = { "session_id": string; "topic": string; "intensity": I
 
 export type PlanRequest = { "schema_version": "1"; "session_id": string; "revision": number; "fear_description": string; "current_ability": string; "preferences": Array<string>; "relevant_history": Array<HistoryRow>; "history_choice": "accepted" | "declined" | "not_available" | "chain_reuse"; "parent_session_id"?: string; "builder_additions": Array<string>; "use_history": boolean; "chained_rerun": boolean };
 
-export type Character = { "asset_id"?: string; "color_hex"?: string; "id": string; "name": string; "role": string; "appearance_brief": string; "goal": string; "behavior_boundaries": Array<string>; "voice_id": string; "scene_node_id": string };
+export type Character = { dialogue_style?: string; "asset_id"?: string; "color_hex"?: string; "id": string; "name": string; "role": string; "appearance_brief": string; "goal": string; "behavior_boundaries": Array<string>; "voice_id": string; "scene_node_id": string };
 
 export type ToolCall = ({ "tool": "compose_scene"; "execute_when": "setup" | "after_session" | "dialogue_turn" | "builder_revision"; "arguments": { "setting_brief": string; "intensity_1_10": number; "props": Array<string>; "interaction_mode": "solo" | "dialogue" | "navigation" | "mixed" } }) | ({ "tool": "plan_audio"; "execute_when": "setup" | "after_session" | "dialogue_turn" | "builder_revision"; "arguments": { "audio_brief": string; "intensity_1_10": number; "duration_sec": number; "transition_whoosh_required": true } }) | ({ "tool": "generate_feedback"; "execute_when": "setup" | "after_session" | "dialogue_turn" | "builder_revision"; "arguments": { "observation_source": "current_session_observations"; "tone": "coaching_nonclinical"; "max_did_well": 3; "max_noticed": 3 } }) | ({ "tool": "adapt_session"; "execute_when": "setup" | "after_session" | "dialogue_turn" | "builder_revision"; "arguments": { "observation_source": "completed_session_observations"; "history_source": "authorized_chain_history" } }) | ({ "tool": "character_turn"; "execute_when": "setup" | "after_session" | "dialogue_turn" | "builder_revision"; "arguments": { "character_id": string; "context_source": "current_turn_and_recent_history" } }) | ({ "tool": "revise_scene"; "execute_when": "setup" | "after_session" | "dialogue_turn" | "builder_revision"; "arguments": { "additional_input": string; "base_revision": number } });
 
@@ -20,7 +20,7 @@ export type SceneRequest = { "plan": SessionPlan; "capabilities_version": string
 
 export type Geometry = ({ "kind": "box"; "size": Array<number> }) | ({ "kind": "plane"; "width": number; "height": number }) | ({ "kind": "sphere"; "radius": number }) | ({ "kind": "cylinder"; "radius": number; "height": number }) | ({ "kind": "asset"; "asset_id": string });
 
-export type Material = { surface?: SurfaceProfile; "color": string; "roughness": number; "texture_asset_id"?: string; "opacity"?: number; "double_sided"?: boolean };
+export type Material = { surface?: SurfaceProfile; "color": string; "roughness": number; "texture_asset_id"?: string; "texture_scale"?: number; "opacity"?: number; "double_sided"?: boolean };
 
 export type SceneNode = { collision_role?: "solid" | "none"; support_node_id?: string | null; support_contact?: [number,number,number]; "id": string; "parent_id": string | null; "role": "environment" | "prop" | "character" | "task_focus"; "geometry": Geometry; "position": Array<number>; "rotation_radians": Array<number>; "scale": Array<number>; "material": Material; "animation": "none" | "idle" | "listen" | "speak" | "gesture" | "walk" | "run" | "swim" | "sit"; "description": string; "prop_name"?: string };
 
@@ -58,11 +58,11 @@ export type BuilderRevision = { "schema_version": "1"; "session_id": string; "re
 
 export type Reflection = { "id": string; "session_id": string; "created_at": string; "display_title": string; "topic": string; "relative_file_path": string; "transcript": string; "local_date": string; "local_time": string; "timezone": string };
 
-export type SessionRecord = { checkpoint?: Record<string,unknown> | null; render_metrics?: Record<string,unknown> | null; applied_operations?: WorldOperation[]; turns?: Array<Record<string,unknown>>; scene?: SceneSpec; audio?: AudioPlan; observations?: Array<Observation>; adaptation?: AdaptationResult | null; reflection_file?: string; reflection?: Record<string, unknown>; "schema_version": "1"; "session_id": string; "parent_session_id"?: string; "started_at": string; "ended_at": string; "plan": SessionPlan; "scene_revision": number; "active_seconds": number; "stop_count": number; "outcome": "completed" | "user_ended" | "interrupted" | "failed"; "reported_difficulty": number | null; "reported_readiness": number | null; "reflection_id"?: string; "feedback"?: FeedbackResult; "generation_provenance": { "mode": "live" | "replay"; "model_ids": Array<string>; "request_ids": Array<string> }; "use_history": boolean; "chained_rerun": boolean; "intensity_1_10": number; "topic_short": string; "early_end": boolean };
+export type SessionRecord = { world_id?: string; setup_context?: SessionSetupContext; pending_world_transaction?: string; deferred_changes?: string[]; deferred_applied?: string[]; adaptation_applied?: string[]; checkpoint?: Record<string,unknown> | null; render_metrics?: Record<string,unknown> | null; applied_operations?: WorldOperation[]; turns?: Array<Record<string,unknown>>; scene?: SceneSpec; audio?: AudioPlan; observations?: Array<Observation>; adaptation?: AdaptationResult | null; reflection_file?: string; reflection?: Record<string, unknown>; "schema_version": "1"; "session_id": string; "parent_session_id"?: string; "started_at": string; "ended_at"?: string; "plan": SessionPlan; "scene_revision": number; "active_seconds"?: number; "stop_count"?: number; "outcome": "prepared" | "running" | "completed" | "user_ended" | "interrupted" | "failed"; "reported_difficulty": number | null; "reported_readiness": number | null; "reflection_id"?: string; "feedback"?: FeedbackResult; "generation_provenance": { "mode": "live" | "replay"; "model_ids": Array<string>; "request_ids": Array<string> }; "use_history": boolean; "chained_rerun": boolean; "intensity_1_10": number; "topic_short": string; "early_end"?: boolean };
 
-export type ValidationIssue = { "path": string; "rule": string; "message": string; "classification"?: "hard" | "soft"; "severity"?: number; "measured"?: string; "allowed"?: string };
+export type ValidationIssue = { "path": string; "rule": string; "message": string; "classification"?: "hard" | "soft"; "outdoor"?: boolean; "severity"?: number; "measured"?: string; "allowed"?: string };
 
-export type Error = { "code": "INVALID_INPUT" | "UNAUTHORIZED" | "RATE_LIMITED" | "PROVIDER_UNAVAILABLE" | "TIMEOUT" | "INVALID_MODEL_OUTPUT" | "CANCELLED" | "CONFLICT"; "message": string; "retryable": boolean; "request_id": string; "issues"?: Array<ValidationIssue>; "retry_after_ms"?: number };
+export type Error = { "code": "INVALID_INPUT" | "UNAUTHORIZED" | "RATE_LIMITED" | "PROVIDER_UNAVAILABLE" | "TIMEOUT" | "INVALID_MODEL_OUTPUT" | "CANCELLED" | "CONFLICT" | "NOT_FOUND"; "message": string; "retryable": boolean; "request_id": string; "issues"?: Array<ValidationIssue>; "retry_after_ms"?: number };
 
 export type GenerationResult = { "plan": SessionPlan; "scene": SceneSpec; "audio": AudioPlan };
 
@@ -108,4 +108,25 @@ export type ConstructionPlan = {
  relations:Array<{id:string;kind:'on'|'inside'|'within'|'faces'|'attached_to'|'near'|'clear_of';subject_id:string;target_id:string;anchor_id?:string;subject_anchor_id?:string;offset:[number,number,number];clearance:number;tolerance:number;required:boolean}>;
  routes:Array<{path_id:string;from_anchor_id?:string;to_anchor_id?:string;stage_ids:string[];requirement_ids:string[];clearance_radius_meters:number;eye_height_meters:number}>;
  medium_regions?:MediumRegion[];
+ macros?:AssemblyMacro[];
 };
+export type AssemblyMacro =
+ | FinishedRoomMacro
+ | {id:string;kind:'seating_rows';root_node_id:string;zone_id:string;chair_asset_id:string;rows:number;seats_per_row:number;origin:[number,number,number];seat_spacing:number;row_spacing:number;facing_yaw:number;character_node_ids?:string[]}
+ | {id:string;kind:'enclosure';root_node_id:string;zone_id:string;center:[number,number,number];size:[number,number,number];wall_height:number;opening_width:number;wall_asset_id?:string}
+ | {id:string;kind:'scatter';root_node_id:string;zone_id:string;asset_id:string;count:number;area_center:[number,number,number];area_size:[number,number];min_spacing:number;seed_offset:number}
+ | {id:string;kind:'platform_steps';root_node_id:string;zone_id:string;origin:[number,number,number];steps:number;step_height:number;step_depth:number;width:number;platform_depth:number}
+ | {id:string;kind:'functional_group';root_node_id:string;zone_id:string;origin:[number,number,number];facing_yaw:number;desk_asset_id?:string;chair_asset_id:string;include_desk:boolean};
+export type FinishedRoomMacro = {id:string;kind:'room_shell';root_node_id:string;zone_id:string;center:[number,number,number];size:[number,number,number];wall_thickness:number;ceiling:boolean;wall_material:Material;floor_material:Material;trim_color:string;ceiling_color:string;openings:Array<{id:string;wall:'north'|'south'|'east'|'west';offset:number;width:number;height:number;sill_height:number;kind:'door'|'window'}>};
+
+// Additive same-world and generated-asset interfaces. Runtime validation remains authoritative.
+export type SessionSetupContext = {fear:string;ability:string;use_history:boolean;history_ids:string[]};
+export type WorldDocuments = {plan:SessionPlan;scene:SceneSpec;audio:AudioPlan};
+export type WorldRevisionRequest = WorldDocuments & {session_id:string;expected_revision:number;revision:number;world_id?:string;transaction_id?:string};
+export type WorldRevisionResult = WorldDocuments & {session_id:string;revision:number;world_id:string;status:'prepared'|'committed';hash:string};
+export type WorldLookupResult = WorldDocuments & {world_id?:string;hash:string;experience?:unknown};
+export type WorldCancelResult = {status:'cancelled';world_id?:string;plan?:SessionPlan;scene?:SceneSpec;audio?:AudioPlan};
+export type WorldEditResult = WorldDocuments & {status:'clarify'|'ready'|'deferred'|'unchanged';question:string;summary:string;deferred:string[];expected_revision:number};
+export type GeneratedTextureUpload = {content_base64:string;format?:'png'|'jpeg';purpose?:'surface'|'distant'};
+export type GeneratedTextureMetadata = {id:string;file:string;format:'png'|'jpeg';bytes:number;sha256:string;width:number;height:number;purpose?:'surface'|'distant'};
+export type JobPauseRequest = {paused:boolean;sequence?:number};

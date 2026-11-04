@@ -9,7 +9,7 @@ export class PhoneTestWindow {
  get remainingMilliseconds(){return this.active?Math.max(0,this.expiresAt-this.now()):0;}
  get remainingSeconds(){return Math.ceil(this.remainingMilliseconds/1000);}
  renew(method:string,path:string){
-  const action=['/v1/session-plans','/v1/scene-revisions','/v1/dialogue','/v1/feedback','/v1/adaptations'].includes(path)
+  const action=['/v1/session-plans','/v1/scene-revisions','/v1/dialogue','/v1/feedback','/v1/adaptations','/v1/world-edit-plans'].includes(path)
    || /^\/v1\/jobs\/[^/]+\/validation$/.test(path);
   if(!this.authorizedAtLaunch || method!=='POST' || !action)return false;
   this.expiresAt=this.now()+this.seconds*1000;
