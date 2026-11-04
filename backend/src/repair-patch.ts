@@ -144,6 +144,6 @@ export function applyScenePatch(base:SceneSpec,patch:SceneRepairPatch,scope:Repa
 
 /** Patch-eligible defects are localized geometry/placement problems. */
 export function patchEligible(issues:ValidationIssue[]):boolean {
- const patchable=new Set(['zone_fit','fit','route_clearance','route_support','anchor_alignment','placement','support','orientation','bounds']);
+ const patchable=new Set(['zone_fit','fit','route_clearance','route_support','anchor_alignment','placement','support','orientation','bounds','clearance']);
  return issues.length>0&&issues.length<=12&&issues.every(issue=>patchable.has(issue.rule));
 }

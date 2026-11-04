@@ -72,10 +72,47 @@ reached and no funds were added.
   12 pt with higher contrast. STOP/pause, ratings, reflection/feedback,
   history/export and adapted repeats are behaviorally unchanged.
 
+## Recovery pipeline revision (this branch)
+
+- Acceptance policy (`backend/src/acceptance.ts`): zone defects carry
+  normalized severity (overflow against the larger of 0.3 m or 5% of the
+  containing dimension). Soft defects are accepted only under an individual
+  severity limit (1), a per-category count budget and a total severity
+  budget, and are recorded in `construction_report.accepted_defects`.
+  Severe or accumulated defects stay hard; valid content cannot dilute
+  them. Routes, support, references and requirement coverage remain hard.
+- Deterministic corrections run before any model repair: an unsupported
+  texture reference with an authored color fallback is dropped and the
+  color retained, recorded in `construction_report.corrections`. Raw
+  candidates are preserved separately (per-attempt artifacts).
+- Scoped repair (`backend/src/repair-patch.ts`): localized failures repair
+  through a typed SceneRepairPatch against a hashed base candidate with a
+  backend-computed scope (violations plus parent/child, support, anchor,
+  relation, route and zone dependencies). Stale, out-of-scope, oversized
+  or unsupported patches are rejected; `remove_node` requires proof that
+  nothing necessary depends on the content. Structural failures remain
+  eligible for one bounded complete rebuild. The repair role uses Wonder
+  with its own instructions, schema and 7000-token limit; the generic
+  system prompt no longer forbids patches for that role.
+- Live evidence on this branch (spend-conscious): one library success via
+  the bounded rebuild path (~$0.82 settled). Three swim attempts failed
+  legitimately (water/zone sizing and containment slips) and were
+  diagnosed from retained artifacts rather than retried blindly; a fourth
+  was terminated early at the user's request to conserve credit. Offline
+  replay of 13 retained candidates shows the router behaving as designed:
+  fit/zone-only profiles are patch-eligible (with usable computed scopes),
+  reference/coverage profiles correctly take the rebuild path. A live
+  patched success is therefore not yet demonstrated; the patch mechanism
+  is covered by unit and chain tests plus this offline replay.
+- Ledger at last sync: 77 entries, $13.14 charged of the $50 file cap,
+  $36.86 remaining, including retained unsettled reservations. No further
+  live runs were made after the conservation request.
+
 ## Verification status
 
-- Backend: full suite passing (145/145: `npm --prefix backend test`),
-  `tsc --noEmit` clean. New regression coverage: island
+- Backend: full suite passing (151/151: `npm --prefix backend test`),
+  `tsc --noEmit` clean, including acceptance, deterministic-correction,
+  scoped-patch, omission and repair-allocation regression tests. New regression coverage: island
   containment/placement, rotated-asset diagnostics, dangling anchors,
   planning-vs-construction repair allocation, doorway/transformed/relative
   routes.

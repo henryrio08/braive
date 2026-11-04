@@ -64,7 +64,7 @@ async function generate(request:PlanRequest, job:Job, signal:AbortSignal) {
   consumeRepair:(kind)=>claimRepair(attempts.get(job.job_id),kind),
   onRejected:(candidate,error)=>{
    if(process.env.BRAIVE_TEST_MODE==='true'){
-    try{const payload=JSON.stringify({...candidate,issues:error instanceof AppError?error.issues:[]},null,2);writeFileSync(new URL('../data/last-rejected-scene.json',import.meta.url),payload,{mode:0o600});mkdirSync(new URL('../data/rejected',import.meta.url),{recursive:true});writeFileSync(new URL(`../data/rejected/${job.job_id}.json`,import.meta.url),payload,{mode:0o600});}catch{}
+    try{const payload=JSON.stringify({...candidate,issues:error instanceof AppError?error.issues:[]},null,2);writeFileSync(new URL('../data/last-rejected-scene.json',import.meta.url),payload,{mode:0o600});mkdirSync(new URL('../data/rejected',import.meta.url),{recursive:true});writeFileSync(new URL(`../data/rejected/${job.job_id}-${Date.now()}.json`,import.meta.url),payload,{mode:0o600});}catch{}
    }
   }
  },signal);
