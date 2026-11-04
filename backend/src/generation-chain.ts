@@ -128,7 +128,7 @@ export async function generateExperience(request:PlanRequest,job:Job,deps:Genera
     }
     failure=new AppError(error.code,error.message,[...combined.values()],error.status);
    }
-   if(candidate)deps.onRejected?.({plan,scene:candidate,audio,experience},failure);
+   if(candidate&&failure instanceof AppError&&failure.code==='INVALID_MODEL_OUTPUT')deps.onRejected?.({plan,scene:candidate,audio,experience},failure);
    throw failure;
   }
  });

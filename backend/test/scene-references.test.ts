@@ -1,5 +1,20 @@
 import {test} from 'node:test';import assert from 'node:assert/strict';
-import {canonicalSceneReferences} from '../src/scene-references.js';
+import {canonicalSceneMotion,canonicalSceneReferences} from '../src/scene-references.js';
+
+test('time-zero world and relative samples preserve the path origin and positive timed points',()=>{
+ const last={at_seconds:8,position:[1,1,-4]};
+ const path={coordinate_space:'world',points:[{at_seconds:0,position:[0,1,0]},last]};
+ const relative={coordinate_space:'relative',points:[{at_seconds:0,position:[0,0,0]},last]};
+ const original={motion_paths:[path,relative]};
+ const result=canonicalSceneMotion(original) as typeof original & {motion_paths:Array<{start_position?:number[]}>};
+ assert.deepEqual(result.motion_paths[0].start_position,[0,1,0]);
+ assert.deepEqual(result.motion_paths[0].points,[last]);
+ assert.equal(result.motion_paths[1].start_position,undefined);
+ assert.deepEqual(result.motion_paths[1].points,[last]);
+ assert.equal(path.points.length,2);
+ const conflicting={motion_paths:[{...path,start_position:[10,1,0]},{...relative,points:[{at_seconds:0,position:[1,0,0]},last]}]};
+ assert.deepEqual(canonicalSceneMotion(conflicting),conflicting);
+});
 import type {SessionPlan,SceneSpec,AudioPlan} from '../../docs/handoff/contracts.js';
 const plan={characters:[{id:'maya',scene_node_id:'maya_root'}]} as SessionPlan;
 const audio={layers:[{id:'arrival',asset_id:'whoosh'}]} as AudioPlan;
