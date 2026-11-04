@@ -13,7 +13,7 @@ export interface GenerationDependencies {
  capabilities:unknown;
  previous?:ApprovedExperience;
  isCurrent:()=>boolean;
- consumeRepair:()=>boolean;
+ consumeRepair:(kind:'planning'|'construction')=>boolean;
  onRejected?:(candidate:ApprovedExperience, error:unknown)=>void;
 }
 
@@ -64,27 +64,29 @@ export async function generateExperience(request:PlanRequest,job:Job,deps:Genera
  const previous=deps.previous&&(deps.previous.plan.session_id===source.session_id||
   source.chained_rerun&&deps.previous.plan.session_id===source.parent_session_id)?deps.previous:undefined;
  const planning={request:source,capabilities:planningCapabilities(),previous_plan:previous?.plan};
- let repairUsed=false;
- const run=async<T>(stage:string,operation:(issues?:ValidationIssue[])=>Promise<T>):Promise<T>=>{
+ // Planning (author/editor) and construction (builder) each own one repair:
+// an editorial correction must not starve scene construction, and vice versa.
+ let repairsUsed={planning:false,construction:false};
+ const run=async<T>(stage:string,kind:'planning'|'construction',operation:(issues?:ValidationIssue[])=>Promise<T>):Promise<T>=>{
   let issues:ValidationIssue[]|undefined;
   for(;;){
    check();job.stage=issues?'Repairing '+stage.toLowerCase():stage;
    try {const value=await operation(issues);check();return value;}
    catch(error){
     check();
-    if(!(error instanceof AppError)||error.code!=='INVALID_MODEL_OUTPUT'||repairUsed||!deps.consumeRepair())throw error;
-    repairUsed=true;
+    if(!(error instanceof AppError)||error.code!=='INVALID_MODEL_OUTPUT'||repairsUsed[kind]||!deps.consumeRepair(kind))throw error;
+    repairsUsed[kind]=true;
     issues=error.issues.length?error.issues:[{path:'/',rule:'validation',message:error.message}];
    }
   }
  };
- const draft=await run('Planning your experience',async issues=>{
+ const draft=await run('Planning your experience','planning',async issues=>{
   const result=await deps.model('ExperienceDraft',{...structuredClone(planning),issues},authorInstructions,signal,'experience_author');
   validateExperienceShape(result);
   return result;
  });
  if(draft.safety.decision==='refuse')throw new AppError('INVALID_INPUT',draft.safety.reason+' '+draft.safety.practice_preserving_alternative);
- const experience=await run('Reviewing your experience',async issues=>{
+ const experience=await run('Reviewing your experience','planning',async issues=>{
   const result=await deps.model('ExperienceDraft',{...structuredClone(planning),proposed_experience:structuredClone(draft),issues},editorInstructions,signal,'experience_editor');
   validateExperience(result);
   if(result.safety.decision==='refuse')throw new AppError('INVALID_INPUT',result.safety.reason+' '+result.safety.practice_preserving_alternative);
@@ -95,7 +97,7 @@ export async function generateExperience(request:PlanRequest,job:Job,deps:Genera
  check();
  const {plan,audio}=assembleExperience(experience,source,source.revision===1?'setup':'builder_revision');
  let candidate:SceneSpec|undefined;
- const scene=await run('Building your scene',async issues=>{
+ const scene=await run('Building your scene','construction',async issues=>{
   const input={request:source,plan,approved_experience:experience,audio,requirements:constructionRequirements(plan),
    capabilities:deps.capabilities,previous_scene:authoredScene(candidate??previous?.scene),issues};
   try {

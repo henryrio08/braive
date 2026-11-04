@@ -52,7 +52,7 @@ function sceneFor(plan:SessionPlan):SceneSpec {
 
 type Call={schema:string;input:any;role:string};
 function harness(options:{edited?:ExperienceDraft;model?:(call:Call,index:number)=>unknown|Promise<unknown>;repairAvailable?:boolean}={}) {
- const calls:Call[]=[],controller=new AbortController();let current=true,repairs=0;
+ const calls:Call[]=[],controller=new AbortController();let current=true,repairs=0;const used=new Set<string>();
  const deps:Parameters<typeof generateExperience>[2]={
   capabilities:{assets:{test_inventory:[['not_for_the_planner',1]]},asset_bounds:{not_for_the_planner:{min:[0,0,0],max:[1,1,1]}}},
   model:async(schema,input,_instructions,_signal,role)=>{
@@ -65,7 +65,7 @@ function harness(options:{edited?:ExperienceDraft;model?:(call:Call,index:number
    return sceneFor((input as {plan:SessionPlan}).plan);
   },
   isCurrent:()=>current,
-  consumeRepair:()=>options.repairAvailable!==false&&repairs++===0,
+  consumeRepair:(kind)=>{if(options.repairAvailable===false)return false;if(used.has(kind))return false;used.add(kind);repairs++;return true;},
  };
  const input=request(),job:Job={job_id:'b1e16a52-8358-4465-a260-17e78f5f0dc2',session_id:input.session_id,revision:input.revision,status:'running',stage:'Starting'};
  return {calls,controller,deps,input,job,setStale:()=>{current=false;},repairs:()=>repairs,
@@ -88,6 +88,18 @@ test('editor final plan reaches construction, with original context and compact 
   assert.equal(call.schema,'ExperienceDraft');
  }
  assert.equal(h.repairs(),0);
+});
+
+test('a planning repair does not consume the construction repair',async()=>{
+ let builderCalls=0;
+ const h=harness({model:call=>{
+  if(call.role==='experience_editor'&&!call.input.issues){const bad=draft();bad.experience.stages[0].duration_sec=30;return bad;}
+  if(call.role==='scene_builder'){builderCalls++;if(builderCalls===1){const bad=sceneFor(call.input.plan);bad.construction_plan!.relations[0].offset=[0,0,-30];return bad;}}
+ }});
+ const result=await h.run();
+ assert.ok(result.scene.construction_report);
+ assert.deepEqual(h.calls.map(c=>c.role),['experience_author','experience_editor','experience_editor','scene_builder','scene_builder']);
+ assert.equal(h.repairs(),2);
 });
 
 test('an unchanged complete editor plan proceeds directly to the builder',async()=>{
