@@ -27,6 +27,7 @@ extension UIColor {
   func setHeadsetText(title: String, detail: String, command: String, status: String, visible: Bool) {
     headsetPanels.update(title: title, detail: detail, command: command, status: status, visible: visible)
   }
+  func setBlackout(_ level: Double) { headsetPanels.setBlackout(level) }
   let left = SCNNode(), right = SCNNode()
   var nodes: [String: SCNNode] = [:], viewpoints: [String: SCNVector3] = [:],
     characters: [String: String] = [:]

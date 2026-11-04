@@ -113,4 +113,6 @@ export type ConstructionPlan = {
 export type AssemblyMacro =
  | {id:string;kind:'seating_rows';root_node_id:string;zone_id:string;chair_asset_id:string;rows:number;seats_per_row:number;origin:[number,number,number];seat_spacing:number;row_spacing:number;facing_yaw:number}
  | {id:string;kind:'enclosure';root_node_id:string;zone_id:string;center:[number,number,number];size:[number,number,number];wall_height:number;opening_width:number;wall_asset_id?:string}
- | {id:string;kind:'scatter';root_node_id:string;zone_id:string;asset_id:string;count:number;area_center:[number,number,number];area_size:[number,number];min_spacing:number;seed_offset:number};
+ | {id:string;kind:'scatter';root_node_id:string;zone_id:string;asset_id:string;count:number;area_center:[number,number,number];area_size:[number,number];min_spacing:number;seed_offset:number}
+ | {id:string;kind:'platform_steps';root_node_id:string;zone_id:string;origin:[number,number,number];steps:number;step_height:number;step_depth:number;width:number;platform_depth:number}
+ | {id:string;kind:'functional_group';root_node_id:string;zone_id:string;origin:[number,number,number];facing_yaw:number;desk_asset_id?:string;chair_asset_id:string;include_desk:boolean};

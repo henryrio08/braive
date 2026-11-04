@@ -4212,7 +4212,9 @@
             "enum": [
               "seating_rows",
               "enclosure",
-              "scatter"
+              "scatter",
+              "platform_steps",
+              "functional_group"
             ]
           },
           "root_node_id": {
@@ -4324,6 +4326,38 @@
             "type": "integer",
             "minimum": 0,
             "maximum": 100000
+          },
+          "steps": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 12
+          },
+          "step_height": {
+            "type": "number",
+            "minimum": 0.05,
+            "maximum": 0.5
+          },
+          "step_depth": {
+            "type": "number",
+            "minimum": 0.2,
+            "maximum": 1
+          },
+          "width": {
+            "type": "number",
+            "minimum": 0.5,
+            "maximum": 6
+          },
+          "platform_depth": {
+            "type": "number",
+            "minimum": 0.5,
+            "maximum": 6
+          },
+          "desk_asset_id": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "include_desk": {
+            "type": "boolean"
           }
         },
         "required": [

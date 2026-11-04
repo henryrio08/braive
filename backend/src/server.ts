@@ -5,20 +5,23 @@ import {cancelGeneration,releaseGeneration,supersedeGeneration,repeatedGeneratio
 import {PhoneTestWindow} from './phone-test-window.js';
 import {canonicalSceneReferences} from './scene-references.js';
 import {assertCurrentDialogue,dialogueContext} from './dialogue.js';
-import {meshCatalog,assetManifest,generationCharacterIDs,textureManifest} from './assets.js';
+import {meshCatalog,assetManifest,generationCharacterIDs,textureManifest,textureIDs,generatedTextures,registerGeneratedTexture,removeGeneratedTexture,parseImageInfo,generatedAssetsDir} from './assets.js';
+import {prepareWorldCommit,publishWorldCommit,type ApprovedWorld} from './world-commits.js';
 import express from 'express';
 import {compileScene,constructionRequirements,deterministicCorrections} from './construction.js';
 import {dispatchTool} from './tool-dispatch.js';
 import {generateExperience,authoredScene,experienceSceneIssues,type ApprovedExperience} from './generation-chain.js';
 import {builderInstructions} from './generation-prompts.js';
 import { createServer } from 'node:http';
-import { randomUUID, timingSafeEqual } from 'node:crypto';
-import {mkdirSync,writeFileSync} from 'node:fs';
+import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
+import {existsSync,mkdirSync,readdirSync,readFileSync,rmSync,writeFileSync} from 'node:fs';
+import {basename,join} from 'node:path';
+import {fileURLToPath} from 'node:url';
 import { WebSocketServer, WebSocket } from 'ws';
 import { AppError, validate, validateProviderOutput, sceneIssues } from './contracts.js';
 import { model, provenance, requestCount, reservedCostUSD, usageLog } from './meta.js';
 import type { Job, PlanRequest } from '../../docs/handoff/contracts.js';
-const app=express(); app.use(express.json({limit:'2mb'})); app.disable('x-powered-by');
+const app=express(); app.use(express.json({limit:'20mb'})); app.disable('x-powered-by');
 const secret=process.env.BRAIVE_TOKEN;
 if(!secret || secret.length<20) throw new Error('Set BRAIVE_TOKEN to a random string of at least 20 characters');
 function authorized(value: string | undefined) { const a=Buffer.from(value??''), b=Buffer.from(`Bearer ${secret}`); return a.length===b.length && timingSafeEqual(a,b); }
@@ -139,6 +142,70 @@ app.post('/v1/jobs/:id/validation',async(req,res,next)=>{
   finally{clearTimeout(timer);releaseGeneration(job.job_id,controller,running);}
  }catch(e){next(e);}
 });
+app.post('/v1/world-commits',(req,res,next)=>{
+ try {
+  const body=req.body??{};
+  const {session_id,expected_revision,revision,plan,scene,audio,world_id}=body;
+  if(typeof session_id!=='string'||!session_id||typeof expected_revision!=='number'||typeof revision!=='number'||!plan||!scene||!audio) throw new AppError('INVALID_INPUT','World commit requires session_id, expected_revision, revision, plan, scene and audio');
+  const priorExperience=approved.get(session_id)?.experience;
+  const input={session_id,expected_revision,revision,plan,scene,audio,world_id:typeof world_id==='string'?world_id:undefined};
+  const world=prepareWorldCommit(input,approved as unknown as Map<string,ApprovedWorld>,revisions);
+  const stored={...world,experience:priorExperience};
+  const dir=fileURLToPath(new URL('../data/worlds/',import.meta.url));
+  mkdirSync(dir,{recursive:true});
+  writeFileSync(join(dir,`${session_id}.json`),JSON.stringify({plan:stored.plan,scene:stored.scene,audio:stored.audio,revision,world_id:stored.world_id},null,2),{mode:0o600});
+  publishWorldCommit(input,world,approved as unknown as Map<string,ApprovedWorld>,revisions);
+  approved.set(session_id,stored as unknown as ApprovedExperience);
+  res.status(200).json({session_id,revision,world_id:stored.world_id,status:'committed'});
+ } catch(e){next(e);}
+});
+app.post('/v1/assets',(req,res,next)=>{
+ try {
+  const body=req.body??{};
+  if(typeof body.content_base64!=='string'||!body.content_base64) throw new AppError('INVALID_INPUT','content_base64 is required');
+  if(body.format!==undefined&&body.format!=='png'&&body.format!=='jpeg') throw new AppError('INVALID_INPUT','format must be png or jpeg');
+  const buffer=Buffer.from(body.content_base64,'base64');
+  if(buffer.length>12*1024*1024) throw new AppError('INVALID_INPUT','Generated asset exceeds the 12MB plan limit');
+  let info:{format:'png'|'jpeg';width:number;height:number};
+  try { info=parseImageInfo(buffer); } catch(e:any) { throw new AppError('INVALID_INPUT',e?.message??'Invalid image data'); }
+  if(body.format&&body.format!==info.format) throw new AppError('INVALID_INPUT','Declared format does not match image contents');
+  if(info.width>2048||info.height>1024) throw new AppError('INVALID_INPUT','Generated asset exceeds the 2048x1024 distant imagery cap');
+  const sha256=createHash('sha256').update(buffer).digest('hex');
+  const id='texture.generated.'+sha256.slice(0,16);
+  const existing=generatedTextures().find(e=>e.sha256===sha256);
+  if(existing){res.status(201).json({id:existing.id,format:existing.format,bytes:existing.bytes,width:existing.width,height:existing.height});return;}
+  const ext=info.format==='png'?'png':'jpg';
+  const file=`${id}.${ext}`;
+  mkdirSync(generatedAssetsDir,{recursive:true});
+  writeFileSync(join(generatedAssetsDir,file),buffer,{mode:0o600});
+  const entry=registerGeneratedTexture({id,file,format:info.format,bytes:buffer.length,sha256,width:info.width,height:info.height});
+  res.status(201).json({id:entry.id,format:entry.format,bytes:entry.bytes,width:entry.width,height:entry.height});
+ } catch(e){next(e);}
+});
+app.get('/v1/assets/:id',(req,res,next)=>{
+ try {
+  const id=req.params.id;
+  const generated=generatedTextures().find(e=>e.id===id);
+  if(generated){
+   const path=join(generatedAssetsDir,basename(generated.file));
+   if(!existsSync(path)) {res.status(404).json({code:'NOT_FOUND',message:'Generated asset file is missing'});return;}
+   res.type(generated.format==='png'?'image/png':'image/jpeg');
+   res.sendFile(path); return;
+  }
+  if(textureIDs.has(id)||textureManifest.some(t=>t.id===id)){res.status(404).json({code:'ASSET_BUNDLED',message:'Bundled texture is already on the device'});return;}
+  res.status(404).json({code:'NOT_FOUND',message:'Asset not found'});
+ } catch(e){next(e);}
+});
+app.delete('/v1/assets/:id',(req,res,next)=>{
+ try {
+  const id=req.params.id;
+  if(textureIDs.has(id)||textureManifest.some(t=>t.id===id)) throw new AppError('INVALID_INPUT','Bundled textures cannot be deleted');
+  const removed=removeGeneratedTexture(id);
+  if(!removed){res.status(404).json({code:'NOT_FOUND',message:'Asset not found'});return;}
+  try{rmSync(join(generatedAssetsDir,basename(removed.file)),{force:true});}catch{}
+  res.sendStatus(204);
+ } catch(e){next(e);}
+});
 app.get('/v1/jobs/:id',(req,res)=>{const j=jobs.get(req.params.id); j?res.json(j):res.status(404).json({message:'Job not found'});});
 app.delete('/v1/jobs/:id',(req,res)=>{cancelGeneration(req.params.id,jobs,running);res.sendStatus(204);});
 const routes=[['dialogue','DialogueRequest','DialogueResult','Respond as the specified character to the actual user answer. At most two short sentences, 35 words total. One speaker. Use character gestures only; scenario actions own movement and world changes. Never invent observations.'],['feedback','FeedbackRequest','FeedbackResult','Only cite supplied observation IDs. Maximum three positive did_well and three noticed. Include a quick improvement if supported. No diagnosis or inferred eye contact.'],['adaptations','AdaptationRequest','AdaptationResult','Use self-report, preferences, and supplied evidence IDs. Maintain if evidence is missing; ease or maintain after early quit/high difficulty. Preserve scenario identity.']] as const;
@@ -172,6 +239,20 @@ for(const [path,requestSchema,resultSchema,instructions] of routes) app.post(`/v
 });
 app.get('/v1/provenance/:id',(req,res)=>res.json({mode:'live',model_ids:[process.env.SPARK_MODEL??'muse-spark-1.3',process.env.WONDER_MODEL??'muse-wonder-1.0'],request_ids:provenance.get(req.params.id)??[]}));
 app.use((e:any,_req:express.Request,res:express.Response,_next:express.NextFunction)=>res.status(e.status??500).json({code:e.code??'INVALID_INPUT',message:e.message,issues:e.issues??[],request_id:randomUUID(),retryable:true}));
+try {
+ const worldsDir=fileURLToPath(new URL('../data/worlds/',import.meta.url));
+ if(existsSync(worldsDir)) for(const file of readdirSync(worldsDir)) {
+  if(!file.endsWith('.json'))continue;
+  try {
+   const data=JSON.parse(readFileSync(join(worldsDir,file),'utf8'));
+   const session_id=data?.plan?.session_id??data?.session_id??file.slice(0,-5);
+   const revision=data?.revision??data?.plan?.revision;
+   if(!data?.plan||!data?.scene||!data?.audio||typeof session_id!=='string'||typeof revision!=='number')continue;
+   approved.set(session_id,{plan:data.plan,scene:data.scene,audio:data.audio,experience:data.experience} as ApprovedExperience);
+   revisions.set(session_id,revision);
+  } catch {}
+ }
+} catch {}
 const server=createServer(app); const wss=new WebSocketServer({noServer:true,maxPayload:100000});
 server.on('upgrade',(req,socket,head)=>{
  const diagnostic=req.url==='/v1/diagnostics/audio' && process.env.BRAIVE_TEST_MODE==='true';

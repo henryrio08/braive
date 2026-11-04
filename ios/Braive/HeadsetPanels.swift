@@ -9,9 +9,34 @@ import UIKit
   let root = SCNNode()
   private var panelNode: SCNNode?
   private var statusNode: SCNNode?
+  private var blackoutNode: SCNNode?
+  private var blackoutMaterial: SCNMaterial?
   private var lastKey = ""
 
   func attach(to head: SCNNode) { head.addChildNode(root) }
+
+  func setBlackout(_ level: Double) {
+    let clamped = min(1, max(0, level))
+    if clamped <= 0 {
+      blackoutNode?.removeFromParentNode(); blackoutNode = nil; blackoutMaterial = nil
+      return
+    }
+    if blackoutNode == nil {
+      let plane = SCNPlane(width: 10, height: 5)
+      let material = SCNMaterial()
+      material.diffuse.contents = UIColor.black
+      material.lightingModel = .constant
+      material.isDoubleSided = false
+      plane.materials = [material]
+      let node = SCNNode(geometry: plane)
+      node.position = SCNVector3(0, 0, -2.9)
+      node.name = "braive_blackout"
+      root.addChildNode(node)
+      blackoutNode = node; blackoutMaterial = material
+    }
+    blackoutNode?.isHidden = false
+    blackoutMaterial?.transparency = CGFloat(clamped)
+  }
 
   func update(title: String, detail: String, command: String, status: String, visible: Bool) {
     let key = [title, detail, command, status, visible ? "1" : "0"].joined(separator: "\u{1}")

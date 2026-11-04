@@ -126,8 +126,8 @@ struct HeadsetHUD: View {
     }
   }
   var pausedHeadsetCopy: HeadsetCopy {
-    if pauses.contains("builder_edit") {
-      return HeadsetCopy(title: "Your place is saved.", detail: builderEditing ? "Say what should change in this same place." : "Your change is ready in this same place.", command: "Say RESUME to continue · STOP to end")
+    if pauses.contains("user_stop") {
+      return HeadsetCopy(title: "End this practice?", detail: pauses.contains("portrait") ? "Turn the phone sideways to resume." : "Your place is saved.", command: "Say YES to end · NO to continue")
     }
     if pauses.contains("tracking_unavailable") {
       return HeadsetCopy(title: "Your practice is paused.", detail: "Head tracking is unavailable.", command: "Remove the viewer", hint: "Keep the app open or reopen it to restore tracking")
@@ -135,8 +135,8 @@ struct HeadsetHUD: View {
     if pauses.contains("command_channel_unavailable") || pauses.contains("audio_interruption") {
       return HeadsetCopy(title: "Your place is saved.", detail: "Voice needs reconnecting.", command: "Remove the viewer", hint: "Hold the screen for phone controls")
     }
-    if pauses.contains("user_stop") {
-      return HeadsetCopy(title: "End this practice?", detail: pauses.contains("portrait") ? "Turn the phone sideways to resume." : "Your place is saved.", command: "Say YES to end · NO to continue")
+    if pauses.contains("builder_edit") {
+      return HeadsetCopy(title: "Your place is saved.", detail: builderEditing ? "Say what should change in this same place." : "Your change is ready in this same place.", command: "Say RESUME to continue · STOP to end")
     }
     if pauses.contains("portrait") { return HeadsetCopy(title: "Take a moment.", command: "Turn the phone sideways to continue") }
     return HeadsetCopy(title: "Your practice is paused.", detail: "Your place is saved.")

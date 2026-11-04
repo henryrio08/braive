@@ -404,6 +404,24 @@ export function expandAssemblyMacros(scene:SceneSpec):void {
     placed.push(candidate);
    }
    placed.forEach((pos,i)=>members.push(add(`item_${i}`,{kind:'asset',asset_id:macro.asset_id},pos,rand()*Math.PI*2)));
+  }else if(macro.kind==='platform_steps'){
+   if(!Number.isInteger(macro.steps)||macro.steps<1||macro.steps>12||!(macro.step_height>=0.05&&macro.step_height<=0.5)||!(macro.step_depth>=0.2&&macro.step_depth<=1)||!(macro.width>=0.5&&macro.width<=6)||!(macro.platform_depth>=0.5&&macro.platform_depth<=6))fail(`Macro ${macro.id} platform_steps fields are out of bounds (steps 1..12, step_height 0.05..0.5, step_depth 0.2..1, width 0.5..6, platform_depth 0.5..6)`);
+   // Convention: origin is the base front-center (front edge of step_0 at origin.z, floor at origin.y). Step i spans y [origin.y+i*step_height, origin.y+(i+1)*step_height] (box height step_height, centered between) and its center is at z=origin.z-(i+0.5)*step_depth, ascending away from the front (-Z). platform_top (0.15 thick) sits behind the last step at center z=origin.z-steps*step_depth-platform_depth/2 with its top exactly at origin.y+steps*step_height, flush with the last step top, so its center y is 0.075 below that.
+   for(let i=0;i<macro.steps;i++){
+    members.push(add(`step_${i}`,{kind:'box',size:[macro.width,macro.step_height,macro.step_depth]},[macro.origin[0],macro.origin[1]+(i+0.5)*macro.step_height,macro.origin[2]-(i+0.5)*macro.step_depth]));
+   }
+   members.push(add('platform_top',{kind:'box',size:[macro.width,0.15,macro.platform_depth]},[macro.origin[0],macro.origin[1]+macro.steps*macro.step_height-0.075,macro.origin[2]-macro.steps*macro.step_depth-macro.platform_depth/2]));
+  }else if(macro.kind==='functional_group'){
+   if(!assetIDs.has(macro.chair_asset_id))fail(`Macro ${macro.id} chair asset ${macro.chair_asset_id} is not registered`);
+   if(macro.include_desk&&macro.desk_asset_id&&!assetIDs.has(macro.desk_asset_id))fail(`Macro ${macro.id} desk asset ${macro.desk_asset_id} is not registered`);
+   // Facing direction uses the compiler yaw convention (yaw=atan2(-dx,-dz)), so forward is [-sin(yaw),0,-cos(yaw)]. Chairs sit on opposite sides of the desk along that axis and face each other; cast remains authored elsewhere.
+   const dir:Vec3=[-Math.sin(macro.facing_yaw),0,-Math.cos(macro.facing_yaw)];
+   if(macro.include_desk){
+    if(macro.desk_asset_id)members.push(add('desk',{kind:'asset',asset_id:macro.desk_asset_id},[macro.origin[0],macro.origin[1],macro.origin[2]],macro.facing_yaw));
+    else members.push(add('desk',{kind:'box',size:[1.4,0.75,0.7]},[macro.origin[0],macro.origin[1]+0.375,macro.origin[2]],macro.facing_yaw));
+   }
+   members.push(add('chair_0',{kind:'asset',asset_id:macro.chair_asset_id},[macro.origin[0]+dir[0]*0.85,macro.origin[1],macro.origin[2]+dir[2]*0.85],macro.facing_yaw+Math.PI));
+   members.push(add('chair_1',{kind:'asset',asset_id:macro.chair_asset_id},[macro.origin[0]-dir[0]*0.85,macro.origin[1],macro.origin[2]-dir[2]*0.85],macro.facing_yaw));
   }
   cp.assemblies.push({id:`${macro.id}_assembly`,root_node_id:macro.root_node_id,member_node_ids:members,zone_id:macro.zone_id,requirement_ids:[]});
  }

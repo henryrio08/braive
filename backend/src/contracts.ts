@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import Ajv from 'ajv';
-import {assetIDs,characterIDs,generationCharacterIDs,assetManifest,textureIDs} from './assets.js';
+import {assetIDs,characterIDs,generationCharacterIDs,assetManifest,allTextureIDs} from './assets.js';
 import {scenarioGraphIssues} from './scenario-graph.js';
 import addFormats from 'ajv-formats';
 import type { ValidationIssue, SceneSpec, SessionPlan, AudioPlan, WorldOperation } from '../../docs/handoff/contracts.js';
@@ -63,7 +63,7 @@ export function sceneIssues(plan: SessionPlan, scene: SceneSpec, audio: AudioPla
   if(n.material.surface&&((g.kind==='asset'&&characterIDs.has(g.asset_id))||n.role==='character'))fail(`/nodes/${i}/material/surface`,'palette','Approved character materials cannot receive environmental surface profiles');
   if(n.material.surface?.profile==='water'&&n.collision_role!=='none')fail(`/nodes/${i}/collision_role`,'medium','Visual water surfaces must not be solid route obstacles; support needs separate real geometry');
   if(n.support_node_id && (!nodes.has(n.support_node_id)||n.support_node_id===n.id))fail(`/nodes/${i}/support_node_id`,'reference','Support must name another loaded node');
-  if(n.material.texture_asset_id!==undefined&&!textureIDs.has(n.material.texture_asset_id))fail(`/nodes/${i}/material/texture_asset_id`,'asset',`Texture ${n.material.texture_asset_id} is not a registered texture; use an ID from the registered texture list (mesh/GLB asset IDs are not textures); trusted code loads it`);
+  if(n.material.texture_asset_id!==undefined&&!allTextureIDs().has(n.material.texture_asset_id))fail(`/nodes/${i}/material/texture_asset_id`,'asset',`Texture ${n.material.texture_asset_id} is not a registered texture; use an ID from the registered texture list (mesh/GLB asset IDs are not textures); trusted code loads it`);
   if((n.material as any).texture_scale!==undefined&&!((n.material as any).texture_scale>0))fail(`/nodes/${i}/material/texture_scale`,'size','Texture UV scale must be positive');
   const approvedProp=!!n.prop_name&&!!plan.props?.includes(n.prop_name);
   if(n.prop_name&&!approvedProp)fail(`/nodes/${i}/prop_name`,'prop_match','Scene prop name must match an approved plan prop');
