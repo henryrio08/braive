@@ -54,3 +54,15 @@ export function cancelGeneration(id:string,jobs:Map<string,Job>,running:Map<stri
 export function releaseGeneration(id:string,controller:AbortController,running:Map<string,AbortController>) {
  if(running.get(id)===controller)running.delete(id);
 }
+
+/** Per-session state must outlive any retained revision of that session. */
+export function pruneCompletedJobs(jobs:Map<string,Job>,running:ReadonlyMap<string,AbortController>,limit=100) {
+ const evicted:string[]=[],expiredSessions=new Set<string>();
+ for(const [id,job] of jobs){
+  if(jobs.size<=limit)break;
+  if(running.has(id))continue;
+  jobs.delete(id);evicted.push(id);expiredSessions.add(job.session_id);
+ }
+ if(expiredSessions.size)for(const job of jobs.values())expiredSessions.delete(job.session_id);
+ return {evicted,expiredSessions};
+}
