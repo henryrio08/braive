@@ -6,7 +6,7 @@ let previousVisualMode:string|undefined;
 beforeEach(()=>{previousVisualMode=process.env.BRAIVE_VISUAL_STRICTNESS;process.env.BRAIVE_VISUAL_STRICTNESS='standard';});
 afterEach(()=>{if(previousVisualMode===undefined)delete process.env.BRAIVE_VISUAL_STRICTNESS;else process.env.BRAIVE_VISUAL_STRICTNESS=previousVisualMode;});
 import assert from 'node:assert/strict';
-import {compileConstruction,compileScene,constructionRequirements} from '../src/construction.js';
+import {compileConstruction,compileScene,constructionRequirements,deterministicCorrections} from '../src/construction.js';
 import {transform,inverse,point,multiply,identity} from '../src/spatial-math.js';
 import {sceneIssues} from '../src/contracts.js';
 import type {SessionPlan,SceneSpec,SceneNode,AudioPlan} from '../../docs/handoff/contracts.js';
@@ -74,6 +74,29 @@ test('clearance respects an explicit target anchor and world offset',()=>{
  assert.ok(compileConstruction(plan,scene).construction_report!.resolved_relation_ids.includes('clear'));
  scene.construction_plan!.relations[1].offset=[1,0,-3];
  assert.throws(()=>compileConstruction(plan,scene),/constraints require repair/);
+});
+
+test('viewpoint targets preserve real clearance, and cannot stand in for geometry',()=>{
+ const {plan,scene}=setup();
+ scene.viewpoints.push({id:'arrival',position:[1,1,-3],description:'Arrival'});
+ scene.construction_plan!.relations.push({id:'clear',kind:'clear_of',subject_id:'table',target_id:'arrival',
+  offset:[0,0,0],clearance:1,tolerance:0.01,required:true});
+ const relation=scene.construction_plan!.relations[1];
+ assert.throws(()=>compileConstruction(plan,scene),(e:any)=>e.issues.some((i:any)=>i.rule==='clearance'));
+ relation.target_id='missing_viewpoint';
+ assert.throws(()=>compileConstruction(plan,scene),(e:any)=>e.issues.some((i:any)=>i.rule==='reference'));
+ relation.target_id='arrival';relation.kind='within';
+ assert.throws(()=>compileConstruction(plan,scene),(e:any)=>e.issues.some((i:any)=>i.rule==='reference'));
+});
+
+test('a declared support link identifies the owner of an undeclared contact anchor',()=>{
+ const {plan,scene}=setup(),construction=scene.construction_plan!,relation=construction.relations[0];
+ scene.nodes[1].position=[1,0.5,-3];scene.nodes[1].support_node_id='floor';
+ construction.anchors=[];
+ relation.target_id=relation.anchor_id!;
+ assert.deepEqual(compileConstruction(plan,deterministicCorrections(scene).scene).nodes,scene.nodes);
+ scene.nodes[1].support_node_id=null;
+ assert.throws(()=>compileConstruction(plan,deterministicCorrections(scene).scene),(e:any)=>e.issues.some((i:any)=>i.rule==='reference'));
 });
 
 test('zone fit catches world coordinates mistakenly repeated on a local child',()=>{
@@ -145,6 +168,19 @@ test('static independent roots are partitioned without changing geometry or worl
  assert.throws(()=>compileConstruction(plan,scene),(e:any)=>e.issues.some((i:any)=>i.rule==='hierarchy'));
 });
 
+test('static assembly bookkeeping can omit its named root when all listed members are independent',()=>{
+ const {plan,scene}=setup();
+ scene.nodes[1].position=[1,0.5,-3];scene.construction_plan!.relations=[];
+ scene.construction_plan!.assemblies.push({id:'room_collection',root_node_id:'table',member_node_ids:['floor'],
+  zone_id:'room',requirement_ids:['task']});
+ const compiled=compileConstruction(plan,scene);
+ assert.deepEqual(compiled.nodes,scene.nodes);
+ assert.deepEqual(compiled.construction_plan!.assemblies.at(-1),{
+  id:'room_collection',root_node_id:'floor',member_node_ids:['floor'],zone_id:'room',requirement_ids:['task'],
+ });
+ assert.deepEqual(compileConstruction(plan,compiled),compiled);
+});
+
 test('anchor footprints use physical meters through parent scale while positions remain geometry-local',()=>{
  const {plan,scene}=setup();scene.nodes[1].parent_id='floor';scene.nodes[0].scale=[2,1,3];
  scene.construction_plan!.zones[0].size=[100,20,100];
@@ -177,6 +213,20 @@ function routeSetup(purpose:string,wall:boolean){
 test('a viewer route through solid geometry fails backend construction with the blocking node and segment',()=>{
  const {plan,scene}=routeSetup('walk',true);
  assert.throws(()=>compileConstruction(plan,scene),(e:any)=>e.issues.some((i:any)=>i.rule==='route_clearance'&&i.message.includes('wall')&&i.message.includes('segment 1')));
+});
+
+test('route clearance uses height at the obstacle and follows moving assembly ancestry',()=>{
+ const {plan,scene}=routeSetup('ride',true);
+ const obstacle=scene.nodes.at(-1)!;
+ obstacle.geometry={kind:'box',size:[2,0.2,1]};
+ obstacle.position=[0,2.6,0];
+ scene.motion_paths![0].points=[{at_seconds:5,position:[0,3.6,-8]}];
+ assert.ok(compileConstruction(plan,scene));
+ obstacle.position=[0,2.6,-5];
+ assert.throws(()=>compileConstruction(plan,scene),(e:any)=>e.issues.some((i:any)=>i.rule==='route_clearance'&&i.message.includes('wall')));
+ obstacle.parent_id='floor';
+ scene.viewer_attached_node_ids=['floor'];
+ assert.ok(compileConstruction(plan,scene));
 });
 
 test('human clearance distinguishes an animated object from an approved actor',()=>{

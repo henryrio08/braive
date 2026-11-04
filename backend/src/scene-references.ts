@@ -1,20 +1,25 @@
 import type {AudioPlan,MotionPath,SceneSpec,SessionPlan} from '../../docs/handoff/contracts.js';
 
 /** A leading time-zero sample states the origin, not a second movement point. */
+export function normalizePathOrigin(path:Partial<MotionPath>):boolean {
+ if(!Array.isArray(path.points)||path.points.length<2||path.points[0]?.at_seconds!==0)return false;
+ const origin=path.points[0].position;
+ if(!Array.isArray(origin)||origin.length!==3||!origin.every(Number.isFinite))return false;
+ if(path.coordinate_space===undefined||path.coordinate_space==='world'){
+  const start=path.start_position;
+  if(start!==undefined&&(!Array.isArray(start)||start.length!==3||!start.every(Number.isFinite)||
+    Math.hypot(...origin.map((v,i)=>v-start[i]))>=1e-6))return false;
+  path.start_position=start??origin;
+ }else if(path.coordinate_space!=='relative'||origin.some(v=>v!==0))return false;
+ path.points.shift();
+ return true;
+}
+
 export function canonicalSceneMotion(value:unknown):unknown {
  if(!value||typeof value!=='object'||!Array.isArray((value as SceneSpec).motion_paths))return value;
  const scene=structuredClone(value) as SceneSpec;
- for(const raw of scene.motion_paths!){
-  if(!raw||typeof raw!=='object')continue;
-  const path=raw as Partial<MotionPath>;
-  if(!Array.isArray(path.points)||path.points.length<2||path.points[0]?.at_seconds!==0)continue;
-  const origin=path.points[0].position;
-  if(!Array.isArray(origin)||origin.length!==3||!origin.every(Number.isFinite))continue;
-  if(path.coordinate_space==='world'){
-   if(path.start_position&&(!Array.isArray(path.start_position)||path.start_position.length!==3||!origin.every((v,i)=>v===path.start_position![i])))continue;
-   path.start_position=origin;
-  }else if(path.coordinate_space!=='relative'||origin.some(v=>v!==0))continue;
-  path.points.shift();
+ for(const path of scene.motion_paths!){
+  if(path&&typeof path==='object')normalizePathOrigin(path);
  }
  return scene;
 }

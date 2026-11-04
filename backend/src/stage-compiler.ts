@@ -1,4 +1,4 @@
-import type {ExperienceDraft} from './experience.js';
+import type {ExperienceDraft,MovementIntent} from './experience.js';
 import type {SceneSpec,SessionPlan} from '../../docs/handoff/contracts.js';
 import type {ValidationIssue} from '../../docs/handoff/contracts.js';
 
@@ -16,6 +16,7 @@ import type {ValidationIssue} from '../../docs/handoff/contracts.js';
  */
 type Step=NonNullable<SceneSpec['scenario']>['steps'][number];
 type Operation=Step['start_operations'][number];
+type Travel=Exclude<MovementIntent,'none'>;
 
 export function materializeStageGraph(experience:ExperienceDraft,plan:SessionPlan,source:SceneSpec) {
  const scene=structuredClone(source);
@@ -31,6 +32,7 @@ export function materializeStageGraph(experience:ExperienceDraft,plan:SessionPla
   ...[...authored.values()].flatMap(step=>[...(step.start_operations??[]),...(step.actions??[]).flatMap(action=>action.operations)]),
  ].filter(op=>op.type==='move_node').map(op=>op.path_id));
  const stages=experience.experience.stages;
+ const travelByPath=new Map<string,Set<Travel>>();
  const nodes=new Map(scene.nodes.map(node=>[node.id,node]));
  const taskFocus=(requirements.find(requirement=>requirement.requirement_id==='task')?.node_ids??[])
   .filter(id=>nodes.has(id)&&nodes.get(id)?.role!=='character');
@@ -53,21 +55,22 @@ export function materializeStageGraph(experience:ExperienceDraft,plan:SessionPla
    announce_on_entry:prior?.announce_on_entry??false,
   };
  };
- function boundPaths(id:string,movement:string):string[] {
+ function boundPaths(id:string,movement:Travel):string[] {
   const explicit=[...new Set(routes.filter(route=>route.stage_ids.includes(id)).map(route=>route.path_id))];
   if(explicit.length||!scene.construction_plan)return explicit;
   const binding=requirements.filter(requirement=>requirement.requirement_id===`stage:${id}`);
   const candidates=[...new Set(binding.flatMap(requirement=>requirement.path_ids))];
   if(candidates.length!==1)return candidates.length>1?candidates:[];
   const path=paths.get(candidates[0]);
-  if(!path||nodeMotionPaths.has(path.id)||(movement!=='other'&&path.purpose!==movement))return [];
+  if(!path||nodeMotionPaths.has(path.id))return [];
   // Do not steal a path explicitly assigned to another stage.
   const existing=routes.filter(route=>route.path_id===path.id);
   if(existing.length>1||existing.some(route=>route.stage_ids.length>0))return [];
   if(existing.length===1){
    existing[0].stage_ids.push(id);
   }else{
-   const peers=routes.filter(route=>paths.get(route.path_id)?.purpose===path.purpose);
+   const purpose=movement==='other'?path.purpose:movement;
+   const peers=routes.filter(route=>paths.get(route.path_id)?.purpose===purpose);
    const shared=(key:'clearance_radius_meters'|'eye_height_meters')=>{
     const values=[...new Set(peers.map(route=>route[key]))];
     return values.length===1?values[0]:undefined;
@@ -95,6 +98,11 @@ export function materializeStageGraph(experience:ExperienceDraft,plan:SessionPla
      :`Stage ${id} has ${bound.length} different routes bound (${bound.join(', ')}); bind exactly one so travel is unambiguous.`});
    } else {
     preserved.push({type:'move_viewer',path_id:bound[0]} as Operation);
+    if(stage.movement!=='other'){
+     const movements=travelByPath.get(bound[0])??new Set();
+     movements.add(stage.movement);
+     travelByPath.set(bound[0],movements);
+    }
     if(stage.conversation_character_index===null)completion={trigger:'motion_complete',motion_path_id:bound[0],next_step_id:nextId};
    }
   }
@@ -116,6 +124,14 @@ export function materializeStageGraph(experience:ExperienceDraft,plan:SessionPla
    ...(characterIndex!==null&&plan.characters[characterIndex]?{conversation_target:plan.characters[characterIndex].id}:{}),
   } as Step;
  });
+ // The approved stage owns viewer motion semantics. Keep the trajectory
+ // untouched so construction and native audits check it under that intent.
+ for(const [id,movements] of travelByPath){
+  const path=paths.get(id),[movement]=movements;
+  if(!path||nodeMotionPaths.has(id)||movements.size!==1||path.purpose===movement)continue;
+  corrections.push(`Set ${id} movement to approved ${movement} (builder labeled it ${path.purpose})`);
+  path.purpose=movement;
+ }
  const terminalPrior=authored.get('stage_completed');
  const {completion:_authoredCompletion,conversation_target:_authoredTarget,...terminalRest}=terminalPrior??{} as Partial<Step>;
  steps.push({

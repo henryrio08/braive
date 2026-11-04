@@ -4,6 +4,7 @@ import {AppError,document,sceneIssues} from './contracts.js';
 import type {SceneSpec,SceneNode,SessionPlan,ValidationIssue,ConstructionPlan,AudioPlan} from '../../docs/handoff/contracts.js';
 import {identity,multiply,inverse,point,transform,transformedBounds,contains,distance,type Vec3,type Bounds} from './spatial-math.js';
 import {classifyVisual,evaluateAcceptance,zoneSeverity,visualStrictness,type ClassifiedIssue} from './acceptance.js';
+import {normalizePathOrigin} from './scene-references.js';
 
 export type ConstructionRequirement={id:string;kind:'task'|'cast'|'prop'|'stage'|'motion'|'boundary'|'outcome';target:string;description:string};
 export function constructionRequirements(plan:SessionPlan):ConstructionRequirement[]{
@@ -88,8 +89,8 @@ function constructionSource(source:SceneSpec):SceneSpec {
  const assemblyLimit=document.components.schemas.ConstructionPlan.properties.assemblies.maxItems;
  let assemblyCount=cp.assemblies.length;
  cp.assemblies=cp.assemblies.flatMap(assembly=>{
-  if(inheritsControl(assembly.root_node_id)||assembly.member_node_ids.some(id=>!nodes.has(id)))return [assembly];
-  const members=new Set(assembly.member_node_ids),groups=new Map<string,string[]>();
+  if(!nodes.has(assembly.root_node_id)||inheritsControl(assembly.root_node_id)||assembly.member_node_ids.some(id=>!nodes.has(id)))return [assembly];
+  const members=new Set([assembly.root_node_id,...assembly.member_node_ids]),groups=new Map<string,string[]>();
   for(const id of assembly.member_node_ids){
    let root=id;const seen=new Set<string>();
    while(nodes.get(root)?.parent_id&&members.has(nodes.get(root)!.parent_id!)){
@@ -98,11 +99,12 @@ function constructionSource(source:SceneSpec):SceneSpec {
    if(root!==assembly.root_node_id&&nodes.get(root)?.parent_id!==null)return [assembly];
    const group=groups.get(root)??[];group.push(id);groups.set(root,group);
   }
-  if(groups.size<2||!groups.has(assembly.root_node_id)||assemblyCount+groups.size-1>assemblyLimit)return [assembly];
+  if(!groups.size||(groups.size===1&&groups.has(assembly.root_node_id))||assemblyCount+groups.size-1>assemblyLimit)return [assembly];
   assemblyCount+=groups.size-1;
+  const originalRoot=groups.has(assembly.root_node_id)?assembly.root_node_id:groups.keys().next().value;
   return [...groups].map(([root,member_node_ids])=>{
    let id=assembly.id;
-   if(root!==assembly.root_node_id){
+   if(root!==originalRoot){
     let salt=0;do{id='asm_'+createHash('sha256').update(assembly.id+'|'+root+'|'+salt++).digest('hex').slice(0,16);}while(assemblyIDs.has(id));
     assemblyIDs.add(id);
    }
@@ -167,21 +169,17 @@ export function deterministicCorrections(source:SceneSpec):{scene:SceneSpec;corr
  if(cp){
   // An unambiguous time-zero waypoint IS the route origin: it becomes the
   // path start, preserving later waypoints, times, frame and destination.
-  for(const path of scene.motion_paths??[]){
-   const first=path.points[0];
-   if(first&&first.at_seconds===0){
-    if(!path.start_position){path.start_position=[...first.position];corrections.push(`Normalized time-zero waypoint of ${path.id} into its route origin; later waypoints and timing unchanged.`);path.points=path.points.slice(1);}
-    else if(distance(path.start_position,first.position)<1e-6){path.points=path.points.slice(1);corrections.push(`Removed redundant time-zero waypoint duplicating the origin of ${path.id}.`);}
-   }
-  }
+  for(const path of scene.motion_paths??[])if(normalizePathOrigin(path))
+   corrections.push(`Normalized time-zero waypoint of ${path.id} into its route origin; later waypoints and timing unchanged.`);
   const nodeIds=new Set(scene.nodes.map(n=>n.id));
   const anchorIds=new Set((cp.anchors??[]).map(a=>a.id));
   const zoneIds=new Set((cp.zones??[]).map(z=>z.id));
+  const viewpointIds=new Set((scene.viewpoints??[]).map(view=>view.id));
   const requiredNodes=new Set((cp.requirements??[]).flatMap(r=>r.node_ids));
   // Facing the participant is the only reading of a faces relation whose
   // target does not resolve to scene geometry.
   for(const relation of cp.relations??[]){
-   if(relation.kind==='faces'&&relation.target_id!=='viewer'&&!nodeIds.has(relation.target_id)&&!anchorIds.has(relation.target_id)&&!zoneIds.has(relation.target_id)){
+   if(relation.kind==='faces'&&relation.target_id!=='viewer'&&!nodeIds.has(relation.target_id)&&!anchorIds.has(relation.target_id)&&!zoneIds.has(relation.target_id)&&!viewpointIds.has(relation.target_id)){
     corrections.push(`Retargeted ${relation.id} from unresolvable ${relation.target_id} to the viewer (participant).`);
     relation.target_id='viewer';
    }
@@ -204,6 +202,16 @@ export function deterministicCorrections(source:SceneSpec):{scene:SceneSpec;corr
    }
   }
   const nodeById=new Map(scene.nodes.map(n=>[n.id,n]));
+  // Recover a missing anchor's owner only from an explicit node support link.
+  // The next passes can then verify or materialize the relation's contact.
+  for(const relation of cp.relations??[]){
+   const id=relation.target_id;
+   if(relation.kind!=='on'||id!==relation.anchor_id||id==='viewer'||nodeIds.has(id)||anchorIds.has(id)||zoneIds.has(id)||viewpointIds.has(id))continue;
+   const support=nodeById.get(relation.subject_id)?.support_node_id;
+   if(!support||support===relation.subject_id||!nodeIds.has(support))continue;
+   relation.target_id=support;
+   corrections.push(`Resolved the owner of missing anchor ${id} for ${relation.id} from the subject's declared support ${support}.`);
+  }
   // Preserve a seated pose and its declared support when a placement
   // annotation cannot locate a real contact. Standing mesh bounds cannot
   // reconstruct a seat contact. Strict review still reports the bad relation.
@@ -236,10 +244,14 @@ export function deterministicCorrections(source:SceneSpec):{scene:SceneSpec;corr
    const declared=new Map((cp.anchors??[]).map(a=>[a.id,a]));
    if(['within','inside'].includes(relation.kind)){
     if(relation.anchor_id&&!declared.has(relation.anchor_id)){delete relation.anchor_id;corrections.push(`Dropped undeclared anchor reference from containment relation ${relation.id}; containment targets the zone/node volume.`);}
-    if(relation.subject_anchor_id&&!declared.has(relation.subject_anchor_id)){delete relation.subject_anchor_id;corrections.push(`Dropped undeclared subject anchor reference from containment relation ${relation.id}.`);}
+   }
+   if(relation.kind!=='on'){
+    if(relation.subject_anchor_id&&declared.get(relation.subject_anchor_id)?.node_id!==relation.subject_id){
+     delete relation.subject_anchor_id;
+     corrections.push(`Dropped unused subject contact reference from ${relation.id}; only support relations use it.`);
+    }
     continue;
    }
-   if(relation.kind!=='on')continue;
    const subject=nodeById.get(relation.subject_id);
    if(relation.subject_anchor_id){
     const existing=declared.get(relation.subject_anchor_id);
@@ -404,10 +416,16 @@ export function compileConstruction(plan:SessionPlan,source:SceneSpec):SceneSpec
  }
  for(const node of scene.nodes)if(node.role!=='environment'&&!assigned.has(node.id))fail('/construction_plan/assemblies','coverage','Task objects, props and characters need explicit assembly membership: '+node.id);
  const relations=map(cp.relations,'/construction_plan/relations');
+ const viewpoints=new Map(scene.viewpoints.map(view=>[view.id,view.position as Vec3]));
+ const viewpointTarget=(relation:ConstructionPlan['relations'][number])=>{
+  const id=relation.target_id;
+  if(!['near','faces','clear_of'].includes(relation.kind)||id==='viewer'||nodes.has(id)||zones.has(id)||anchors.has(id))return undefined;
+  return viewpoints.get(id);
+ };
  for(const relation of relations.values()){
   const at='/construction_plan/relations/'+relation.id;
   const targetAnchor=anchors.get(relation.target_id),targetNodeID=targetAnchor?.node_id??relation.target_id;
-  if(!nodes.has(relation.subject_id)||(!nodes.has(targetNodeID)&&!zones.has(relation.target_id)&&relation.target_id!=='viewer'))fail(at,'reference','Relation subject or target is missing');
+  if(!nodes.has(relation.subject_id)||(!nodes.has(targetNodeID)&&!zones.has(relation.target_id)&&relation.target_id!=='viewer'&&!viewpointTarget(relation)))fail(at,'reference','Relation subject or target is missing');
   if(relation.anchor_id&&anchors.get(relation.anchor_id)?.node_id!==targetNodeID)fail(at,'reference','Target anchor must belong to its target node');
   if(targetAnchor&&relation.anchor_id&&targetAnchor.id!==relation.anchor_id)fail(at,'reference','A relation cannot select two different target anchors');
   if(relation.subject_anchor_id&&anchors.get(relation.subject_anchor_id)?.node_id!==relation.subject_id)fail(at,'reference','Contact anchor must belong to its subject');
@@ -424,10 +442,10 @@ export function compileConstruction(plan:SessionPlan,source:SceneSpec):SceneSpec
   const targetAnchor=anchors.get(relation.target_id);
   const targetNodeID=targetAnchor?.node_id??relation.target_id;
   for(const dependency of relations.values())if(dependency.subject_id===targetNodeID&&!['clear_of','faces'].includes(dependency.kind))apply(dependency);
-  const n=nodes.get(relation.subject_id),target=nodes.get(targetNodeID),zone=zones.get(relation.target_id);
+  const n=nodes.get(relation.subject_id),target=nodes.get(targetNodeID),zone=zones.get(relation.target_id),viewpoint=viewpointTarget(relation);
   const at='/construction_plan/relations/'+relation.id;
-  if(!n||(!target&&!zone&&relation.target_id!=='viewer')){fail(at,'reference','Relation subject or target is missing',relation.required);visiting.delete(relation.id);done.add(relation.id);return;}
-  let center:Vec3=targetAnchor?anchorPoint(targetAnchor.id):zone?zone.center:point(frames(targetNodeID),[0,0,0]);
+  if(!n||(!target&&!zone&&!viewpoint&&relation.target_id!=='viewer')){fail(at,'reference','Relation subject or target is missing',relation.required);visiting.delete(relation.id);done.add(relation.id);return;}
+  let center:Vec3=targetAnchor?anchorPoint(targetAnchor.id):zone?.center??viewpoint??point(frames(targetNodeID),[0,0,0]);
   if(relation.anchor_id){const anchor=anchors.get(relation.anchor_id);if(!anchor||anchor.node_id!==targetNodeID){fail(at,'reference','Anchor must belong to the relation target',relation.required);visiting.delete(relation.id);done.add(relation.id);return;}center=anchorPoint(anchor.id);}
   const destination=center.map((v,i)=>v+relation.offset[i]) as Vec3;
   if(relation.kind==='faces'){
@@ -475,8 +493,7 @@ export function compileConstruction(plan:SessionPlan,source:SceneSpec):SceneSpec
  for(const relation of cp.relations.filter(r=>r.kind==='clear_of')){
   const anchor=anchors.get(relation.anchor_id??relation.target_id);
   const zone=zones.get(relation.target_id);
-  if(!nodes.has(relation.subject_id)||(!anchor&&!zone&&!nodes.has(relation.target_id)&&relation.target_id!=='viewer')){fail('/construction_plan/relations/'+relation.id,'reference','Clearance subject or target is missing');continue;}
-  const at=anchor?anchorPoint(anchor.id):point(frames('viewer'),[0,0,0]);
+  const at=anchor?anchorPoint(anchor.id):viewpointTarget(relation)??point(frames('viewer'),[0,0,0]);
   const a=worldBounds(relation.subject_id),targetBounds=anchor?{min:at,max:at}:zone?{min:zone.center.map((v,i)=>v-zone.size[i]/2) as Vec3,max:zone.center.map((v,i)=>v+zone.size[i]/2) as Vec3}:nodes.has(relation.target_id)?worldBounds(relation.target_id):{min:at,max:at};
   const b={min:targetBounds.min.map((v,i)=>v+relation.offset[i]),max:targetBounds.max.map((v,i)=>v+relation.offset[i])};
   const gap=Math.hypot(...[0,1,2].map(i=>Math.max(0,b.min[i]-a.max[i],a.min[i]-b.max[i])));
@@ -515,6 +532,14 @@ export function compileConstruction(plan:SessionPlan,source:SceneSpec):SceneSpec
  const nodeActors=new Map<string,string>();
  for(const op of operations)if(op.type==='move_node'&&'path_id' in op&&'node_id' in op&&!nodeActors.has(op.path_id))nodeActors.set(op.path_id,op.node_id);
  const attachedIDs=new Set(scene.viewer_attached_node_ids??[]);
+ const inIgnoredAssembly=(node:SceneNode,isViewer:boolean,actorID:string|undefined)=>{
+  const seen=new Set<string>();
+  for(let id:string|null=node.id;id&&!seen.has(id);id=nodes.get(id)?.parent_id??null){
+   if(id===actorID||(isViewer&&attachedIDs.has(id)))return true;
+   seen.add(id);
+  }
+  return false;
+ };
  const initialView=(scene.viewpoints.find(v=>v.id===scene.initial_viewpoint_id)?.position??[0,1.6,0]) as Vec3;
  const orient2=(p:Vec3,q:Vec3,r:Vec3)=>(q[0]-p[0])*(r[2]-p[2])-(q[2]-p[2])*(r[0]-p[0]);
  const pointSegment=(pt:Vec3,u:Vec3,w:Vec3)=>{const dx=w[0]-u[0],dz=w[2]-u[2];const length2=dx*dx+dz*dz;const t=length2<1e-12?0:Math.max(0,Math.min(1,((pt[0]-u[0])*dx+(pt[2]-u[2])*dz)/length2));return Math.hypot(pt[0]-(u[0]+t*dx),pt[2]-(u[2]+t*dz));};
@@ -541,24 +566,34 @@ export function compileConstruction(plan:SessionPlan,source:SceneSpec):SceneSpec
   const eye=route.eye_height_meters,radius=route.clearance_radius_meters;
   const origin:Vec3=isViewer?((path.start_position as Vec3|undefined)??[...initialView] as Vec3):point(frames(actorID!),[0,0,0]);
   const absolute:Vec3[]=path.coordinate_space==='relative'?[origin,...path.points.map(p=>[origin[0]+p.position[0],origin[1]+p.position[1],origin[2]+p.position[2]] as Vec3)]:[origin,...path.points.map(p=>p.position as Vec3)];
-  const solids=scene.nodes.filter(n=>(n.collision_role??'solid')==='solid'&&n.id!==actorID&&!(isViewer&&attachedIDs.has(n.id)));
-  const supports=scene.nodes.filter(n=>(n.collision_role??'solid')!=='none'&&n.id!==actorID);
+  const collisionNodes=scene.nodes.filter(n=>(n.collision_role??'solid')!=='none'&&!inIgnoredAssembly(n,isViewer,actorID));
+  const solids=collisionNodes.filter(n=>(n.collision_role??'solid')==='solid');
   let reported=0;
   for(let i=1;i<absolute.length&&reported<4;i++){
    const a=absolute[i-1],b=absolute[i];
    const eyeA=isViewer?a[1]:a[1]+eye,eyeB=isViewer?b[1]:b[1]+eye;
-   const bodyLow=Math.min(eyeA,eyeB)-eye+0.15,bodyHigh=Math.max(eyeA,eyeB);
+   const deltaY=eyeB-eyeA;
+   const at=(t:number):Vec3=>[a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t,a[2]+(b[2]-a[2])*t];
    for(const solid of solids){
     const bounds=worldBounds(solid.id);
-    if(bodyHigh<bounds.min[1]||bodyLow>bounds.max[1])continue;
-    const gap=segmentRectDistance(a,b,bounds);
+    const minEye=bounds.min[1],maxEye=bounds.max[1]+eye-0.15;
+    if(Math.max(eyeA,eyeB)<minEye||Math.min(eyeA,eyeB)>maxEye)continue;
+    // Clearance only applies where the body and the obstacle overlap in
+    // height at the same point along the segment.
+    let from=a,to=b;
+    if(deltaY!==0){
+     const enter=(minEye-eyeA)/deltaY,exit=(maxEye-eyeA)/deltaY;
+     from=at(Math.max(0,Math.min(enter,exit)));
+     to=at(Math.min(1,Math.max(enter,exit)));
+    }
+    const gap=segmentRectDistance(from,to,bounds);
     if(gap<radius){fail('/motion_paths/'+path.id,'route_clearance',`Route ${path.id} segment ${i-1} from ${JSON.stringify(a)} to ${JSON.stringify(b)} passes ${gap.toFixed(2)}m from solid node "${solid.id}" (body radius ${radius}m, blocking bounds ${JSON.stringify(bounds)}). Move the route or "${solid.id}" so the swept body clears it; keep the authored destination and purpose.`);reported++;break;}
    }
    if(['walk','run'].includes(path.purpose)){
     const length=Math.hypot(b[0]-a[0],b[1]-a[1],b[2]-a[2]),count=Math.max(1,Math.ceil(length/0.25));
     for(let sample=0;sample<=count;sample++){
      const t=sample/count,x=a[0]+(b[0]-a[0])*t,z=a[2]+(b[2]-a[2])*t,footY=a[1]+(b[1]-a[1])*t-(isViewer?eye:0);
-     const supported=supports.some(n=>{const bounds=worldBounds(n.id);return x>=bounds.min[0]-0.02&&x<=bounds.max[0]+0.02&&z>=bounds.min[2]-0.02&&z<=bounds.max[2]+0.02&&bounds.max[1]>=footY-0.35&&bounds.max[1]<=footY+0.3;});
+     const supported=collisionNodes.some(n=>{const bounds=worldBounds(n.id);return x>=bounds.min[0]-0.02&&x<=bounds.max[0]+0.02&&z>=bounds.min[2]-0.02&&z<=bounds.max[2]+0.02&&bounds.max[1]>=footY-0.35&&bounds.max[1]<=footY+0.3;});
      if(!supported){fail('/motion_paths/'+path.id,'route_support',`Route ${path.id} segment ${i-1} has no supporting surface under the body near [${x.toFixed(2)},${footY.toFixed(2)},${z.toFixed(2)}] (sample ${sample}). Add or extend ground geometry under the authored route; do not lower the participant through the floor.`);reported++;break;}
     }
    }
@@ -607,7 +642,7 @@ export function compileConstruction(plan:SessionPlan,source:SceneSpec):SceneSpec
  for(const relation of cp.relations.filter(r=>r.kind!=='clear_of')){
   const n=nodes.get(relation.subject_id);if(!n)continue;
   const zone=zones.get(relation.target_id);
-  const center=relation.anchor_id?anchorPoint(relation.anchor_id):anchors.has(relation.target_id)?anchorPoint(relation.target_id):zone?zone.center:point(frames(relation.target_id),[0,0,0]);
+  const center=relation.anchor_id?anchorPoint(relation.anchor_id):anchors.has(relation.target_id)?anchorPoint(relation.target_id):zone?.center??viewpointTarget(relation)??point(frames(relation.target_id),[0,0,0]);
   const requested=center.map((v,i)=>v+relation.offset[i]) as Vec3;
   const origin=point(frames(n.id),[0,0,0]);
   if(['near','attached_to'].includes(relation.kind)&&distance(origin,requested)>relation.tolerance)fail('/construction_plan/relations/'+relation.id,'placement','Later constraints displaced the requested relationship',relation.required,{severity:distance(origin,requested)/Math.max(0.3,relation.tolerance)});

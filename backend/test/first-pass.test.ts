@@ -74,6 +74,17 @@ test('stage compiler recovers omitted route metadata and reuses the declared ope
   assert.equal(materializeStageGraph(approved,plan,source).issues[0].rule,'route_binding');
 });
 
+test('stage compiler keeps an authored purpose when one path is shared across conflicting uses',()=>{
+ const source=scene();
+ source.construction_plan!.routes[0].stage_ids=['stage_1','stage_2'];
+ const approved=draft([{movement:'walk',conversation:null,duration:30},{movement:'run',conversation:null,duration:30}]);
+ assert.equal(materializeStageGraph(approved,plan,source).scene.motion_paths![0].purpose,'swim');
+
+ source.events=[{at_active_second:0,operation:{type:'move_node',path_id:'path_a',node_id:'another_actor'}}] as SceneSpec['events'];
+ approved.experience.stages[1].movement='walk';
+ assert.equal(materializeStageGraph(approved,plan,source).scene.motion_paths![0].purpose,'swim');
+});
+
 test('preparation: time-zero waypoint becomes the route origin, preserving later waypoints and destination', () => {
   const s = scene({motion_paths: [{id: 'path_a', purpose: 'swim', interpolation: 'linear', coordinate_space: 'world',
     points: [{at_seconds: 0, position: [0, 0.9, 8]}, {at_seconds: 32, position: [0, 0.9, -2]}, {at_seconds: 65, position: [0, 0.9, -12.5]}]}] as unknown as SceneSpec['motion_paths']});
