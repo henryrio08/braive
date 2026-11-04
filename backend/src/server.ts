@@ -6,14 +6,16 @@ import {assertCurrentDialogue,dialogueContext} from './dialogue.js';
 import {meshCatalog,assetManifest,generationCharacterIDs} from './assets.js';
 import express from 'express';
 import {compileScene,constructionRequirements} from './construction.js';
-import {dispatchTool,plannedTool} from './tool-dispatch.js';
+import {dispatchTool} from './tool-dispatch.js';
+import {generateExperience,authoredScene,experienceSceneIssues,type ApprovedExperience} from './generation-chain.js';
+import {builderInstructions} from './generation-prompts.js';
 import { createServer } from 'node:http';
 import { randomUUID, timingSafeEqual } from 'node:crypto';
 import {writeFileSync} from 'node:fs';
 import { WebSocketServer, WebSocket } from 'ws';
-import { AppError, validate, sceneIssues, planIssues } from './contracts.js';
-import { authoring, model, provenance, requestCount, reservedCostUSD, usageLog } from './meta.js';
-import type { Job, PlanRequest, SessionPlan, SceneSpec, AudioPlan } from '../../docs/handoff/contracts.js';
+import { AppError, validate, validateProviderOutput, sceneIssues } from './contracts.js';
+import { model, provenance, requestCount, reservedCostUSD, usageLog } from './meta.js';
+import type { Job, PlanRequest } from '../../docs/handoff/contracts.js';
 const app=express(); app.use(express.json({limit:'2mb'})); app.disable('x-powered-by');
 const secret=process.env.BRAIVE_TOKEN;
 if(!secret || secret.length<20) throw new Error('Set BRAIVE_TOKEN to a random string of at least 20 characters');
@@ -40,7 +42,9 @@ app.use((req,_res,next)=>{
  }
  next();
 });
-const approved=new Map<string,{plan:SessionPlan,scene:SceneSpec,audio:AudioPlan}>();
+const approved=new Map<string,ApprovedExperience>();
+// Read-only authenticated pairing check; it neither spends nor renews provider access.
+app.get('/v1/connection',(_req,res)=>res.json({status:'ok'}));
 const attempts=new Map<string,{deadline:number,repairs:number}>();
 const requests=new Map<string,PlanRequest>();
 const generationLimitMs=10*60*1000;
@@ -51,46 +55,26 @@ capabilities.version='iphone-construction-visuals-5';
 Object.assign(capabilities,{construction_version:'1',asset_bounds:Object.fromEntries(assetManifest.map(a=>[a.id,a.bounds_meters])),surface_profiles:['matte','ground','water','glass','foliage'],sky:'App-owned procedural cubemap or solid background; explicit fog distances. No image-generation call or arbitrary shader source.'});
 Object.assign(capabilities,{scenario_engine:'Guided automatic stages: movement and events start on stage entry and advance by time or motion completion. No WALK/SIT/ASK or stage-advance commands. Natural user speech reaches the approved character only in authored conversation_target windows. Quiet scenes need no speaking.',movement:'move_viewer follows an authored motion_paths trajectory in meters; each path starts at the current camera position, points are absolute destinations at increasing positive seconds. Preserve head-tracked orientation. Paths can be interrupted by another path without teleporting; STOP freezes the active clock. walk, run, swim, climb, fall, glide, ride and other trajectories use the same generic system. move_node animates another actor/prop along a path, optionally facing its travel direction.',view_distance_meters:10000});
 Object.assign(capabilities,{character_assets:assetManifest.filter(a=>generationCharacterIDs.has(a.id)).map(a=>({asset_id:a.id,tags:a.tags,resolved_nodes:a.resolved_node_count,triangles:a.approx_tris,behaviors:['idle','listen','speak','walk','run','sit']}))});
-const assets=capabilities.audio_assets.map(id=>({id,kind:'audio',description:`Bundled synthesized ${id}`,origin:'bundled'}));
-function authoredScene(scene:SceneSpec|undefined):Omit<SceneSpec,'construction_report'>|undefined {
- if(!scene)return undefined;
- const {construction_report,...authored}=scene;
- return authored;
-}
 async function generate(request:PlanRequest, job:Job, signal:AbortSignal) {
- let plan:SessionPlan|undefined, scene:SceneSpec|undefined, audio:AudioPlan|undefined, issues:unknown;
- const generationPhase=request.revision===1?'setup':'builder_revision';
  const previous=approved.get(request.session_id)??(request.parent_session_id?approved.get(request.parent_session_id):undefined);
- for(let attempt=0;attempt<2;attempt++) {
-  try {
-   if(!plan) { job.stage='Coordinating your situation'; plan=await model('SessionPlan',{request,capabilities,issues,generation_phase:generationPhase,previous_plan:previous?.plan},`You coordinate Braive situational practice. ${authoring}\nUse current ability and explicit boundaries. Copy session_id/revision. Intro includes exact stop_reminder, at most 18 words total. Choose default voice IDs. Return safety decision before generating any scene. Prefer named registered GLB assets; generate layout and interactions. Choose Character.asset_id from the approved soft_adult IDs. Preserve the source palette. Plan automatic experiences with empty action_ids, natural speech where appropriate, and a separate completed final stage. Do not invent mesh IDs. Procedural primitives are environment/task geometry only; listed empty subcategories remain gaps.`,signal); }
-   if(plan!.safety.decision==='refuse') throw new AppError('INVALID_INPUT',plan!.safety.reason+' '+plan!.safety.practice_preserving_alternative);
-   if(plan!.session_id!==request.session_id || plan!.revision!==request.revision) throw new AppError('INVALID_MODEL_OUTPUT','Coordinator revision mismatch');
-   const pIssues=planIssues(plan!); if(pIssues.length) throw new AppError('INVALID_MODEL_OUTPUT','Invalid coordinator invariants',pIssues);
-   if(!plan!.experience)throw new AppError('INVALID_MODEL_OUTPUT','Coordinator must plan executable experience stages');
-   if(plan!.experience.progression!=='guided'){plan=undefined;throw new AppError('INVALID_MODEL_OUTPUT','New experiences must unfold automatically without voice-command actions');}
-   if(plan!.characters.some(c=>!c.asset_id))throw new AppError('INVALID_MODEL_OUTPUT','Coordinator must choose the registered asset_id for every character');
-   for(const tool of ['plan_audio','compose_scene'] as const)plannedTool(plan!,tool,generationPhase);
-   for(const tool of ['generate_feedback','adapt_session'] as const)plannedTool(plan!,tool,'after_session');
-   job.stage=attempt?'Repairing scene validation issues':'Authoring spatial scene and sound';
-   // Audio first supplies a stable cue manifest to scene authoring.
-   audio??=await dispatchTool(plan!,'plan_audio',generationPhase,async args=>model('AudioPlan',{plan,available_assets:assets,tool_arguments:args},'Select only supplied audio assets. Required whoosh. Keep narrative speech audible. Match plan revision.',signal));
-   scene=await dispatchTool(plan!,'compose_scene',generationPhase,async args=>model('SceneSpec',{plan,requirements:constructionRequirements(plan!),capabilities,audio,tool_arguments:args,previous_scene:authoredScene(scene??previous?.scene),issues},authoring+" Use registered GLBs for characters and props; primitives for environment/task geometry. Preserve each Character.asset_id exactly and copy Character.color_hex to Material.color. Use node animation sit for seated characters; match supporting chairs to the actual pose. Preserve the approved friendly style and comfortable spacing. Place normalized asset bases at floor height. No unregistered IDs. Neutral behavior uses app-owned joint motions, not invented GLB animation clips. Return compact JSON with concise descriptions. Prefer 30-60 scene nodes when sufficient for all approved participants, setting, depth and interactions; never remove task semantics to meet that guideline.",signal,true));
-   scene=canonicalSceneReferences(plan!,scene!,audio!);
-   scene=compileScene(plan!,scene!,audio!);
-   const errors=sceneIssues(plan!,scene!,audio!);
-   for(const l of audio!.layers) if(!capabilities.audio_assets.includes(l.asset_id)) errors.push({path:'/audio/layers',rule:'asset',message:'Unknown audio asset'});
-   if(errors.length) throw new AppError('INVALID_MODEL_OUTPUT','Scene requires repair',errors);
-   signal.throwIfAborted();
-   if(revisions.get(request.session_id)!==request.revision) throw new AppError('CANCELLED','Superseded revision');
-   job.result={plan:plan!,scene:scene!,audio:audio!};approved.set(request.session_id,job.result); job.status='succeeded'; job.stage='Ready for device validation'; return;
-  } catch(e) {
-   if(process.env.BRAIVE_TEST_MODE==='true' && plan && scene && audio){
-    try{writeFileSync(new URL('../data/last-rejected-scene.json',import.meta.url),JSON.stringify({plan,scene,audio,issues:e instanceof AppError?e.issues:issues??[]},null,2),{mode:0o600});}catch{}
+ const result=await generateExperience(request,job,{
+  model,capabilities,previous,
+  isCurrent:()=>revisions.get(request.session_id)===request.revision,
+  consumeRepair:()=>{
+   const attempt=attempts.get(job.job_id);
+   if(!attempt||attempt.repairs>=1||Date.now()>=attempt.deadline)return false;
+   attempt.repairs++;return true;
+  },
+  onRejected:(candidate,error)=>{
+   if(process.env.BRAIVE_TEST_MODE==='true'){
+    try{writeFileSync(new URL('../data/last-rejected-scene.json',import.meta.url),JSON.stringify({...candidate,issues:error instanceof AppError?error.issues:[]},null,2),{mode:0o600});}catch{}
    }
-   if(e instanceof AppError && e.code==='INVALID_MODEL_OUTPUT' && attempt===0) { attempts.get(job.job_id)!.repairs++;issues=e.issues.length?e.issues:[{message:e.message}]; if(e.issues.some(i=>i.path.startsWith('/audio/')))audio=undefined; if(plan && (planIssues(plan).length || e.issues.some(i=>i.rule==='tool_schedule'))) {plan=undefined;audio=undefined;scene=undefined;} continue; } throw e;
   }
- }
+ },signal);
+ signal.throwIfAborted();
+ if(revisions.get(request.session_id)!==request.revision)throw new AppError('CANCELLED','Superseded revision');
+ const {experience,...wire}=result;
+ job.result=wire;approved.set(request.session_id,result);job.status='succeeded';job.stage='Ready for device validation';
 }
 app.post(['/v1/session-plans','/v1/scene-revisions'],(req,res,next)=>{
  try {
@@ -130,11 +114,14 @@ app.post('/v1/jobs/:id/validation',async(req,res,next)=>{
   res.status(202).json(job);
   try {
    const {plan,audio,scene}=job.result;
-   const authored=canonicalSceneReferences(plan,await model('SceneSpec',{plan,audio,requirements:constructionRequirements(plan),previous_scene:authoredScene(scene),capabilities,issues:[{path:'/nodes',rule:'native_preflight',message:req.body.message}]},authoring,controller.signal,true),audio);
+   const experience=approved.get(job.session_id)?.experience;
+   const output=await model('SceneSpec',{plan,audio,approved_experience:experience,requirements:constructionRequirements(plan),previous_scene:authoredScene(scene),capabilities,issues:[{path:'/nodes',rule:'native_preflight',message:req.body.message}]},builderInstructions,controller.signal,'scene_builder');
+   validate('SceneSpec',output);validateProviderOutput('SceneSpec',output);
+   const authored=canonicalSceneReferences(plan,output,audio);
    const repaired=compileScene(plan,authored,audio);
-   const errors=sceneIssues(plan,repaired,audio);if(errors.length) throw new AppError('INVALID_MODEL_OUTPUT','Native repair invalid',errors);
+   const errors=[...sceneIssues(plan,repaired,audio),...(experience?experienceSceneIssues(experience,plan,repaired):[])];if(errors.length) throw new AppError('INVALID_MODEL_OUTPUT','Native repair invalid',errors);
    controller.signal.throwIfAborted();if(revisions.get(job.session_id)!==job.revision)return;
-   job.result={plan,audio,scene:repaired};approved.set(job.session_id,job.result);job.status='succeeded';job.stage='Ready for device validation';
+   job.result={plan,audio,scene:repaired};approved.set(job.session_id,{...job.result,experience});job.status='succeeded';job.stage='Ready for device validation';
   }catch(e:any){if(jobs.get(job.job_id)?.status!=='cancelled'){job.status='failed';job.error={code:controller.signal.aborted?'TIMEOUT':e.code??'INVALID_MODEL_OUTPUT',message:e.message,retryable:true,request_id:job.job_id,issues:e.issues};}}
   finally{clearTimeout(timer);releaseGeneration(job.job_id,controller,running);}
  }catch(e){next(e);}

@@ -1,0 +1,21 @@
+# iPhone voice and generation follow-up — November 3, 2026
+
+Physical iPhone 14 feedback after the first xtool installation:
+
+- Settings → Listen to voice made no sound and gave no visible response. Settings can open before capture configures an audio session. The preview now activates an audible playback session when capture is off and reports playback setup errors in Settings. The owner confirmed that the preview is now audible.
+- The voice picker then proved hard to scroll, and its selected row sometimes played a different voice. The session was publishing an unchanged listening status and connection string 20 times a second, while Settings also refreshed its voice list on system notifications. The picker now keeps its voice list stable until Settings closes; unchanged status values no longer trigger redraws, and preview uses the voice selected in that visible list.
+- Scene preparation showed “The request timed out” well before the ten-minute generation ceiling. The app's individual job poll used a 35-second network timeout and treated a transient timeout as the end of generation. It now retries the same job after transient connection errors until the existing ten-minute deadline; it does not submit another paid job. The backend's ten-minute ceiling is unchanged. End-to-end provider timing needs a live backend test.
+- Speech felt unacknowledged for about five seconds. The headset now shows hearing/processing feedback from the on-device detector and partial transcription, and the quiet interval after stable speech is shorter (0.35 seconds for short commands, 0.9 seconds otherwise). Actual recognition latency and turn boundaries need a phone listening check.
+
+The initial voice update compiled with xtool on Windows and was installed on the paired iPhone. The picker correction and a live scene still need a device check.
+
+## Shared branch follow-up — build 0.4 (6)
+
+These fixes are now included on `codex/experience-editor` alongside the author/editor generation chain. Update both the backend computer and the iPhone build; a running server from main lacks the new authenticated readiness route.
+
+- Before intake, the app verifies `/health` and the read-only authenticated `/v1/connection` route with five-second request timeouts. Incorrect pairing, an outdated server, an empty address and network errors produce useful setup messages. New installations require an explicit server address; no placeholder host is assumed. Use the computer's actual reachable address and port (8788 for the approved test launcher). Pairing checks do not renew paid provider activity.
+- Accepted-job polling retries only transient connection errors for the same job and within the original monotonic readiness deadline. It never retries the paid generation POST. HTTP errors, malformed job JSON, incorrect job IDs, cancellation and expired deadlines terminate appropriately.
+- Head tracking now uses the active interface's landscape-left or landscape-right basis instead of applying the same landscape-right correction to both. The established forward direction survives basis changes. Core Motion errors/unavailability pause with a visible explanation, and missing tracking blocks headset readiness. Recovery clears only the tracking pause. The black pre-readiness screen remains intentional: confirm START and then headset YES to reveal the forest.
+- Voice preview activates playback when capture is off, uses the visible selected voice and reports setup errors. Picker options remain stable while Settings is open. Unchanged listening state no longer publishes twenty redraws a second. Speech-activity feedback and the shorter quiet intervals are included.
+
+Validation: the arm64 iPhone app compiles with the prepared xtool/Apple SDK; offline transport checks cover readiness/pairing, same-job retries, invalid responses, deadlines and cancellation. The 36 voice-turn checks, 29 speech-coordination checks and 109 backend tests pass. Expanded head-pose checks cover both landscape bases, turns, recentering and a landscape side change; their Apple `simd` executable still needs an Apple runtime to run. The synthetic controller audit now includes unavailable/recovered tracking cases. A physical phone/viewer run of this combined build, real network generation and optical comfort remain unverified.

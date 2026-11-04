@@ -2,12 +2,13 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {outputSchema,sceneOutputSchema,validate} from '../src/contracts.js';
 import type {SessionPlan,AudioPlan} from '../../docs/handoff/contracts.js';
+import {experienceSchema} from '../src/experience.js';
 import {assetIDs} from '../src/assets.js';
 import Ajv from 'ajv';
 
 test('provider schemas are acyclic and fit Meta’s ten-level structured-output limit',()=>{
- for(const name of ['SessionPlan','SceneSpec','AudioPlan','FeedbackResult','AdaptationResult']){
-  const schema=outputSchema(name);
+ for(const name of ['ExperienceDraft','SessionPlan','SceneSpec','AudioPlan','FeedbackResult','AdaptationResult']){
+  const schema=name==='ExperienceDraft'?experienceSchema():outputSchema(name);
   function depth(value:any,trail:string[]=[]):number {
    if(!value||typeof value!=='object')return 0;
    if(value.$ref){
@@ -34,6 +35,9 @@ test('builder geometry rejects placeholders and invented IDs while preserving al
  assert.equal(check({kind:'sphere',radius:2}),true);
  assert.equal(check({kind:'cylinder',radius:2,height:1}),true);
  assert.equal(check({kind:'box'}),false);
+ const ids=[...assetIDs];
+ assert.ok(ids.length<=1000);
+ if(ids.length>250)assert.ok(ids.reduce((sum,id)=>sum+id.length,0)<=15000,'Asset enum exceeds the provider string limit');
 });
 
 test('repair feedback identifies the missing and unexpected schema fields',()=>{

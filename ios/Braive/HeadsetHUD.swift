@@ -35,7 +35,7 @@ struct HeadsetHUD: View {
       VStack(spacing: 12) {
         HStack(spacing: 6) {
           Image(systemName: "waveform").font(.system(size: 10))
-          Text(status).font(.system(size: 10))
+          Text(status).font(.system(size: status == "Listening" ? 10 : 12, weight: .semibold))
           Spacer()
           if let remaining {
             Text(Duration.seconds(remaining).formatted(.time(pattern: .minuteSecond)))
@@ -126,6 +126,9 @@ struct HeadsetHUD: View {
     }
   }
   var pausedHeadsetCopy: HeadsetCopy {
+    if pauses.contains("tracking_unavailable") {
+      return HeadsetCopy(title: "Your practice is paused.", detail: "Head tracking is unavailable.", command: "Remove the viewer", hint: "Keep the app open or reopen it to restore tracking")
+    }
     if pauses.contains("command_channel_unavailable") || pauses.contains("audio_interruption") {
       return HeadsetCopy(title: "Your place is saved.", detail: "Voice needs reconnecting.", command: "Remove the viewer", hint: "Hold the screen for phone controls")
     }

@@ -106,9 +106,44 @@ struct API {
       }
     }
   }
+  /// Establish reachability and pairing without generating a scene or renewing paid access.
+  func checkConnection() async throws {
+    let health = try await call("/health", timeout: 5)
+    guard health["status"].text == "ok" else { throw URLError(.badServerResponse) }
+    let pairing = try await call("/v1/connection", timeout: 5)
+    guard pairing["status"].text == "ok" else { throw URLError(.badServerResponse) }
+  }
+  /// The server owns an accepted job. Retry reads of that job, never another paid POST.
+  func pollJob(_ id: String, deadline: Double, retryDelay: TimeInterval = 0.6,
+    onReconnect: (@MainActor () -> Void)? = nil) async throws -> JSON {
+    while ProcessInfo.processInfo.systemUptime < deadline {
+      try Task.checkCancellation()
+      do {
+        let job = try await call("/v1/jobs/" + id,
+          timeout: max(0.01, min(35, deadline - ProcessInfo.processInfo.systemUptime)))
+        guard job["job_id"].text == id,
+          ["pending", "running", "succeeded", "failed", "cancelled"].contains(job["status"].text)
+        else { throw URLError(.badServerResponse) }
+        return job
+      } catch where Self.isTransientConnection(error) {
+        let remaining = deadline - ProcessInfo.processInfo.systemUptime
+        guard remaining > 0 else { break }
+        await onReconnect?()
+        try await Task.sleep(for: .seconds(min(max(0, retryDelay), remaining)))
+      }
+    }
+    try Task.checkCancellation()
+    throw NSError(domain: NSURLErrorDomain, code: URLError.timedOut.rawValue,
+      userInfo: [NSLocalizedDescriptionKey: "Scene readiness deadline reached. Retry, revise, or cancel."])
+  }
   func call(_ path: String, _ body: JSON? = nil, method: String? = nil, timeout: TimeInterval = 35) async throws -> JSON {
     try Task.checkCancellation()
-    guard let url = URL(string: base + path), ["http", "https"].contains(url.scheme ?? "") else {
+    let address = base.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: #"/+$"#, with: "", options: .regularExpression)
+    guard let components = URLComponents(string: address),
+      ["http", "https"].contains(components.scheme?.lowercased() ?? ""),
+      let host = components.host, !host.isEmpty,
+      components.user == nil, components.password == nil, components.query == nil, components.fragment == nil,
+      let url = URL(string: address + path) else {
       throw URLError(.badURL)
     }
     var req = URLRequest(url: url)
