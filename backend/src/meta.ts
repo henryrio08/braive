@@ -55,7 +55,13 @@ export async function model(schema: string, input: unknown, instructions: string
   if(role==='experience_author')validateExperienceShape(value);
   else validateExperience(value);
  }
- else {validate(schema,value);validateProviderOutput(schema,value);}
+ else {
+  try {validate(schema,value);validateProviderOutput(schema,value);}
+  catch(error){
+   if(error instanceof AppError&&schema==='SceneSpec')throw error.withModelOutput(schema,value);
+   throw error;
+  }
+ }
  const sessionID=value.session_id??(input as {request?:{session_id?:string}})?.request?.session_id;
  if(sessionID && result.id) provenance.set(sessionID,[...(provenance.get(sessionID)??[]),result.id]);
  metrics.outcome='succeeded';

@@ -9,7 +9,12 @@ const ajv = new (Ajv as any)({ strict: false, allErrors: true });
 (addFormats as any)(ajv);
 ajv.addSchema({ $id: 'braive', components: document.components });
 export class AppError extends Error {
+ declare modelOutput?:{schema:string;value:unknown};
  constructor(public code: string, message: string, public issues: ValidationIssue[] = [], public status = 400) { super(message); }
+ withModelOutput(schema:string,value:unknown):this {
+  Object.defineProperty(this,'modelOutput',{value:{schema,value},enumerable:false,configurable:true});
+  return this;
+ }
 }
 function schemaIssues(errors:any[]):ValidationIssue[]{
  return errors.map(e=>({path:e.instancePath,rule:e.keyword,message:e.message+(e.params&&Object.keys(e.params).length?' '+JSON.stringify(e.params):'')}));

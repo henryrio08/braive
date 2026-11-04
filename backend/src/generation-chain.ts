@@ -107,7 +107,30 @@ export async function generateExperience(request:PlanRequest,job:Job,deps:Genera
    const errors=[...sceneIssues(plan,compiled,audio),...experienceSceneIssues(experience,plan,compiled)];
    if(errors.length)throw new AppError('INVALID_MODEL_OUTPUT','Scene requires repair',errors);
    return compiled;
-  } catch(error){if(candidate)deps.onRejected?.({plan,scene:candidate,audio,experience},error);throw error;}
+  } catch(error){
+   if(error instanceof AppError&&error.modelOutput?.schema==='SceneSpec'){
+    const value=error.modelOutput.value;
+    if(value&&typeof value==='object'&&!Array.isArray(value))candidate=value as SceneSpec;
+   }
+   let failure=error;
+   if(candidate&&error instanceof AppError&&error.code==='INVALID_MODEL_OUTPUT'){
+    const issues:ValidationIssue[]=[];
+    try {
+     // Cross-field validation is safe only after the saved wire shape passes.
+     validate('SceneSpec',candidate);
+     try {compileScene(plan,canonicalSceneReferences(plan,candidate,audio),audio);}
+     catch(constructionError){if(constructionError instanceof AppError)issues.push(...constructionError.issues);else throw constructionError;}
+     issues.push(...experienceSceneIssues(experience,plan,candidate));
+    } catch(shapeError){if(shapeError instanceof AppError)issues.push(...shapeError.issues);else throw shapeError;}
+    const combined=new Map<string,ValidationIssue>();
+    for(const issue of [...issues,...error.issues]){
+     const key=issue.path+'|'+issue.rule;if(!combined.has(key))combined.set(key,issue);
+    }
+    failure=new AppError(error.code,error.message,[...combined.values()],error.status);
+   }
+   if(candidate)deps.onRejected?.({plan,scene:candidate,audio,experience},failure);
+   throw failure;
+  }
  });
  check();
  return {plan,scene,audio,experience};

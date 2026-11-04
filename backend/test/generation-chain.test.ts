@@ -97,6 +97,26 @@ test('an unchanged complete editor plan proceeds directly to the builder',async(
  assert.equal(result.audio.transition_whoosh_asset_id,'whoosh');
 });
 
+test('schema-rejected builder output survives into the repair with independent construction failures',async()=>{
+ let builderCalls=0;
+ const h=harness({model:call=>{
+  if(call.role==='scene_builder'&&builderCalls++===0){
+   const candidate=sceneFor(call.input.plan);
+   candidate.nodes[1].parent_id='missing_parent';
+   delete candidate.scenario!.steps[0].review_viewpoint_id;
+   throw new AppError('INVALID_MODEL_OUTPUT','Missing required scene metadata',[
+    {path:'/scenario/steps/0',rule:'required',message:'review_viewpoint_id is required'},
+   ]).withModelOutput('SceneSpec',candidate);
+  }
+ }});
+ await h.run();
+ const repair=h.calls.filter(c=>c.role==='scene_builder')[1].input;
+ assert.equal(repair.previous_scene.nodes[1].parent_id,'missing_parent');
+ assert.ok(repair.issues.some((i:any)=>i.path==='/nodes/1/parent_id'&&i.rule==='reference'));
+ assert.ok(repair.issues.some((i:any)=>i.rule==='required'&&i.message.includes('review_viewpoint_id')));
+ assert.equal(h.repairs(),1);
+});
+
 test('the editor fixes a structurally valid author timing mistake without spending the shared repair',async()=>{
  const authored=draft();authored.experience.stages[0].duration_sec=28;
  const h=harness({model:call=>call.role==='experience_author'?authored:undefined});

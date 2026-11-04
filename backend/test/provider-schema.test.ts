@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {outputSchema,sceneOutputSchema,validate} from '../src/contracts.js';
+import {AppError,outputSchema,sceneOutputSchema,validate} from '../src/contracts.js';
 import type {SessionPlan,AudioPlan} from '../../docs/handoff/contracts.js';
 import {experienceSchema} from '../src/experience.js';
 import {assetIDs} from '../src/assets.js';
@@ -44,6 +44,13 @@ test('repair feedback identifies the missing and unexpected schema fields',()=>{
  assert.throws(()=>validate('Material',{invented:1}),(e:any)=>
   e.issues.some((i:any)=>i.message.includes('missingProperty')&&i.message.includes('color'))&&
   e.issues.some((i:any)=>i.message.includes('additionalProperty')&&i.message.includes('invented')));
+});
+
+test('rejected model output is internal repair context and is not serialized with an error',()=>{
+ const candidate={nodes:[{id:'private_scene_node'}]};
+ const error=new AppError('INVALID_MODEL_OUTPUT','Repair required').withModelOutput('SceneSpec',candidate);
+ assert.equal(error.modelOutput!.value,candidate);
+ assert.equal(JSON.stringify(error).includes('private_scene_node'),false);
 });
 
 test('generated reference fields reject dot placeholders, including nested construction data',()=>{
