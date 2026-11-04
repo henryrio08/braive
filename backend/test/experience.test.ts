@@ -67,6 +67,16 @@ test('movement, conversation references and total stage duration are checked bef
   assert.throws(()=>validateExperience(stop),/Invalid experience invariants/);
 });
 
+test('a stage that explicitly travels after settling remains valid',()=>{
+  const source=draft();
+  source.experience.requires_motion=true;
+  source.experience.stages[0]={...source.experience.stages[0],
+    goal:'Settle while floating, then swim toward the shore.',
+    sensory_brief:'Start with a stable floating viewpoint, then pass the shoreline plants.',
+    movement:'swim'};
+  validateExperience(source);
+});
+
 test('a structurally valid author draft can reach the editor with a fixable timing mistake',()=>{
   const source=draft();source.experience.stages[0].duration_sec=30;
   validateExperienceShape(source);

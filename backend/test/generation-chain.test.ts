@@ -97,6 +97,24 @@ test('an unchanged complete editor plan proceeds directly to the builder',async(
  assert.equal(result.audio.transition_whoosh_asset_id,'whoosh');
 });
 
+test('a floating-in-place stage labeled as travel is repaired by the editor before building',async()=>{
+ const edited=draft();
+ const stage=edited.experience.stages[0];
+ stage.goal='Settle while floating calmly and notice the view ahead.';
+ stage.sensory_brief='Gentle ripples and a stable floating viewpoint.';
+ const rejected=structuredClone(edited);
+ rejected.experience.requires_motion=true;
+ rejected.experience.stages[0].movement='swim';
+ const h=harness({model:call=>{
+  if(call.role==='experience_editor')return call.input.issues?edited:rejected;
+ }});
+ const result=await h.run();
+ assert.deepEqual(h.calls.map(c=>c.role),['experience_author','experience_editor','experience_editor','scene_builder']);
+ assert.equal(h.calls[2].input.issues[0].path,'/experience/stages/0/movement');
+ assert.equal(h.calls[3].input.approved_experience.experience.stages[0].movement,'none');
+ assert.equal(result.scene.scenario!.steps[0].completion?.after_seconds,stage.duration_sec);
+});
+
 test('schema-rejected builder output survives into the repair with independent construction failures',async()=>{
  let builderCalls=0;
  const h=harness({model:call=>{
